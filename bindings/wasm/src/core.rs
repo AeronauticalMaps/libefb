@@ -55,6 +55,7 @@ impl From<JsFuel> for Fuel {
 }
 
 #[wasm_bindgen(js_name = FuelType)]
+#[derive(Debug, Clone, Copy)]
 pub struct JsFuelType {
     inner: FuelType,
 }

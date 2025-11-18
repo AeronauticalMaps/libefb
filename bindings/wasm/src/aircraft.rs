@@ -101,6 +101,7 @@ impl From<AircraftBuilder> for JsAircraftBuilder {
 ////////////////////////////////////////////////////////////////////////////////
 
 #[wasm_bindgen(js_name = Station)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct JsStation {
     inner: Station,
 }
@@ -140,6 +141,7 @@ impl From<Station> for JsStation {
 ////////////////////////////////////////////////////////////////////////////////
 
 #[wasm_bindgen(js_name = FuelTank)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct JsFuelTank {
     inner: FuelTank,
 }
@@ -179,6 +181,7 @@ impl From<FuelTank> for JsFuelTank {
 ////////////////////////////////////////////////////////////////////////////////
 
 #[wasm_bindgen(js_name = CGLimit)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct JsCGLimit {
     inner: CGLimit,
 }
