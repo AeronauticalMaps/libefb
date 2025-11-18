@@ -16,7 +16,7 @@
 use efb::prelude::*;
 use wasm_bindgen::prelude::*;
 
-use crate::{JsLength, JsMass, JsVolume};
+use crate::{JsFuelType, JsLength, JsMass, JsVolume};
 
 #[wasm_bindgen(js_name = AircraftBuilder)]
 #[derive(Default)]
@@ -211,60 +211,6 @@ impl From<JsCGLimit> for CGLimit {
 
 impl From<CGLimit> for JsCGLimit {
     fn from(value: CGLimit) -> Self {
-        Self { inner: value }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-#[wasm_bindgen(js_name = FuelType)]
-pub struct JsFuelType {
-    inner: FuelType,
-}
-
-#[wasm_bindgen(js_class = FuelType)]
-impl JsFuelType {
-    #[wasm_bindgen(constructor)]
-    pub fn new(fuel_type: String) -> Result<Self, JsError> {
-        let inner = match fuel_type.as_ref() {
-            "AvGas" => FuelType::AvGas,
-            "Diesel" => FuelType::Diesel,
-            "JetA" => FuelType::JetA,
-            _ => return Err(JsError::new(&format!("invalid fuel type: {fuel_type}"))),
-        };
-
-        Ok(Self { inner })
-    }
-
-    #[wasm_bindgen(js_name = avGas)]
-    pub fn av_gas() -> Self {
-        Self {
-            inner: FuelType::AvGas,
-        }
-    }
-
-    pub fn diesel() -> Self {
-        Self {
-            inner: FuelType::Diesel,
-        }
-    }
-
-    #[wasm_bindgen(js_name = jetA)]
-    pub fn jet_a() -> Self {
-        Self {
-            inner: FuelType::JetA,
-        }
-    }
-}
-
-impl From<JsFuelType> for FuelType {
-    fn from(value: JsFuelType) -> Self {
-        value.inner
-    }
-}
-
-impl From<FuelType> for JsFuelType {
-    fn from(value: FuelType) -> Self {
         Self { inner: value }
     }
 }

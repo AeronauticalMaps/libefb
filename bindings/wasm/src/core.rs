@@ -26,12 +26,10 @@ pub struct JsFuel {
 #[wasm_bindgen(js_class = Fuel)]
 impl JsFuel {
     #[wasm_bindgen(constructor)]
-    pub fn new(mass: JsMass, fuel_type: JsValue) -> Result<Self, JsError> {
-        let fuel_type: FuelType = serde_wasm_bindgen::from_value(fuel_type)?;
-
-        Ok(Self {
-            inner: Fuel::new(mass.into(), fuel_type),
-        })
+    pub fn new(mass: JsMass, fuel_type: JsFuelType) -> Self {
+        Self {
+            inner: Fuel::new(mass.into(), fuel_type.into()),
+        }
     }
 
     #[wasm_bindgen(js_name = fromVolume)]
@@ -53,5 +51,57 @@ impl JsFuel {
 impl From<JsFuel> for Fuel {
     fn from(value: JsFuel) -> Self {
         value.inner
+    }
+}
+
+#[wasm_bindgen(js_name = FuelType)]
+pub struct JsFuelType {
+    inner: FuelType,
+}
+
+#[wasm_bindgen(js_class = FuelType)]
+impl JsFuelType {
+    #[wasm_bindgen(constructor)]
+    pub fn new(fuel_type: String) -> Result<Self, JsError> {
+        let inner = match fuel_type.as_ref() {
+            "AvGas" => FuelType::AvGas,
+            "Diesel" => FuelType::Diesel,
+            "JetA" => FuelType::JetA,
+            _ => return Err(JsError::new(&format!("invalid fuel type: {fuel_type}"))),
+        };
+
+        Ok(Self { inner })
+    }
+
+    #[wasm_bindgen(js_name = avGas)]
+    pub fn av_gas() -> Self {
+        Self {
+            inner: FuelType::AvGas,
+        }
+    }
+
+    pub fn diesel() -> Self {
+        Self {
+            inner: FuelType::Diesel,
+        }
+    }
+
+    #[wasm_bindgen(js_name = jetA)]
+    pub fn jet_a() -> Self {
+        Self {
+            inner: FuelType::JetA,
+        }
+    }
+}
+
+impl From<JsFuelType> for FuelType {
+    fn from(value: JsFuelType) -> Self {
+        value.inner
+    }
+}
+
+impl From<FuelType> for JsFuelType {
+    fn from(value: FuelType) -> Self {
+        Self { inner: value }
     }
 }
