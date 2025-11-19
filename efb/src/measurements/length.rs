@@ -18,8 +18,8 @@ use std::ops::Div;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use super::{Duration, DurationUnit, Measurement, Speed, UnitOfMeasure};
-use super::{SpeedUnit, constants};
+use super::{constants, SpeedUnit};
+use super::{Duration, DurationUnit, Measurement, PhysicalQuantity, Speed, UnitOfMeasure};
 
 /// Length unit with _m_ as SI unit.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -33,6 +33,10 @@ pub enum LengthUnit {
 }
 
 impl UnitOfMeasure<f32> for LengthUnit {
+    fn quantity() -> PhysicalQuantity {
+        PhysicalQuantity::Length
+    }
+
     fn si() -> Self {
         Self::Meters
     }

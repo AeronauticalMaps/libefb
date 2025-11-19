@@ -17,7 +17,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::constants;
-use super::{Measurement, UnitOfMeasure};
+use super::{Measurement, PhysicalQuantity, UnitOfMeasure};
 
 /// Temperature with _K_ as SI unit.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -30,6 +30,10 @@ pub enum TemperatureUnit {
 }
 
 impl UnitOfMeasure<f32> for TemperatureUnit {
+    fn quantity() -> PhysicalQuantity {
+        PhysicalQuantity::Temperature
+    }
+
     fn si() -> Self {
         Self::Kelvin
     }

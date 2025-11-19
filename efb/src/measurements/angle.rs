@@ -19,7 +19,7 @@ use std::ops::Add;
 use serde::{Deserialize, Serialize};
 
 use super::constants;
-use super::{Measurement, UnitOfMeasure};
+use super::{Measurement, PhysicalQuantity, UnitOfMeasure};
 use crate::MagneticVariation;
 
 /// Angle unit with _rad_ as SI unit.
@@ -33,6 +33,10 @@ pub enum AngleUnit {
 }
 
 impl UnitOfMeasure<f32> for AngleUnit {
+    fn quantity() -> PhysicalQuantity {
+        PhysicalQuantity::Angle
+    }
+
     fn si() -> Self {
         AngleUnit::Radian
     }

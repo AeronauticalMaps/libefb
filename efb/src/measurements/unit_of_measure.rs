@@ -13,6 +13,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/// Physical quantities that can be measured with units.
+pub enum PhysicalQuantity {
+    Angle,
+    Length,
+    Density,
+    Duration,
+    Mass,
+    Pressure,
+    Speed,
+    Temperature,
+    Volume,
+}
+
 /// A trait that implements a unit of measure.
 ///
 /// The unit of measure of some value converts to and from the International
@@ -24,13 +37,17 @@
 /// Basic usage implementing a length measurement:
 ///
 /// ```
-/// # use efb::measurements::{UnitOfMeasure};
+/// # use efb::measurements::{UnitOfMeasure, PhysicalQuantity};
 /// enum LengthUnit {
 ///     Meters,
 /// }
 ///
 /// // the length's value is a float
 /// impl UnitOfMeasure<f32> for LengthUnit {
+///     fn quantity() -> PhysicalQuantity {
+///         PhysicalQuantity::Length
+///     }
+///
 ///     fn si() -> Self {
 ///         Self::Meters
 ///     }
@@ -56,6 +73,9 @@
 /// ```
 /// [`Measurement`]: super::Measurement
 pub trait UnitOfMeasure<T> {
+    /// Returns the physical quantity measured in this unit.
+    fn quantity() -> PhysicalQuantity;
+
     /// Returns the SI unit.
     fn si() -> Self;
 

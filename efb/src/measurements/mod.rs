@@ -64,5 +64,5 @@ pub use measurement::*;
 pub use pressure::{Pressure, PressureUnit};
 pub use speed::{Speed, SpeedUnit};
 pub use temperature::{Temperature, TemperatureUnit};
-pub use unit_of_measure::UnitOfMeasure;
+pub use unit_of_measure::{PhysicalQuantity, UnitOfMeasure};
 pub use volume::{Volume, VolumeUnit};

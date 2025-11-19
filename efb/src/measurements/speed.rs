@@ -19,7 +19,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use super::constants;
-use super::{Measurement, UnitOfMeasure};
+use super::{Measurement, PhysicalQuantity, UnitOfMeasure};
 use crate::error::Error;
 
 /// Speed unit with _m/s_ as SI unit.
@@ -33,6 +33,10 @@ pub enum SpeedUnit {
 }
 
 impl UnitOfMeasure<f32> for SpeedUnit {
+    fn quantity() -> PhysicalQuantity {
+        PhysicalQuantity::Speed
+    }
+
     fn si() -> Self {
         Self::MetersPerSecond
     }

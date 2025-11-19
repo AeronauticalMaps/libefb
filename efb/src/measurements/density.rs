@@ -16,7 +16,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use super::{Measurement, UnitOfMeasure};
+use super::{Measurement, PhysicalQuantity, UnitOfMeasure};
 
 /// Density unit with _kg/m³_ as SI unit.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -28,6 +28,10 @@ pub enum DensityUnit {
 }
 
 impl UnitOfMeasure<f32> for DensityUnit {
+    fn quantity() -> PhysicalQuantity {
+        PhysicalQuantity::Density
+    }
+
     fn si() -> Self {
         Self::KilogramPerCubicMeter
     }

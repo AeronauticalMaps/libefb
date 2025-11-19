@@ -18,7 +18,7 @@ use std::ops::Mul;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use super::{Density, DensityUnit, Mass, MassUnit, Measurement, UnitOfMeasure};
+use super::{Density, DensityUnit, Mass, MassUnit, Measurement, PhysicalQuantity, UnitOfMeasure};
 
 /// Volume with _m³_ as SI unit.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -30,6 +30,10 @@ pub enum VolumeUnit {
 }
 
 impl UnitOfMeasure<f32> for VolumeUnit {
+    fn quantity() -> PhysicalQuantity {
+        PhysicalQuantity::Volume
+    }
+
     fn si() -> Self {
         Self::CubicMeters
     }

@@ -16,7 +16,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use super::{Measurement, UnitOfMeasure};
+use super::{Measurement, PhysicalQuantity, UnitOfMeasure};
 
 /// Duration unit with s as SI unit.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -27,6 +27,10 @@ pub enum DurationUnit {
 }
 
 impl UnitOfMeasure<u32> for DurationUnit {
+    fn quantity() -> PhysicalQuantity {
+        PhysicalQuantity::Duration
+    }
+
     fn si() -> Self {
         Self::Seconds
     }

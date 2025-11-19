@@ -16,7 +16,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use super::{Measurement, UnitOfMeasure};
+use super::{Measurement, PhysicalQuantity, UnitOfMeasure};
 
 mod constants {
     pub const IN_HG_IN_PA: f32 = 3386.39;
@@ -33,6 +33,10 @@ pub enum PressureUnit {
 }
 
 impl UnitOfMeasure<f32> for PressureUnit {
+    fn quantity() -> PhysicalQuantity {
+        PhysicalQuantity::Pressure
+    }
+
     fn si() -> Self {
         Self::Pascal
     }
