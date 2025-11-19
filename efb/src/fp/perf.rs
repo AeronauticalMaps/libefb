@@ -72,11 +72,14 @@ impl Performance {
         self.at_level(level).ff
     }
 
-    /// Returns the speed and fuel flow at a level.
+    /// Returns the performance at a level.
+    ///
+    /// Uses reverse find to return the performance at the highest level that is
+    /// less than or equal to the target level. Does not interpolate between levels.
     ///
     /// # Panics
     ///
-    /// Panics if the map holds no performance value which should never happen.
+    /// Panics if the table is empty.
     fn at_level(&self, level: &VerticalDistance) -> &PerformanceTableRow {
         self.table
             .iter()

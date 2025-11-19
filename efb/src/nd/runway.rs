@@ -75,16 +75,21 @@ impl TryFrom<u8> for RunwayConditionCode {
     }
 }
 
+/// Runway with physical and declared distances.
 #[derive(Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Runway {
     pub designator: String,
     pub bearing: Angle,
     pub length: Length,
+    /// Takeoff Run Available - length available for ground run during takeoff.
     pub tora: Length,
+    /// Takeoff Distance Available - length available for takeoff including clearway.
     pub toda: Length,
+    /// Landing Distance Available - length available for landing ground roll.
     pub lda: Length,
     pub surface: RunwaySurface,
+    /// Runway gradient as percentage (positive = upslope, negative = downslope).
     pub slope: f32,
     pub elev: VerticalDistance,
 }

@@ -77,6 +77,10 @@
 //!
 //! - **FMS** Flight Management System
 //!
+//! ## I
+//!
+//! - **ISA** International Standard Atmosphere
+//!
 //! ## M
 //!
 //! - **MSL** Mean Sea Level
@@ -127,7 +131,7 @@ pub mod prelude {
         FuelPolicy, Performance, Reserve, TakeoffLandingPerformance,
     };
     pub use crate::measurements::*;
-    pub use crate::nd::{InputFormat, NavigationData};
+    pub use crate::nd::{Fix, InputFormat, NavigationData};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

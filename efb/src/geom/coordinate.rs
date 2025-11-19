@@ -30,10 +30,10 @@ mod constants {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(C)]
 pub struct Coordinate {
-    /// Latitude in the range from -180° east to 180° west.
+    /// Latitude in the range from -90° (south) to 90° (north).
     pub latitude: f32,
 
-    /// Longitude in the range from -90° south to 90° north.
+    /// Longitude in the range from -180° (west) to 180° (east).
     pub longitude: f32,
 }
 

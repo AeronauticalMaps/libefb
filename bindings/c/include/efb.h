@@ -32,9 +32,17 @@ typedef enum {
   Seconds,
 } EfbDurationUnit;
 
+/// Type of fuel used by an aircraft.
+///
+/// Represents different fuel types that can be used in aircraft. Each fuel type
+/// has an associated density at ISA conditions used for mass/volume
+/// conversions.
 typedef enum {
+  /// Aviation gasoline (100LL) with density of 0.75 kg/L at ISA.
   AvGas,
+  /// Diesel fuel with density of 0.838 kg/L at ISA.
   Diesel,
+  /// Jet-A with density of 0.8 kg/L at ISA.
   JetA,
 } EfbFuelType;
 
@@ -237,6 +245,28 @@ typedef struct {
   EfbSpeed speed;
 } EfbWind;
 
+/// Fuel quantity with a specific type and mass.
+///
+/// Represents a quantity of fuel, tracking both the fuel type and mass.
+/// Fuel quantities can be created from either mass or volume, and converted
+/// between the two at ISA conditions.
+///
+/// # Examples
+///
+/// ```
+/// # use efb::prelude::*;
+/// # use efb::measurements::{Mass, Volume};
+/// // Create fuel from volume
+/// let fuel = Fuel::from_volume(Volume::l(100.0), FuelType::Diesel);
+///
+/// // Create fuel from mass
+/// let fuel = Fuel::new(Mass::kg(83.8), FuelType::Diesel);
+///
+/// // Add fuel quantities
+/// let total = Fuel::from_volume(Volume::l(50.0), FuelType::Diesel)
+///     + Fuel::from_volume(Volume::l(50.0), FuelType::Diesel);
+/// assert_eq!(total.volume(), Volume::l(100.0));
+/// ```
 typedef struct {
   EfbFuelType fuel_type;
   EfbMass mass;
@@ -308,11 +338,22 @@ typedef struct {
 
 typedef EfbMeasurementf32VolumeUnit EfbVolume;
 
+/// Policy for determining fuel to load.
+///
+/// Represents different approaches to fuel planning. The [`fuel planning`] is
+/// based on this policy.
+///
+/// [`fuel planning`]: `FuelPlanning`
 typedef enum {
+  /// Load minimum required fuel only.
   MinimumFuel,
+  /// Fill tanks to capacity.
   MaximumFuel,
+  /// Total fuel to load (includes required fuel).
   ManualFuel,
+  /// Desired fuel remaining after landing.
   FuelAtLanding,
+  /// Additional fuel beyond minimum requirements.
   ExtraFuel,
 } EfbFuelPolicy_Tag;
 

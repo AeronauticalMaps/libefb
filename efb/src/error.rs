@@ -13,6 +13,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! EFB error types.
+//!
+//! All operations that can fail return [`Result<T>`]. The [`Error`] categorizes
+//! errors into:
+//!
+//! - Route decoding errors (invalid elements, unknown identifiers)
+//! - Parsing errors (malformed strings, invalid values)
+//! - Navigation data errors (unknown identifiers, invalid runway codes)
+//! - Mass & balance planning errors (mismatched dimensions, exceeded capacities)
+//! - Aircraft building errors (missing required fields)
+
 use std::error;
 use std::fmt;
 use std::result;

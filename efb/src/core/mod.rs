@@ -13,6 +13,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Core aviation related types and utilities.
+//!
+//! This module provides fundamental types used throughout the library for
+//! representing aviation-specific concepts such as fuel, wind, vertical
+//! distances, and magnetic variation.
+
 mod fuel;
 mod mag_var;
 mod vertical_distance;

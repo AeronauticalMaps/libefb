@@ -42,13 +42,24 @@ impl Default for Reserve {
     }
 }
 
+/// Policy for determining fuel to load.
+///
+/// Represents different approaches to fuel planning. The [`fuel planning`] is
+/// based on this policy.
+///
+/// [`fuel planning`]: `FuelPlanning`
 #[repr(C)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum FuelPolicy {
+    /// Load minimum required fuel only.
     MinimumFuel,
+    /// Fill tanks to capacity.
     MaximumFuel,
+    /// Total fuel to load (includes required fuel).
     ManualFuel(Fuel),
+    /// Desired fuel remaining after landing.
     FuelAtLanding(Fuel),
+    /// Additional fuel beyond minimum requirements.
     ExtraFuel(Fuel),
 }
 

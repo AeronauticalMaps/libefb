@@ -29,16 +29,25 @@ mod constants {
     pub const JET_A_AT_ISA: Density = Density::kg_per_l(0.8);
 }
 
+/// Type of fuel used by an aircraft.
+///
+/// Represents different fuel types that can be used in aircraft. Each fuel type
+/// has an associated density at ISA conditions used for mass/volume
+/// conversions.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(C)]
 pub enum FuelType {
+    /// Aviation gasoline (100LL) with density of 0.75 kg/L at ISA.
     AvGas,
+    /// Diesel fuel with density of 0.838 kg/L at ISA.
     Diesel,
+    /// Jet-A with density of 0.8 kg/L at ISA.
     JetA,
 }
 
 impl FuelType {
+    /// Returns the density of the fuel type at ISA conditions.
     pub fn density(&self) -> Density {
         match self {
             Self::AvGas => constants::AVGAS_AT_ISA,
@@ -48,6 +57,28 @@ impl FuelType {
     }
 }
 
+/// Fuel quantity with a specific type and mass.
+///
+/// Represents a quantity of fuel, tracking both the fuel type and mass.
+/// Fuel quantities can be created from either mass or volume, and converted
+/// between the two at ISA conditions.
+///
+/// # Examples
+///
+/// ```
+/// # use efb::prelude::*;
+/// # use efb::measurements::{Mass, Volume};
+/// // Create fuel from volume
+/// let fuel = Fuel::from_volume(Volume::l(100.0), FuelType::Diesel);
+///
+/// // Create fuel from mass
+/// let fuel = Fuel::new(Mass::kg(83.8), FuelType::Diesel);
+///
+/// // Add fuel quantities
+/// let total = Fuel::from_volume(Volume::l(50.0), FuelType::Diesel)
+///     + Fuel::from_volume(Volume::l(50.0), FuelType::Diesel);
+/// assert_eq!(total.volume(), Volume::l(100.0));
+/// ```
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(C)]
@@ -57,10 +88,14 @@ pub struct Fuel {
 }
 
 impl Fuel {
+    /// Creates new fuel from mass.
     pub fn new(mass: Mass, fuel_type: FuelType) -> Self {
         Self { fuel_type, mass }
     }
 
+    /// Creates new fuel from volume.
+    ///
+    /// The mass is calculated using the fuel type's density at ISA conditions.
     pub fn from_volume(v: Volume, fuel_type: FuelType) -> Self {
         Self {
             fuel_type,
@@ -68,6 +103,9 @@ impl Fuel {
         }
     }
 
+    /// Returns the volume of fuel.
+    ///
+    /// The volume is calculated from the mass using the fuel type's density.
     pub fn volume(self) -> Volume {
         self.mass / self.fuel_type.density()
     }

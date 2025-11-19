@@ -100,6 +100,28 @@ impl NavigationData {
         self.cycle.as_ref()
     }
 
+    /// Returns all airspaces that contain the given point.
+    ///
+    /// This performs a 2D spatial query using only the airspace polygons.
+    /// Vertical bounds (floor and ceiling) are not checked. Returns an empty
+    /// vector if the point is not within any airspace.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use efb::nd::NavigationData;
+    /// # use efb::geom::Coordinate;
+    /// # fn check_airspace(nd: &NavigationData) {
+    /// let position = Coordinate::new(53.03759, 9.00533);
+    /// let airspaces = nd.at(&position);
+    ///
+    /// if airspaces.is_empty() {
+    ///     println!("Outside controlled airspace");
+    /// } else {
+    ///     println!("Inside {} airspace(s)", airspaces.len());
+    /// }
+    /// # }
+    /// ```
     pub fn at(&self, point: &Coordinate) -> Vec<&Airspace> {
         self.airspaces
             .iter()
@@ -107,6 +129,24 @@ impl NavigationData {
             .collect()
     }
 
+    /// Searches for a navigation aid by identifier.
+    ///
+    /// Searches waypoints first, then airports. Returns the first match found.
+    /// The search is case-sensitive and does not perform partial matching.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use efb::prelude::*;
+    /// # fn search(mut fms: FMS) -> Result<(), Error> {
+    /// // Search for Hamburg airport
+    /// match fms.nd().find("EDDH") {
+    ///     Some(navaid) => println!("Found: {}", navaid.ident()),
+    ///     None => return Err(Error::UnknownIdent("EDDH".to_string())),
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn find(&self, ident: &str) -> Option<NavAid> {
         self.waypoints
             .iter()
