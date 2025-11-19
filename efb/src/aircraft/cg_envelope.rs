@@ -136,6 +136,11 @@ impl CGEnvelope {
         // outside the envelope.
         wn_on_ramp != 0 && wn_after_landing != 0
     }
+
+    /// The limits of the envelope.
+    pub fn limits(&self) -> &[CGLimit] {
+        &self.limits
+    }
 }
 
 #[cfg(test)]
