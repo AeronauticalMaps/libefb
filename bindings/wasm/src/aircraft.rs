@@ -109,9 +109,9 @@ pub struct JsStation {
 #[wasm_bindgen(js_class = Station)]
 impl JsStation {
     #[wasm_bindgen(constructor)]
-    pub fn new(arm: JsLength, description: Option<String>) -> Self {
+    pub fn new(arm: &JsLength, description: Option<String>) -> Self {
         Self {
-            inner: Station::new(arm.into(), description),
+            inner: Station::new(arm.clone().into(), description),
         }
     }
 
@@ -149,9 +149,9 @@ pub struct JsFuelTank {
 #[wasm_bindgen(js_class = FuelTank)]
 impl JsFuelTank {
     #[wasm_bindgen(constructor)]
-    pub fn new(capacity: JsVolume, arm: JsLength) -> Self {
+    pub fn new(capacity: &JsVolume, arm: &JsLength) -> Self {
         Self {
-            inner: FuelTank::new(capacity.into(), arm.into()),
+            inner: FuelTank::new(capacity.clone().into(), arm.clone().into()),
         }
     }
 
@@ -189,9 +189,9 @@ pub struct JsCGLimit {
 #[wasm_bindgen(js_class = CGLimit)]
 impl JsCGLimit {
     #[wasm_bindgen(constructor)]
-    pub fn new(mass: JsMass, distance: JsLength) -> Self {
+    pub fn new(mass: &JsMass, distance: &JsLength) -> Self {
         Self {
-            inner: CGLimit::new(mass.into(), distance.into()),
+            inner: CGLimit::new(mass.clone().into(), distance.clone().into()),
         }
     }
 

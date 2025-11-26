@@ -17,6 +17,7 @@ use efb::prelude::*;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(js_name = Duration)]
+#[derive(Debug, Clone, Copy)]
 pub struct JsDuration {
     inner: Duration,
 }
@@ -61,6 +62,7 @@ impl From<Duration> for JsDuration {
 ////////////////////////////////////////////////////////////////////////////////
 
 #[wasm_bindgen(js_name = Length)]
+#[derive(Debug, Clone, Copy)]
 pub struct JsLength {
     inner: Length,
 }
@@ -108,6 +110,7 @@ impl From<Length> for JsLength {
 ////////////////////////////////////////////////////////////////////////////////
 
 #[wasm_bindgen(js_name = Mass)]
+#[derive(Debug, Clone, Copy)]
 pub struct JsMass {
     inner: Mass,
 }
@@ -153,6 +156,7 @@ impl From<Mass> for JsMass {
 ////////////////////////////////////////////////////////////////////////////////
 
 #[wasm_bindgen(js_name = Temperature)]
+#[derive(Debug, Clone, Copy)]
 pub struct JsTemperature {
     inner: Temperature,
 }
@@ -199,6 +203,7 @@ impl From<Temperature> for JsTemperature {
 ////////////////////////////////////////////////////////////////////////////////
 
 #[wasm_bindgen(js_name = Volume)]
+#[derive(Debug, Clone, Copy)]
 pub struct JsVolume {
     inner: Volume,
 }

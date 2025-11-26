@@ -26,18 +26,16 @@ pub struct JsFuel {
 #[wasm_bindgen(js_class = Fuel)]
 impl JsFuel {
     #[wasm_bindgen(constructor)]
-    pub fn new(mass: JsMass, fuel_type: JsFuelType) -> Self {
+    pub fn new(mass: &JsMass, fuel_type: &JsFuelType) -> Self {
         Self {
-            inner: Fuel::new(mass.into(), fuel_type.into()),
+            inner: Fuel::new(mass.clone().into(), fuel_type.clone().into()),
         }
     }
 
     #[wasm_bindgen(js_name = fromVolume)]
-    pub fn from_volume(volume: JsVolume, fuel_type: JsValue) -> Result<Self, JsError> {
-        let fuel_type: FuelType = serde_wasm_bindgen::from_value(fuel_type)?;
-
+    pub fn from_volume(volume: &JsVolume, fuel_type: &JsFuelType) -> Result<Self, JsError> {
         Ok(Self {
-            inner: Fuel::from_volume(volume.into(), fuel_type),
+            inner: Fuel::from_volume(volume.clone().into(), fuel_type.clone().into()),
         })
     }
 

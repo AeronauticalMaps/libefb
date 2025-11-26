@@ -159,6 +159,7 @@ impl From<JsReserve> for Reserve {
 ////////////////////////////////////////////////////////////////////////////////
 
 #[wasm_bindgen(js_name = Performance)]
+#[derive(Debug, Clone)]
 pub struct JsPerformance {
     inner: Performance,
 }
@@ -178,6 +179,7 @@ impl From<Performance> for JsPerformance {
 ////////////////////////////////////////////////////////////////////////////////
 
 #[wasm_bindgen(js_name = TakeoffLandingPerformance)]
+#[derive(Debug, Clone)]
 pub struct JsTakeoffLandingPerformance {
     inner: TakeoffLandingPerformance,
 }
