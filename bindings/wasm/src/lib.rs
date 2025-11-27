@@ -27,4 +27,4 @@ pub use fms::JsFMS;
 pub use fp::*;
 pub use measurements::*;
 pub use nd::JsNavigationData;
-pub use route::JsRoute;
+pub use route::{JsLeg, JsRoute};
