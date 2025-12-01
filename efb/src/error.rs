@@ -120,10 +120,10 @@ impl fmt::Display for Error {
                 write!(f, "fuel stations should match to aircraft's tanks")
             }
             Self::ExceededFuelCapacityOnRamp => {
-                write!(f, "fuel should fit in tank capacity when on ramp")
+                write!(f, "fuel should not exceed tank capacity on ramp")
             }
             Self::ExceededFuelCapacityAfterLanding => {
-                write!(f, "fuel should fit in tank capacity after landing")
+                write!(f, "fuel should not exceed tank capacity after landing")
             }
 
             Self::ExpectedRegistration => write!(f, "aircraft should have a registration"),
