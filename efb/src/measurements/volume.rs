@@ -18,7 +18,9 @@ use std::ops::Mul;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use super::{Density, DensityUnit, Mass, MassUnit, Measurement, PhysicalQuantity, UnitOfMeasure};
+use super::{
+    constants, Density, DensityUnit, Mass, MassUnit, Measurement, PhysicalQuantity, UnitOfMeasure,
+};
 
 /// Volume with _m³_ as SI unit.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -27,6 +29,7 @@ use super::{Density, DensityUnit, Mass, MassUnit, Measurement, PhysicalQuantity,
 pub enum VolumeUnit {
     CubicMeters,
     Liter,
+    USGallon,
 }
 
 impl UnitOfMeasure<f32> for VolumeUnit {
@@ -42,6 +45,7 @@ impl UnitOfMeasure<f32> for VolumeUnit {
         match self {
             Self::CubicMeters => "m³",
             Self::Liter => "L",
+            Self::USGallon => "gal",
         }
     }
 
@@ -49,6 +53,7 @@ impl UnitOfMeasure<f32> for VolumeUnit {
         match to {
             Self::CubicMeters => value,
             Self::Liter => value * 1000.0,
+            Self::USGallon => value / constants::US_GALLON_IN_QUBIC_METER,
         }
     }
 
@@ -56,6 +61,7 @@ impl UnitOfMeasure<f32> for VolumeUnit {
         match self {
             Self::CubicMeters => *value,
             Self::Liter => value / 1000.0,
+            Self::USGallon => value * constants::US_GALLON_IN_QUBIC_METER,
         }
     }
 }
@@ -74,6 +80,13 @@ impl Volume {
         Measurement {
             value,
             unit: VolumeUnit::Liter,
+        }
+    }
+
+    pub fn gal(value: f32) -> Self {
+        Measurement {
+            value,
+            unit: VolumeUnit::USGallon,
         }
     }
 }

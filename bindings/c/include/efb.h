@@ -76,6 +76,7 @@ typedef enum {
 typedef enum {
   CubicMeters,
   Liter,
+  USGallon,
 } EfbVolumeUnit;
 
 typedef struct EfbAircraftBuilder EfbAircraftBuilder;

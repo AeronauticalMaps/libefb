@@ -20,3 +20,4 @@ pub const METER_PER_SECONDS_IN_KNOTS: f32 = 1.943844;
 pub const NAUTICAL_MILE_IN_METER: f32 = 1852.0;
 pub const PI2: f32 = std::f32::consts::PI * 2.0;
 pub const POUNDS_IN_KILOGRAMS: f32 = 0.4535924;
+pub const US_GALLON_IN_QUBIC_METER: f32 = 0.003785412;
