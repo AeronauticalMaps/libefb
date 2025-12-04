@@ -72,10 +72,13 @@ impl JsLength {
     #[wasm_bindgen(constructor)]
     pub fn new(value: Option<f32>, unit: Option<String>) -> Self {
         let unit = match unit.as_deref() {
+            Some("cm") => LengthUnit::Centimeters,
             Some("m") => LengthUnit::Meters,
-            Some("NM") => LengthUnit::NauticalMiles,
+            Some("km") => LengthUnit::Kilometers,
             Some("in") => LengthUnit::Inches,
             Some("ft") => LengthUnit::Feet,
+            Some("NM") => LengthUnit::NauticalMiles,
+            Some("SM") => LengthUnit::StatuteMiles,
             _ => serde_wasm_bindgen::from_value(unit.into()).unwrap_or(LengthUnit::si()),
         };
 
@@ -215,6 +218,7 @@ impl JsVolume {
         let unit = match unit.as_deref() {
             Some("m³") => VolumeUnit::CubicMeters,
             Some("L") => VolumeUnit::Liter,
+            Some("gal") => VolumeUnit::USGallon,
             _ => serde_wasm_bindgen::from_value(unit.into()).unwrap_or(VolumeUnit::si()),
         };
 

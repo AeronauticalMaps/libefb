@@ -53,10 +53,13 @@ typedef enum {
 
 /// Length unit with _m_ as SI unit.
 typedef enum {
+  Centimeters,
   Meters,
-  NauticalMiles,
+  Kilometers,
   Inches,
   Feet,
+  NauticalMiles,
+  StatuteMiles,
 } EfbLengthUnit;
 
 /// Mass unit with _kg_ as SI unit.

@@ -26,10 +26,13 @@ use super::{Duration, DurationUnit, Measurement, PhysicalQuantity, Speed, UnitOf
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(C)]
 pub enum LengthUnit {
+    Centimeters,
     Meters,
-    NauticalMiles,
+    Kilometers,
     Inches,
     Feet,
+    NauticalMiles,
+    StatuteMiles,
 }
 
 impl UnitOfMeasure<f32> for LengthUnit {
@@ -43,28 +46,37 @@ impl UnitOfMeasure<f32> for LengthUnit {
 
     fn symbol(&self) -> &'static str {
         match self {
+            Self::Centimeters => "cm",
             Self::Meters => "m",
-            Self::NauticalMiles => "NM",
+            Self::Kilometers => "km",
             Self::Inches => "in",
             Self::Feet => "ft",
+            Self::NauticalMiles => "NM",
+            Self::StatuteMiles => "SM",
         }
     }
 
     fn from_si(value: f32, to: &Self) -> f32 {
         match to {
+            Self::Centimeters => value * 100.0,
             Self::Meters => value,
-            Self::NauticalMiles => value / constants::NAUTICAL_MILE_IN_METER,
+            Self::Kilometers => value / 1000.0,
             Self::Inches => value / constants::INCH_IN_METER,
             Self::Feet => value / constants::FEET_IN_METER,
+            Self::NauticalMiles => value / constants::NAUTICAL_MILE_IN_METER,
+            Self::StatuteMiles => value / constants::STATUTE_MILE_IN_METER,
         }
     }
 
     fn to_si(&self, value: &f32) -> f32 {
         match self {
+            Self::Centimeters => value / 100.0,
             Self::Meters => *value,
-            Self::NauticalMiles => value * constants::NAUTICAL_MILE_IN_METER,
+            Self::Kilometers => value * 1000.0,
             Self::Inches => value * constants::INCH_IN_METER,
             Self::Feet => value * constants::FEET_IN_METER,
+            Self::NauticalMiles => value * constants::NAUTICAL_MILE_IN_METER,
+            Self::StatuteMiles => value * constants::STATUTE_MILE_IN_METER,
         }
     }
 }
@@ -72,6 +84,13 @@ impl UnitOfMeasure<f32> for LengthUnit {
 pub type Length = Measurement<f32, LengthUnit>;
 
 impl Length {
+    pub fn cm(value: f32) -> Self {
+        Self {
+            value,
+            unit: LengthUnit::Centimeters,
+        }
+    }
+
     pub fn m(value: f32) -> Self {
         Self {
             value,
@@ -79,10 +98,10 @@ impl Length {
         }
     }
 
-    pub fn nm(value: f32) -> Self {
+    pub fn km(value: f32) -> Self {
         Self {
             value,
-            unit: LengthUnit::NauticalMiles,
+            unit: LengthUnit::Kilometers,
         }
     }
 
@@ -97,6 +116,20 @@ impl Length {
         Self {
             value,
             unit: LengthUnit::Feet,
+        }
+    }
+
+    pub fn nm(value: f32) -> Self {
+        Self {
+            value,
+            unit: LengthUnit::NauticalMiles,
+        }
+    }
+
+    pub fn sm(value: f32) -> Self {
+        Self {
+            value,
+            unit: LengthUnit::StatuteMiles,
         }
     }
 }
