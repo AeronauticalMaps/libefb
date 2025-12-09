@@ -15,10 +15,13 @@
 
 //! Navigation Data.
 
+use std::collections::HashMap;
 use std::rc::Rc;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+
+use uuid::Uuid;
 
 use crate::error::Error;
 use crate::geom::Coordinate;
@@ -59,6 +62,8 @@ pub struct NavigationData {
     waypoints: Vec<Rc<Waypoint>>,
     locations: Vec<LocationIndicator>,
     cycle: Option<AiracCycle>,
+    uuid: [u8; 16],
+    partitions: HashMap<[u8; 16], NavigationData>,
 }
 
 impl NavigationData {
@@ -76,6 +81,8 @@ impl NavigationData {
             waypoints: record.waypoints,
             locations: record.locations,
             cycle: record.cycle,
+            uuid: Uuid::new_v4().into_bytes(),
+            partitions: HashMap::new(),
         })
     }
 
@@ -89,6 +96,8 @@ impl NavigationData {
             waypoints: Vec::new(),
             locations: Vec::new(),
             cycle: None,
+            uuid: Uuid::new_v4().into_bytes(),
+            partitions: HashMap::new(),
         })
     }
 
@@ -98,6 +107,14 @@ impl NavigationData {
 
     pub fn cycle(&self) -> Option<&AiracCycle> {
         self.cycle.as_ref()
+    }
+
+    /// Returns the navigation data's UUID.
+    ///
+    /// This UUID is required if the navigation data was append to another
+    /// dataset and should be removed.
+    pub fn uuid(&self) -> &[u8; 16] {
+        &self.uuid
     }
 
     /// Returns all airspaces that contain the given point.
@@ -123,8 +140,7 @@ impl NavigationData {
     /// # }
     /// ```
     pub fn at(&self, point: &Coordinate) -> Vec<&Airspace> {
-        self.airspaces
-            .iter()
+        self.airspaces()
             .filter(|airspace| airspace.polygon.contains(point))
             .collect()
     }
@@ -148,22 +164,28 @@ impl NavigationData {
     /// # }
     /// ```
     pub fn find(&self, ident: &str) -> Option<NavAid> {
-        self.waypoints
-            .iter()
+        self.waypoints()
             .find(|&wp| wp.ident() == ident)
             .map(|wp| NavAid::Waypoint(Rc::clone(wp)))
             .or(self
-                .airports
-                .iter()
+                .airports()
                 .find(|&aprt| aprt.ident() == ident)
                 .map(|aprt| NavAid::Airport(Rc::clone(aprt))))
     }
 
     /// Appends other NavigationData.
-    pub fn append(&mut self, mut other: NavigationData) {
-        self.airports.append(&mut other.airports);
-        self.airspaces.append(&mut other.airspaces);
-        self.waypoints.append(&mut other.waypoints);
+    ///
+    /// The other navigation data can be [removed] by their [UUID].
+    ///
+    /// [removed]: Self::remove
+    /// [UUID]: Self::uuid
+    pub fn append(&mut self, other: NavigationData) {
+        self.partitions.insert(other.uuid, other);
+    }
+
+    /// Removes the navigation data partition.
+    pub fn remove(&mut self, uuid: &[u8; 16]) {
+        self.partitions.remove(uuid);
     }
 
     #[deprecated(
@@ -184,6 +206,30 @@ impl NavigationData {
         };
 
         Ok(())
+    }
+
+    fn airports(&self) -> impl Iterator<Item = &Rc<Airport>> {
+        self.airports.iter().chain(
+            self.partitions
+                .values()
+                .flat_map(|partition| partition.airports.iter()),
+        )
+    }
+
+    fn waypoints(&self) -> impl Iterator<Item = &Rc<Waypoint>> {
+        self.waypoints.iter().chain(
+            self.partitions
+                .values()
+                .flat_map(|partition| partition.waypoints.iter()),
+        )
+    }
+
+    fn airspaces(&self) -> impl Iterator<Item = &Airspace> {
+        self.airspaces.iter().chain(
+            self.partitions
+                .values()
+                .flat_map(|partition| partition.airspaces.iter()),
+        )
     }
 }
 
@@ -217,6 +263,8 @@ mod tests {
             waypoints: Vec::new(),
             locations: vec!["ED".try_into().expect("ED should be a valid location")],
             cycle: None,
+            uuid: Uuid::new_v4().into_bytes(),
+            partitions: HashMap::new(),
         };
 
         assert_eq!(nd.at(&inside), vec![&nd.airspaces[0]]);
