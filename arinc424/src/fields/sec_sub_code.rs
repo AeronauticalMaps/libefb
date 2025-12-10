@@ -16,6 +16,10 @@
 use super::{Field, FieldError};
 use std::str::FromStr;
 
+/// Section Code field (ARINC 424 Spec §5.4).
+///
+/// Position: 4 (1 character)
+/// Identifies the type of record.
 #[derive(Debug, PartialEq)]
 pub enum SecCode {
     MORA,
@@ -28,13 +32,29 @@ pub enum SecCode {
     Airspace,
 }
 
+impl SecCode {
+    /// The position of the section code field.
+    pub const POSITION: usize = 4;
+    /// The length of the section code field.
+    pub const LENGTH: usize = 1;
+}
+
 impl Field for SecCode {}
 
 impl FromStr for SecCode {
     type Err = FieldError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match &s[4..5] {
+        if s.len() < Self::POSITION + Self::LENGTH {
+            return Err(FieldError::invalid_length(
+                "SecCode",
+                Self::POSITION,
+                Self::LENGTH,
+            ));
+        }
+
+        let code = &s[4..5];
+        match code {
             "A" => Ok(Self::MORA),
             "D" => Ok(Self::Navaid),
             "E" => Ok(Self::Enroute),
@@ -43,11 +63,21 @@ impl FromStr for SecCode {
             "R" => Ok(Self::CompanyRoute),
             "T" => Ok(Self::Table),
             "U" => Ok(Self::Airspace),
-            _ => Err(FieldError::InvalidValue("unkown SEC CODE")),
+            c => Err(FieldError::invalid_value(
+                "SecCode",
+                Self::POSITION,
+                Self::LENGTH,
+                "unknown section code",
+            )
+            .with_actual(c)),
         }
     }
 }
 
+/// Subsection Code field (ARINC 424 Spec §5.5).
+///
+/// Position I (1 character)
+/// Further classifies the record within a section.
 #[derive(Debug, PartialEq)]
 pub enum SubCode<const I: usize> {
     // MORA
@@ -75,55 +105,92 @@ pub enum SubCode<const I: usize> {
     ControlledAirspace,
 }
 
-impl<const I: usize> Field for SubCode<I> {}
-
-macro_rules! sub_code_error {
-    ($sub_code:expr) => {
-        Err(FieldError::InvalidValue(concat!(
-            "invalid SEC CODE for SUB CODE: ",
-            $sub_code
-        )))
-    };
+impl<const I: usize> SubCode<I> {
+    /// The length of the subsection code field.
+    pub const LENGTH: usize = 1;
 }
+
+impl<const I: usize> Field for SubCode<I> {}
 
 impl<const I: usize> FromStr for SubCode<I> {
     type Err = FieldError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let sec_code: SecCode = s.parse()?;
+        if s.len() < I + Self::LENGTH {
+            return Err(FieldError::invalid_length("SubCode", I, Self::LENGTH));
+        }
 
-        match &s[I..I + 1] {
+        let sec_code: SecCode = s.parse()?;
+        let sub = &s[I..I + 1];
+
+        match sub {
             " " => match sec_code {
                 SecCode::Navaid => Ok(Self::VHFNavaid),
                 SecCode::CompanyRoute => Ok(Self::CompanyRoute),
-                _ => sub_code_error!("BLANK"),
+                _ => Err(FieldError::invalid_value(
+                    "SubCode",
+                    I,
+                    Self::LENGTH,
+                    "invalid section code for blank subsection",
+                )
+                .with_actual(sub)),
             },
             "A" => match sec_code {
                 SecCode::Enroute => Ok(Self::Waypoint),
                 SecCode::Heliport => Ok(Self::Pad),
                 SecCode::Airport => Ok(Self::ReferencePoint),
                 SecCode::CompanyRoute => Ok(Self::AlternateRecord),
-                _ => sub_code_error!("A"),
+                _ => Err(FieldError::invalid_value(
+                    "SubCode",
+                    I,
+                    Self::LENGTH,
+                    "invalid section code for subsection A",
+                )
+                .with_actual(sub)),
             },
             "B" => match sec_code {
                 SecCode::Navaid => Ok(Self::NDBNavaid),
                 SecCode::Airport => Ok(Self::Gate),
-                _ => sub_code_error!("B"),
+                _ => Err(FieldError::invalid_value(
+                    "SubCode",
+                    I,
+                    Self::LENGTH,
+                    "invalid section code for subsection B",
+                )
+                .with_actual(sub)),
             },
             "C" => match sec_code {
                 SecCode::Heliport | SecCode::Airport => Ok(Self::TerminalWaypoint),
                 SecCode::Table => Ok(Self::CruisingTable),
                 SecCode::Airspace => Ok(Self::ControlledAirspace),
-                _ => sub_code_error!("C"),
+                _ => Err(FieldError::invalid_value(
+                    "SubCode",
+                    I,
+                    Self::LENGTH,
+                    "invalid section code for subsection C",
+                )
+                .with_actual(sub)),
             },
             "G" => match sec_code {
                 SecCode::Airport => Ok(Self::Runway),
-                _ => sub_code_error!("G"),
+                _ => Err(FieldError::invalid_value(
+                    "SubCode",
+                    I,
+                    Self::LENGTH,
+                    "invalid section code for subsection G",
+                )
+                .with_actual(sub)),
             },
             "S" => match sec_code {
                 SecCode::MORA => Ok(Self::GridMORA),
                 SecCode::Heliport | SecCode::Airport => Ok(Self::MSA),
-                _ => sub_code_error!("S"),
+                _ => Err(FieldError::invalid_value(
+                    "SubCode",
+                    I,
+                    Self::LENGTH,
+                    "invalid section code for subsection S",
+                )
+                .with_actual(sub)),
             },
             _ => todo!("implement missing SUB CODE D..Z"),
         }

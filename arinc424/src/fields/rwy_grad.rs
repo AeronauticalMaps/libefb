@@ -17,9 +17,20 @@ use std::str::FromStr;
 
 use super::{Field, FieldError};
 
+/// Runway Gradient field (ARINC 424 Spec §5.212).
+///
+/// Position I (6 characters):
+/// - Character 1: Sign (+ or -)
+/// - Characters 2-3: Integer degrees (00-99)
+/// - Characters 4-6: Decimal degrees (000-999, representing thousandths)
 #[derive(Debug, Default, PartialEq)]
 pub struct RwyGrad<const I: usize> {
     pub degree: f32,
+}
+
+impl<const I: usize> RwyGrad<I> {
+    /// The length of the runway gradient field.
+    pub const LENGTH: usize = 6;
 }
 
 impl<const I: usize> Field for RwyGrad<I> {}
@@ -28,19 +39,29 @@ impl<const I: usize> FromStr for RwyGrad<I> {
     type Err = FieldError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let sign = match &s[I..I + 1] {
+        if s.len() < I + Self::LENGTH {
+            return Err(FieldError::invalid_length("RwyGrad", I, Self::LENGTH));
+        }
+
+        let sign_char = &s[I..I + 1];
+        let sign = match sign_char {
             "+" => Ok(1.0),
             "-" => Ok(-1.0),
-            _ => Err(FieldError::UnexpectedChar("expected + or -")),
+            c => Err(
+                FieldError::unexpected_char("RwyGrad.sign", I, 1, "expected + or -").with_actual(c),
+            ),
         }?;
 
+        let int_slice = &s[I + 1..I + 3];
+        let dec_slice = &s[I + 3..I + 6];
+
         let degree = {
-            let degree = s[I + 1..I + 3]
-                .parse::<f32>()
-                .map_err(|_| FieldError::NotANumber)?;
-            let decimal = s[I + 3..I + 6]
-                .parse::<f32>()
-                .map_err(|_| FieldError::NotANumber)?;
+            let degree = int_slice.parse::<f32>().map_err(|_| {
+                FieldError::not_a_number("RwyGrad.integer", I + 1, 2).with_actual(int_slice)
+            })?;
+            let decimal = dec_slice.parse::<f32>().map_err(|_| {
+                FieldError::not_a_number("RwyGrad.decimal", I + 3, 3).with_actual(dec_slice)
+            })?;
             Ok(degree + decimal / 1000.0)
         }?;
 

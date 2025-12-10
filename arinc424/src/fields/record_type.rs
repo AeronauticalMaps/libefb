@@ -16,10 +16,22 @@
 use super::{Field, FieldError};
 use std::str::FromStr;
 
+/// Record Type field (ARINC 424 Spec §5.2).
+///
+/// Position: 0 (1 character)
+/// - "S": Standard record
+/// - "T": Tailored record
 #[derive(Debug, PartialEq)]
 pub enum RecordType {
     Standard,
     Tailored,
+}
+
+impl RecordType {
+    /// The position of the record type field.
+    pub const POSITION: usize = 0;
+    /// The length of the record type field.
+    pub const LENGTH: usize = 1;
 }
 
 impl Field for RecordType {}
@@ -28,10 +40,25 @@ impl FromStr for RecordType {
     type Err = FieldError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match &s[0..1] {
+        if s.is_empty() {
+            return Err(FieldError::invalid_length(
+                "RecordType",
+                Self::POSITION,
+                Self::LENGTH,
+            ));
+        }
+
+        let code = &s[0..1];
+        match code {
             "S" => Ok(Self::Standard),
             "T" => Ok(Self::Tailored),
-            _ => Err(FieldError::InvalidValue("unknown record type")),
+            c => Err(FieldError::invalid_value(
+                "RecordType",
+                Self::POSITION,
+                Self::LENGTH,
+                "expected S or T",
+            )
+            .with_actual(c)),
         }
     }
 }

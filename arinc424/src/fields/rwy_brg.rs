@@ -17,10 +17,20 @@ use std::str::FromStr;
 
 use super::{Field, FieldError};
 
+/// Runway Bearing field (ARINC 424 Spec §5.51).
+///
+/// Position I (4 characters):
+/// - Characters 1-3: Bearing in degrees (000-360)
+/// - Character 4: "T" for True North, or digit for tenths (Magnetic North)
 #[derive(Debug, PartialEq)]
 pub enum RwyBrg<const I: usize> {
     MagneticNorth(f32),
     TrueNorth(u32),
+}
+
+impl<const I: usize> RwyBrg<I> {
+    /// The length of the runway bearing field.
+    pub const LENGTH: usize = 4;
 }
 
 impl<const I: usize> Field for RwyBrg<I> {}
@@ -29,22 +39,29 @@ impl<const I: usize> FromStr for RwyBrg<I> {
     type Err = FieldError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match &s[I + 3..I + 4] {
+        if s.len() < I + Self::LENGTH {
+            return Err(FieldError::invalid_length("RwyBrg", I, Self::LENGTH));
+        }
+
+        let degree_slice = &s[I..I + 3];
+        let fourth_char = &s[I + 3..I + 4];
+
+        match fourth_char {
             "T" => {
-                let degree = s[I..I + 3]
-                    .parse::<u32>()
-                    .map_err(|_| FieldError::NotANumber)?;
+                let degree = degree_slice.parse::<u32>().map_err(|_| {
+                    FieldError::not_a_number("RwyBrg.degree", I, 3).with_actual(degree_slice)
+                })?;
 
                 Ok(Self::TrueNorth(degree))
             }
             _ => {
-                let degree = s[I..I + 3]
-                    .parse::<u32>()
-                    .map_err(|_| FieldError::NotANumber)?;
+                let degree = degree_slice.parse::<u32>().map_err(|_| {
+                    FieldError::not_a_number("RwyBrg.degree", I, 3).with_actual(degree_slice)
+                })?;
 
-                let decimal = s[I + 3..I + 4]
-                    .parse::<u32>()
-                    .map_err(|_| FieldError::NotANumber)?;
+                let decimal = fourth_char.parse::<u32>().map_err(|_| {
+                    FieldError::not_a_number("RwyBrg.decimal", I + 3, 1).with_actual(fourth_char)
+                })?;
 
                 Ok(Self::MagneticNorth(degree as f32 + decimal as f32 / 10.0))
             }

@@ -16,6 +16,10 @@
 use super::{Field, FieldError};
 use std::str::FromStr;
 
+/// Waypoint Usage field (ARINC 424 Spec §5.82).
+///
+/// Position: 29-31 (2 characters)
+/// Indicates the usage classification of the waypoint.
 #[derive(Debug, PartialEq)]
 pub enum WaypointUsage {
     HiLoAltitude,
@@ -25,19 +29,41 @@ pub enum WaypointUsage {
     RNAV,
 }
 
+impl WaypointUsage {
+    /// The position of the waypoint usage field.
+    pub const POSITION: usize = 29;
+    /// The length of the waypoint usage field.
+    pub const LENGTH: usize = 2;
+}
+
 impl Field for WaypointUsage {}
 
 impl FromStr for WaypointUsage {
     type Err = FieldError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match &s[29..31] {
+        if s.len() < Self::POSITION + Self::LENGTH {
+            return Err(FieldError::invalid_length(
+                "WaypointUsage",
+                Self::POSITION,
+                Self::LENGTH,
+            ));
+        }
+
+        let usage = &s[29..31];
+        match usage {
             " B" => Ok(Self::HiLoAltitude),
             " H" => Ok(Self::HiAltitude),
             " L" => Ok(Self::LoAltitude),
             "  " => Ok(Self::TerminalOnly),
             "R " => Ok(Self::RNAV),
-            _ => Err(FieldError::InvalidValue("unknown waypoint usage")),
+            c => Err(FieldError::invalid_value(
+                "WaypointUsage",
+                Self::POSITION,
+                Self::LENGTH,
+                "unknown waypoint usage",
+            )
+            .with_actual(c)),
         }
     }
 }

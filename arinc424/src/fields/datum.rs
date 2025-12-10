@@ -286,13 +286,23 @@ pub enum Datum<const I: usize> {
     ZAN,
 }
 
+impl<const I: usize> Datum<I> {
+    /// The length of the datum field.
+    pub const LENGTH: usize = 3;
+}
+
 impl<const I: usize> Field for Datum<I> {}
 
 impl<const I: usize> FromStr for Datum<I> {
     type Err = FieldError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match &s[I..I + 3] {
+        if s.len() < I + Self::LENGTH {
+            return Err(FieldError::invalid_length("Datum", I, Self::LENGTH));
+        }
+
+        let datum = &s[I..I + 3];
+        match datum {
             "ADI" => Ok(Self::ADI),
             "AFG" => Ok(Self::AFG),
             "AIN" => Ok(Self::AIN),
@@ -426,9 +436,13 @@ impl<const I: usize> FromStr for Datum<I> {
             "WGE" => Ok(Self::WGE),
             "YAC" => Ok(Self::YAC),
             "ZAN" => Ok(Self::ZAN),
-            _ => Err(FieldError::UnexpectedChar(
-                "expected a datum according to ARINC 424-17 attachment 2",
-            )),
+            c => Err(FieldError::unexpected_char(
+                "Datum",
+                I,
+                Self::LENGTH,
+                "expected a datum code per ARINC 424-17 attachment 2",
+            )
+            .with_actual(c)),
         }
     }
 }

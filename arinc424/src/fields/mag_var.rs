@@ -16,6 +16,12 @@
 use super::{Field, FieldError, Latitude, Longitude};
 use std::str::FromStr;
 
+/// Magnetic Variation field (ARINC 424 Spec §5.39).
+///
+/// Position I (5 characters): Direction + DDD + d (degree + centidegree)
+/// - First character: E (East), W (West), T (True North), or space (use WMM)
+/// - Characters 2-4: Degrees (000-359)
+/// - Character 5: Tenths of degree (0-9)
 #[derive(Debug, PartialEq)]
 pub enum MagVar<const I: usize, const J: usize, const K: usize> {
     /// The variation is east of true north.
@@ -28,22 +34,36 @@ pub enum MagVar<const I: usize, const J: usize, const K: usize> {
     WMM(Latitude<J>, Longitude<K>),
 }
 
+impl<const I: usize, const J: usize, const K: usize> MagVar<I, J, K> {
+    /// The length of the magnetic variation field.
+    pub const LENGTH: usize = 5;
+}
+
 impl<const I: usize, const J: usize, const K: usize> Field for MagVar<I, J, K> {}
 
 impl<const I: usize, const J: usize, const K: usize> FromStr for MagVar<I, J, K> {
     type Err = FieldError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() < I + Self::LENGTH {
+            return Err(FieldError::invalid_length("MagVar", I, Self::LENGTH));
+        }
+
         let first_column = &s[I..I + 1];
 
         match first_column {
             "E" | "W" => {
-                let degree: u8 = s[I + 1..I + 4]
-                    .parse()
-                    .map_err(|_| FieldError::NotANumber)?;
-                let centidegree: u8 = s[I + 4..I + 5]
-                    .parse()
-                    .map_err(|_| FieldError::NotANumber)?;
+                let degree_slice = &s[I + 1..I + 4];
+                let centidegree_slice = &s[I + 4..I + 5];
+
+                let degree: u8 = degree_slice.parse().map_err(|_| {
+                    FieldError::not_a_number("MagVar.degree", I + 1, 3).with_actual(degree_slice)
+                })?;
+
+                let centidegree: u8 = centidegree_slice.parse().map_err(|_| {
+                    FieldError::not_a_number("MagVar.centidegree", I + 4, 1)
+                        .with_actual(centidegree_slice)
+                })?;
 
                 if first_column == "E" {
                     Ok(Self::East(degree, centidegree))
@@ -53,9 +73,10 @@ impl<const I: usize, const J: usize, const K: usize> FromStr for MagVar<I, J, K>
             }
             "T" => Ok(Self::OrientedToTrueNorth),
             " " => Ok(Self::WMM(s.parse()?, s.parse()?)), // TODO this is not valid ARINC 424
-            _ => Err(FieldError::UnexpectedChar(
-                "expected E, W or T as variation direction",
-            )),
+            c => Err(
+                FieldError::unexpected_char("MagVar", I, 1, "expected E, W, T or space")
+                    .with_actual(c),
+            ),
         }
     }
 }

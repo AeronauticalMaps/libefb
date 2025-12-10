@@ -13,16 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[workspace]
-members = [
-    "arinc424",
-    "arinc424-macros",
-    "efb",
-    "bindings/c",
-    "bindings/python",
-    "bindings/wasm",
-]
-resolver = "2"
+[package]
+name = "arinc424-macros"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Procedural macros for ARINC 424 field generation"
+homepage = "https://github.com/pearjo/libefb"
+repository = "https://github.com/pearjo/libefb"
 
-[workspace.lints.rust]
-unsafe_code = "warn"
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "extra-traits"] }

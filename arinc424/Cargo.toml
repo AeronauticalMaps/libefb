@@ -23,3 +23,6 @@ keywords = ["ARINC", "ARINC-424"]
 homepage = "https://github.com/pearjo/libefb"
 repository = "https://github.com/pearjo/libefb"
 readme = "README.md"
+
+[dependencies]
+arinc424-macros = { path = "../arinc424-macros" }

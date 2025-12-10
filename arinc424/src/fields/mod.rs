@@ -65,16 +65,132 @@ pub use source::Source;
 pub use waypoint_type::WaypointType;
 pub use waypoint_usage::WaypointUsage;
 
-#[derive(Debug, PartialEq)]
-pub enum FieldError {
+/// Error context for ARINC 424 field parsing failures.
+///
+/// Provides detailed information about parsing errors including field position,
+/// expected format, and the actual value encountered.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FieldError {
+    /// The kind of error that occurred.
+    pub kind: FieldErrorKind,
+    /// The name of the field being parsed (e.g., "Latitude", "IcaoCode").
+    pub field: &'static str,
+    /// The starting position (0-indexed) of the field in the ARINC 424 record.
+    pub position: usize,
+    /// The expected length of the field.
+    pub length: usize,
+    /// The actual value that was encountered (if available).
+    pub actual: Option<String>,
+}
+
+impl FieldError {
+    /// Creates a new FieldError with the given context.
+    pub fn new(kind: FieldErrorKind, field: &'static str, position: usize, length: usize) -> Self {
+        Self {
+            kind,
+            field,
+            position,
+            length,
+            actual: None,
+        }
+    }
+
+    /// Adds the actual value that was encountered to the error.
+    pub fn with_actual(mut self, actual: impl Into<String>) -> Self {
+        self.actual = Some(actual.into());
+        self
+    }
+
+    /// Creates an InvalidLength error for a field.
+    pub fn invalid_length(field: &'static str, position: usize, length: usize) -> Self {
+        Self::new(FieldErrorKind::InvalidLength, field, position, length)
+    }
+
+    /// Creates an InvalidValue error for a field.
+    pub fn invalid_value(
+        field: &'static str,
+        position: usize,
+        length: usize,
+        message: &'static str,
+    ) -> Self {
+        Self::new(
+            FieldErrorKind::InvalidValue(message),
+            field,
+            position,
+            length,
+        )
+    }
+
+    /// Creates an UnexpectedChar error for a field.
+    pub fn unexpected_char(
+        field: &'static str,
+        position: usize,
+        length: usize,
+        message: &'static str,
+    ) -> Self {
+        Self::new(
+            FieldErrorKind::UnexpectedChar(message),
+            field,
+            position,
+            length,
+        )
+    }
+
+    /// Creates a NotANumber error for a field.
+    pub fn not_a_number(field: &'static str, position: usize, length: usize) -> Self {
+        Self::new(FieldErrorKind::NotANumber, field, position, length)
+    }
+
+    /// Creates a NumberOutOfRange error for a field.
+    pub fn number_out_of_range(field: &'static str, position: usize, length: usize) -> Self {
+        Self::new(FieldErrorKind::NumberOutOfRange, field, position, length)
+    }
+}
+
+impl fmt::Display for FieldError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "error parsing {} at position {}..{}: {}",
+            self.field,
+            self.position,
+            self.position + self.length,
+            self.kind
+        )?;
+        if let Some(ref actual) = self.actual {
+            write!(f, " (got {:?})", actual)?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for FieldError {}
+
+/// The kind of error that occurred during field parsing.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FieldErrorKind {
+    /// The input string was too short to contain the expected field.
     InvalidLength,
+    /// The field value did not match any expected pattern.
     InvalidValue(&'static str),
-    /// An error returned when a field contained an unexpected character.
+    /// The field contained an unexpected character.
     UnexpectedChar(&'static str),
-    /// A numeric field is, unexpectedly, not a number.
+    /// A numeric field contained non-numeric characters.
     NotANumber,
-    /// The value of a numeric field is, unexpectedly, out of an allowed range.
+    /// A numeric field value was outside the allowed range.
     NumberOutOfRange,
+}
+
+impl fmt::Display for FieldErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidLength => write!(f, "input too short for field"),
+            Self::InvalidValue(msg) => write!(f, "invalid value: {}", msg),
+            Self::UnexpectedChar(msg) => write!(f, "unexpected character: {}", msg),
+            Self::NotANumber => write!(f, "expected numeric value"),
+            Self::NumberOutOfRange => write!(f, "numeric value out of range"),
+        }
+    }
 }
 
 pub trait Field
@@ -104,9 +220,12 @@ impl<const I: usize, const N: usize> str::FromStr for AlphaNumericField<I, N> {
     type Err = FieldError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() < I + N {
+            return Err(FieldError::invalid_length("AlphaNumericField", I, N));
+        }
         match <[u8; N]>::try_from(s[I..I + N].as_bytes()) {
             Ok(b) => Ok(Self(b)),
-            _ => Err(FieldError::InvalidLength),
+            Err(_) => Err(FieldError::invalid_length("AlphaNumericField", I, N)),
         }
     }
 }
@@ -138,9 +257,13 @@ impl<const I: usize, const N: usize> str::FromStr for NumericField<I, N> {
     type Err = FieldError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s[I..I + N].parse::<u32>() {
+        if s.len() < I + N {
+            return Err(FieldError::invalid_length("NumericField", I, N));
+        }
+        let slice = &s[I..I + N];
+        match slice.parse::<u32>() {
             Ok(b) => Ok(Self(b)),
-            _ => Err(FieldError::NotANumber),
+            Err(_) => Err(FieldError::not_a_number("NumericField", I, N).with_actual(slice)),
         }
     }
 }

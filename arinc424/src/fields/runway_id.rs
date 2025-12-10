@@ -17,8 +17,19 @@ use std::str::FromStr;
 
 use super::{Field, FieldError};
 
+/// Runway Identifier field (ARINC 424 Spec §5.46).
+///
+/// Position I (5 characters):
+/// - Characters 1-2: "RW" prefix
+/// - Characters 3-4: Runway number (01-36)
+/// - Character 5: Designator suffix (L, R, C, W, G, U, or space)
 pub struct RunwayId<const I: usize> {
     pub designator: String,
+}
+
+impl<const I: usize> RunwayId<I> {
+    /// The length of the runway identifier field.
+    pub const LENGTH: usize = 5;
 }
 
 impl<const I: usize> Field for RunwayId<I> {}
@@ -27,12 +38,23 @@ impl<const I: usize> FromStr for RunwayId<I> {
     type Err = FieldError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match &s[I + 4..I + 5] {
+        if s.len() < I + Self::LENGTH {
+            return Err(FieldError::invalid_length("RunwayId", I, Self::LENGTH));
+        }
+
+        let suffix = &s[I + 4..I + 5];
+        match suffix {
             " " | "C" | "L" | "R" | "W" | "G" | "U" => {
                 let designator = s[I + 2..I + 5].trim_end().to_string();
                 Ok(Self { designator })
             }
-            _ => Err(FieldError::UnexpectedChar("unexpected designation suffix")),
+            c => Err(FieldError::unexpected_char(
+                "RunwayId.suffix",
+                I + 4,
+                1,
+                "expected L, R, C, W, G, U or space",
+            )
+            .with_actual(c)),
         }
     }
 }
