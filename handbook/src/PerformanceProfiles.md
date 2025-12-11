@@ -21,31 +21,19 @@ A performance profile consists of a table with rows containing:
 
 ### Creating Performance Profiles
 
+Performance profiles can be created in two ways:
+
 #### Manual Table Definition
 
-Define a performance table directly with specific values:
+A performance table can be defined directly with specific values at different altitudes. Each entry specifies the altitude, true airspeed, and fuel flow at that altitude.
 
-```
-Performance::new([
-    (Ground, 95 knots, 22 L/h),
-    (1000 ft, 100 knots, 20 L/h),
-    (2000 ft, 103 knots, 19 L/h),
-    (3000 ft, 107 knots, 18 L/h),
-    ...
-])
-```
+**Example:** A table might include entries for ground level, 1000 ft, 2000 ft, 3000 ft, continuing up to the aircraft's service ceiling, with corresponding TAS and fuel flow values from the POH.
 
 #### Function-Based Generation
 
-Generate a performance table automatically using a function:
+Performance tables can also be generated automatically using data from POH performance charts. The data is sampled at regular altitude intervals (typically 1000 ft) from ground level to the service ceiling.
 
-```
-Performance::from_fn(function, ceiling)
-```
-
-The function is called at 1000 ft intervals from ground level to the ceiling, returning TAS and fuel flow for each altitude.
-
-**Example use cases:**
+**Use cases:**
 - Interpolating from POH tables
 - Applying environmental corrections
 - Modeling theoretical performance
@@ -63,13 +51,7 @@ When calculating leg performance, the system looks up the appropriate performanc
 
 ### Fuel Flow Retrieval
 
-For a given altitude, retrieve the fuel flow:
-
-```
-ff = performance.ff(altitude)
-```
-
-This is used in leg fuel calculations:
+For a given altitude, the system retrieves the corresponding fuel flow from the performance table. This is used in leg fuel calculations:
 
 $$
 \text{Leg Fuel} = \text{Fuel Flow}(\text{altitude}) \times \text{ETE}
@@ -77,13 +59,7 @@ $$
 
 ### True Airspeed Retrieval
 
-For a given altitude, retrieve the true airspeed:
-
-```
-tas = performance.tas(altitude)
-```
-
-While typically specified in the route, TAS can also be retrieved from the performance profile for standard configurations.
+For a given altitude, the system retrieves the corresponding true airspeed from the performance table. While typically specified directly in the route, TAS can also be retrieved from the performance profile for standard configurations.
 
 ## Takeoff and Landing Performance
 
@@ -114,17 +90,12 @@ The system uses a **conservative lookup** approach:
 
 ### Example Lookup
 
-Given table entries:
-```
-PA=0 ft, T=0°C:    800 ft ground roll, 1500 ft over obstacle
-PA=0 ft, T=40°C:   1000 ft ground roll, 2000 ft over obstacle
-PA=8000 ft, T=0°C: 1800 ft ground roll, 3600 ft over obstacle
-PA=8000 ft, T=30°C: 2300 ft ground roll, 4800 ft over obstacle
-```
+Given a performance table with entries at sea level (0°C and 40°C) and at 8000 ft (0°C and 30°C):
 
 For an airport at 1000 ft pressure altitude and 20°C:
-- System selects: PA=8000 ft, T=30°C entry
-- Returns: 2300 ft ground roll, 4800 ft over obstacle
+- The system selects the 8000 ft, 30°C entry (next higher altitude and temperature)
+- This returns the most conservative (longest) distances
+- Example result: 2300 ft ground roll, 4800 ft over obstacle
 
 This conservative approach ensures adequate runway length under actual conditions.
 
@@ -206,15 +177,7 @@ where each $f_i$ is an altering factor.
 
 ### Configuring Factors
 
-When building takeoff/landing performance:
-
-```
-TakeoffLandingPerformance::builder(table)
-    .add_factor(headwind_factor)
-    .add_factor(surface_factor)
-    .add_factor(slope_factor)
-    .build()
-```
+Takeoff and landing performance is configured by specifying the base performance table and then adding each altering factor in sequence. Common factors include headwind/tailwind adjustments, surface condition factors, and slope corrections.
 
 ### Separate Factors for Ground Roll vs. Obstacle
 
@@ -308,13 +271,11 @@ Each performance profile can include notes documenting:
 - **Assumptions** - Pilot technique, aircraft condition
 
 **Example notes:**
-```
-"Based on POH Section 5, Rev. 2023-04-15.
- Reference weight: 1111 kg (MTOW).
- Short field technique, flaps 30°.
- Assumes paved, level, dry runway.
- Assume sea level ISA conditions for base performance."
-```
+- Based on POH Section 5, Rev. 2023-04-15
+- Reference weight: 1111 kg (MTOW)
+- Short field technique, flaps 30°
+- Assumes paved, level, dry runway
+- Sea level ISA conditions for base performance
 
 Notes ensure users understand the context and limitations of performance data.
 

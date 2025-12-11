@@ -105,43 +105,33 @@ When performing mass and balance calculations, you must provide:
 
 ## Mass and Balance Methods
 
-The library provides three methods for mass and balance calculations with varying levels of detail:
+The system provides three methods for mass and balance calculations with varying levels of detail:
 
 ### Full Mass and Balance
 
-The `mb()` method provides complete control:
-
-```
-mb(mass_on_ramp, mass_after_landing, fuel_on_ramp, fuel_after_landing)
-```
-
-**Parameters:**
-- `mass_on_ramp` - Vector of masses at each station before flight
-- `mass_after_landing` - Vector of masses at each station after flight
-- `fuel_on_ramp` - Vector of fuel in each tank before flight
-- `fuel_after_landing` - Vector of fuel in each tank after landing
+The full calculation method provides complete control and requires:
+- Mass at each station before flight
+- Mass at each station after flight
+- Fuel in each tank before flight
+- Fuel in each tank after landing
 
 **Use when:** Fuel is distributed unevenly across tanks, or passenger/cargo mass changes during flight.
 
 ### Equally Distributed Fuel
 
-The `mb_from_equally_distributed_fuel()` method simplifies fuel distribution:
-
-```
-mb_from_equally_distributed_fuel(mass_on_ramp, mass_after_landing, total_fuel_on_ramp, total_fuel_after_landing)
-```
-
-This method automatically distributes the total fuel equally across all tanks.
+This simplified method distributes the total fuel equally across all tanks:
+- Requires only total fuel quantity (on ramp and after landing)
+- Automatically divides fuel evenly among all tanks
+- Still tracks individual station masses separately
 
 **Use when:** The aircraft has multiple tanks but fuel distribution is symmetric or doesn't need detailed tracking.
 
 ### Constant Mass with Equal Fuel Distribution
 
-The `mb_from_const_mass_and_equally_distributed_fuel()` method assumes passenger/cargo mass doesn't change:
-
-```
-mb_from_const_mass_and_equally_distributed_fuel(mass, fuel_on_ramp, fuel_after_landing)
-```
+This method assumes passenger/cargo mass doesn't change during flight:
+- Requires only one set of station masses (used for both on ramp and after landing)
+- Automatically distributes fuel equally across tanks
+- Simplest method for typical general aviation scenarios
 
 **Use when:** No passengers/cargo are added or removed during flight (typical general aviation scenario).
 
@@ -169,13 +159,7 @@ The fuel type is specified in the aircraft configuration and automatically used 
 
 ## Balance Verification
 
-After calculating mass and balance, verify the aircraft is within limits:
-
-```
-is_balanced(mass_and_balance)
-```
-
-This checks that **both** the on-ramp and after-landing CG points fall within the CG envelope.
+After calculating mass and balance, the system verifies that the aircraft is within limits by checking that **both** the on-ramp and after-landing CG points fall within the CG envelope.
 
 **Important:** An aircraft must be balanced throughout the entire flight. An aircraft balanced on ramp but unbalanced after landing (or vice versa) is NOT safe to fly.
 

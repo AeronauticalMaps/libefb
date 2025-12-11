@@ -49,9 +49,7 @@ Wind changes from 135° at 9 knots for the first leg to 180° at 9 knots for sub
 
 ### Adding Elements
 
-Route elements can be added using:
-- `push(element)` - Adds element to the end of the route
-- `insert(index, element)` - Inserts element at specific position
+Route elements can be added to the end of the route or inserted at specific positions between existing waypoints.
 
 ### Route Elements
 
@@ -64,19 +62,11 @@ The following element types can be added:
 
 ### Setting Cruise Parameters
 
-Cruise speed and altitude can be set or modified:
-```
-set_cruise(speed, level)
-```
-Setting either parameter to `None` removes it from the route.
+Cruise speed and altitude can be set or modified at any point along the route. Setting either parameter to blank removes it from the route.
 
 ### Alternates
 
-An alternate destination can be specified:
-```
-set_alternate(navaid)
-```
-The system automatically creates a leg from the destination to the alternate using the final leg's performance parameters.
+An alternate destination can be specified, and the system automatically creates a leg from the destination to the alternate using the final leg's performance parameters.
 
 ## Leg Calculations
 
@@ -109,11 +99,6 @@ The angle $\alpha$ is calculated as:
 $$
 \alpha = \text{BRG} - (\text{Wind Direction} + 180°)
 $$
-
-**Implementation:**
-```
-WCA = arcsin((WS / TAS) × sin(α))
-```
 
 **Sign Convention:**
 - Positive WCA: correction to the right (wind from left)
