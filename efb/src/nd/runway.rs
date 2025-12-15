@@ -15,6 +15,7 @@
 
 use std::convert::TryFrom;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -92,6 +93,20 @@ pub struct Runway {
     /// Runway gradient as percentage (positive = upslope, negative = downslope).
     pub slope: f32,
     pub elev: VerticalDistance,
+}
+
+impl Hash for Runway {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.designator.hash(state);
+        self.bearing.hash(state);
+        self.length.hash(state);
+        self.tora.hash(state);
+        self.toda.hash(state);
+        self.lda.hash(state);
+        self.surface.hash(state);
+        self.slope.to_bits().hash(state);
+        self.elev.hash(state);
+    }
 }
 
 impl fmt::Display for Runway {

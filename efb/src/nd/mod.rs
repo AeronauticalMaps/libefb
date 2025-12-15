@@ -16,6 +16,7 @@
 //! Navigation Data.
 
 use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
 
 #[cfg(feature = "serde")]
@@ -230,6 +231,16 @@ impl NavigationData {
                 .values()
                 .flat_map(|partition| partition.airspaces.iter()),
         )
+    }
+}
+
+impl Hash for NavigationData {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.airports.hash(state);
+        self.airspaces.hash(state);
+        self.waypoints.hash(state);
+        self.locations.hash(state);
+        self.cycle.hash(state);
     }
 }
 

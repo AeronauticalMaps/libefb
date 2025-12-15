@@ -40,7 +40,7 @@ pub enum Region {
     TerminalArea([u8; 4]),
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Waypoint {
     pub(crate) fix_ident: String,

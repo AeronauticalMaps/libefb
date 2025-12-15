@@ -14,6 +14,7 @@
 // limitations under the License.
 
 use std::fmt::{Display, Formatter};
+use std::hash::{Hash, Hasher};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -35,6 +36,13 @@ pub struct Coordinate {
 
     /// Longitude in the range from -180° (west) to 180° (east).
     pub longitude: f32,
+}
+
+impl Hash for Coordinate {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.latitude.to_bits().hash(state);
+        self.longitude.to_bits().hash(state);
+    }
 }
 
 impl Coordinate {

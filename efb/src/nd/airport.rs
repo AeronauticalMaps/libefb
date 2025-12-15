@@ -21,7 +21,7 @@ use crate::VerticalDistance;
 
 use super::*;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Airport {
     pub(crate) icao_ident: String,

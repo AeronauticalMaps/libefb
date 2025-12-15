@@ -15,6 +15,7 @@
 
 use std::cmp::Ordering;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::ops::{Add, Div, Mul, Sub};
 
 #[cfg(feature = "serde")]
@@ -38,6 +39,16 @@ where
 {
     pub(super) value: T,
     pub(super) unit: U,
+}
+
+impl<U> Hash for Measurement<f32, U>
+where
+    U: UnitOfMeasure<f32> + Hash,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.value.to_bits().hash(state);
+        self.unit.hash(state);
+    }
 }
 
 impl<T, U> Measurement<T, U>

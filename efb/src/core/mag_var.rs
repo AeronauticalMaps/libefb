@@ -14,6 +14,7 @@
 // limitations under the License.
 
 use std::fmt::{Display, Formatter, Result};
+use std::hash::{Hash, Hasher};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -39,6 +40,24 @@ pub enum MagneticVariation {
     West(f32),
     /// The point is oriented to true north.
     OrientedToTrueNorth,
+}
+
+impl Hash for MagneticVariation {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            MagneticVariation::East(v) => {
+                0u8.hash(state);
+                v.to_bits().hash(state);
+            }
+            MagneticVariation::West(v) => {
+                1u8.hash(state);
+                v.to_bits().hash(state);
+            }
+            MagneticVariation::OrientedToTrueNorth => {
+                2u8.hash(state);
+            }
+        }
+    }
 }
 
 impl From<Coordinate> for MagneticVariation {

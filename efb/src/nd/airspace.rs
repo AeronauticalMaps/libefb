@@ -28,7 +28,7 @@ pub type Airspaces = Vec<Airspace>;
 /// The airspace is classified by the `class` and enclosed by the `polygon`.
 /// It ranges from the `floor` to `ceiling` in vertical direction.
 #[repr(C)]
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Airspace {
     pub name: String,

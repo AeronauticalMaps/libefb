@@ -22,7 +22,7 @@ use super::Coordinate;
 use crate::algorithm;
 
 /// A polygon spawned by coordinates.
-#[derive(Clone, PartialEq, PartialOrd, Debug, Default)]
+#[derive(Clone, PartialEq, PartialOrd, Debug, Default, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Polygon {
     coords: Vec<Coordinate>,
