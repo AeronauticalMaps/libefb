@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Don't take ownership of wrapped types passed from JavaScript
 
+### Removed
+
+- Deprecated reading of navigation data from file
+
 ## [0.4.0] - 2025-11-10
 
 ### Added

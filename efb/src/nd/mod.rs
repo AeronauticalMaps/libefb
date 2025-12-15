@@ -183,26 +183,6 @@ impl NavigationData {
         self.partitions.remove(partition_id);
     }
 
-    #[deprecated(
-        since = "0.3.4",
-        note = "load navigation data separately and append them"
-    )]
-    pub fn read(&mut self, s: &str, fmt: InputFormat) -> Result<(), Error> {
-        match fmt {
-            InputFormat::Arinc424 => {
-                let mut record = s.parse::<Arinc424Record>()?;
-                self.airports.append(&mut record.airports);
-                self.waypoints.append(&mut record.waypoints);
-            }
-            InputFormat::OpenAir => {
-                let mut record = s.parse::<OpenAirRecord>()?;
-                self.airspaces.append(&mut record.airspaces);
-            }
-        };
-
-        Ok(())
-    }
-
     fn airports(&self) -> impl Iterator<Item = &Rc<Airport>> {
         self.airports.iter().chain(
             self.partitions
