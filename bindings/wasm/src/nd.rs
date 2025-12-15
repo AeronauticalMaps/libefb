@@ -37,6 +37,16 @@ impl JsNavigationData {
         fms.modify_nd(|nd| nd.remove(&partition_id))?;
         Ok(())
     }
+
+    #[wasm_bindgen(js_name = expiredPartitions)]
+    pub fn expired_partitions(&self) -> Vec<String> {
+        let fms = self.inner.borrow();
+        fms.nd()
+            .expired_partitions()
+            .iter()
+            .map(|id| id.to_string())
+            .collect()
+    }
 }
 
 impl From<&Rc<RefCell<FMS>>> for JsNavigationData {

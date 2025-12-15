@@ -183,6 +183,19 @@ impl NavigationData {
         self.partitions.remove(partition_id);
     }
 
+    /// Returns the IDs of the expired navigation data partitions.
+    pub fn expired_partitions(&self) -> Vec<u64> {
+        self.partitions
+            .iter()
+            .filter_map(|(&id, nd)| {
+                nd.cycle
+                    .and_then(|cycle| cycle.now_valid())
+                    .filter(|&validity| validity == CycleValidity::Expired)
+                    .map(|_| id)
+            })
+            .collect()
+    }
+
     fn airports(&self) -> impl Iterator<Item = &Rc<Airport>> {
         self.airports.iter().chain(
             self.partitions
