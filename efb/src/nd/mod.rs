@@ -22,8 +22,6 @@ use std::rc::Rc;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use uuid::Uuid;
-
 use crate::error::Error;
 use crate::geom::Coordinate;
 use crate::MagneticVariation;
@@ -63,8 +61,7 @@ pub struct NavigationData {
     waypoints: Vec<Rc<Waypoint>>,
     locations: Vec<LocationIndicator>,
     cycle: Option<AiracCycle>,
-    uuid: [u8; 16],
-    partitions: HashMap<[u8; 16], NavigationData>,
+    partitions: HashMap<u64, NavigationData>,
 }
 
 impl NavigationData {
@@ -82,7 +79,6 @@ impl NavigationData {
             waypoints: record.waypoints,
             locations: record.locations,
             cycle: record.cycle,
-            uuid: Uuid::new_v4().into_bytes(),
             partitions: HashMap::new(),
         })
     }
@@ -97,7 +93,6 @@ impl NavigationData {
             waypoints: Vec::new(),
             locations: Vec::new(),
             cycle: None,
-            uuid: Uuid::new_v4().into_bytes(),
             partitions: HashMap::new(),
         })
     }
@@ -110,12 +105,11 @@ impl NavigationData {
         self.cycle.as_ref()
     }
 
-    /// Returns the navigation data's UUID.
-    ///
-    /// This UUID is required if the navigation data was append to another
-    /// dataset and should be removed.
-    pub fn uuid(&self) -> &[u8; 16] {
-        &self.uuid
+    /// Returns the identifier of the navigation data.
+    pub fn partition_id(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
     }
 
     /// Returns all airspaces that contain the given point.
@@ -174,19 +168,19 @@ impl NavigationData {
                 .map(|aprt| NavAid::Airport(Rc::clone(aprt))))
     }
 
-    /// Appends other NavigationData.
+    /// Appends other navigation data.
     ///
-    /// The other navigation data can be [removed] by their [UUID].
+    /// The other navigation data can be [removed] using it's [partition ID].
     ///
     /// [removed]: Self::remove
-    /// [UUID]: Self::uuid
+    /// [partition ID]: Self::partition_id
     pub fn append(&mut self, other: NavigationData) {
-        self.partitions.insert(other.uuid, other);
+        self.partitions.insert(other.partition_id(), other);
     }
 
     /// Removes the navigation data partition.
-    pub fn remove(&mut self, uuid: &[u8; 16]) {
-        self.partitions.remove(uuid);
+    pub fn remove(&mut self, partition_id: &u64) {
+        self.partitions.remove(partition_id);
     }
 
     #[deprecated(
@@ -274,7 +268,6 @@ mod tests {
             waypoints: Vec::new(),
             locations: vec!["ED".try_into().expect("ED should be a valid location")],
             cycle: None,
-            uuid: Uuid::new_v4().into_bytes(),
             partitions: HashMap::new(),
         };
 

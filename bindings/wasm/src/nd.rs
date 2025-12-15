@@ -31,10 +31,10 @@ impl JsNavigationData {
         serde_wasm_bindgen::to_value(&fms.nd().find(ident)).unwrap()
     }
 
-    pub fn remove(&self, uuid: JsValue) -> Result<(), JsError> {
+    pub fn remove(&self, partition_id: &str) -> Result<(), JsError> {
         let mut fms = self.inner.borrow_mut();
-        let uuid: [u8; 16] = serde_wasm_bindgen::from_value(uuid)?;
-        fms.modify_nd(|nd| nd.remove(&uuid))?;
+        let partition_id: u64 = partition_id.parse()?;
+        fms.modify_nd(|nd| nd.remove(&partition_id))?;
         Ok(())
     }
 }
