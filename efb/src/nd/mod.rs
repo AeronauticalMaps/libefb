@@ -61,6 +61,7 @@ pub struct NavigationData {
     waypoints: Vec<Rc<Waypoint>>,
     locations: Vec<LocationIndicator>,
     cycle: Option<AiracCycle>,
+    partition_id: u64,
     partitions: HashMap<u64, NavigationData>,
 }
 
@@ -73,12 +74,17 @@ impl NavigationData {
     pub fn try_from_arinc424(s: &str) -> Result<Self, Error> {
         let record: Arinc424Record = s.parse()?;
 
+        let mut hasher = DefaultHasher::new();
+        s.hash(&mut hasher);
+        let partition_id = hasher.finish();
+
         Ok(Self {
             airports: record.airports,
             airspaces: Vec::new(),
             waypoints: record.waypoints,
             locations: record.locations,
             cycle: record.cycle,
+            partition_id,
             partitions: HashMap::new(),
         })
     }
@@ -87,12 +93,17 @@ impl NavigationData {
     pub fn try_from_openair(s: &str) -> Result<Self, Error> {
         let record: OpenAirRecord = s.parse()?;
 
+        let mut hasher = DefaultHasher::new();
+        s.hash(&mut hasher);
+        let partition_id = hasher.finish();
+
         Ok(Self {
             airports: Vec::new(),
             airspaces: record.airspaces,
             waypoints: Vec::new(),
             locations: Vec::new(),
             cycle: None,
+            partition_id,
             partitions: HashMap::new(),
         })
     }
@@ -107,9 +118,7 @@ impl NavigationData {
 
     /// Returns the identifier of the navigation data.
     pub fn partition_id(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        self.hash(&mut hasher);
-        hasher.finish()
+        self.partition_id
     }
 
     /// Returns all airspaces that contain the given point.
@@ -221,16 +230,6 @@ impl NavigationData {
     }
 }
 
-impl Hash for NavigationData {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.airports.hash(state);
-        self.airspaces.hash(state);
-        self.waypoints.hash(state);
-        self.locations.hash(state);
-        self.cycle.hash(state);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::geom::Polygon;
@@ -261,6 +260,7 @@ mod tests {
             waypoints: Vec::new(),
             locations: vec!["ED".try_into().expect("ED should be a valid location")],
             cycle: None,
+            partition_id: u64::default(),
             partitions: HashMap::new(),
         };
 
