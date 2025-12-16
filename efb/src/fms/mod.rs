@@ -76,7 +76,8 @@ impl FMS {
         F: FnOnce(&mut NavigationData),
     {
         f(&mut self.nd);
-        self.reevaluate()
+        self.eval_route().inspect_err(|_| self.route.clear())?;
+        self.eval_fp()
     }
 
     pub fn route(&self) -> &Route {
@@ -89,12 +90,12 @@ impl FMS {
         F: FnOnce(&mut Route),
     {
         f(&mut self.route);
-        self.reevaluate()
+        self.eval()
     }
 
     pub fn decode(&mut self, route: String) -> Result<()> {
         self.context.route = Some(route);
-        self.reevaluate()
+        self.eval()
     }
 
     /// Sets an alternate on the route.
@@ -108,7 +109,7 @@ impl FMS {
         match self.nd.find(ident) {
             Some(alternate) => {
                 self.route.set_alternate(Some(alternate));
-                self.reevaluate()?;
+                self.eval()?;
                 Ok(())
             }
             None => Err(Error::UnknownIdent(ident.to_string())),
@@ -117,7 +118,7 @@ impl FMS {
 
     pub fn set_flight_planning(&mut self, builder: FlightPlanningBuilder) -> Result<()> {
         self.context.flight_planning_builder = Some(builder);
-        self.reevaluate()
+        self.eval()
     }
 
     pub fn flight_planning(&self) -> Option<&FlightPlanning> {
@@ -133,11 +134,21 @@ impl FMS {
             .unwrap_or_default()
     }
 
-    fn reevaluate(&mut self) -> Result<()> {
-        if let Some(route) = &self.context.route {
-            self.route.decode(&route, &self.nd)?;
+    fn eval(&mut self) -> Result<()> {
+        self.eval_route()?;
+        self.eval_fp()?;
+        Ok(())
+    }
+
+    fn eval_route(&mut self) -> Result<()> {
+        if let Some(prompt) = &self.context.route {
+            self.route.decode(&prompt, &self.nd)?;
         }
 
+        Ok(())
+    }
+
+    fn eval_fp(&mut self) -> Result<()> {
         if let Some(builder) = &self.context.flight_planning_builder.clone() {
             let flight_planning = builder.build(&self.route)?;
             self.flight_planning = Some(flight_planning);

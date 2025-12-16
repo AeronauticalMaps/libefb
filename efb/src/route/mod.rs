@@ -134,6 +134,13 @@ impl Route {
         self.legs = Self::legs_from_elements(&self.elements);
     }
 
+    /// Clears the route elements, legs and alternate.
+    pub fn clear(&mut self) {
+        self.elements.clear();
+        self.legs.clear();
+        self.alternate.take();
+    }
+
     pub fn elements(&self) -> &Vec<RouteElement> {
         &self.elements
     }

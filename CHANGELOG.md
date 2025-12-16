@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Clear route if corrupted by modifying navigation data
 - Remove navigation data partition
 - Length in cm, km and statue miles
 - Volume in US gallon
