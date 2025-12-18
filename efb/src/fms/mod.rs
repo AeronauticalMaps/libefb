@@ -21,6 +21,8 @@
 //! modify e.g. the navigation data and takes care that the route is reevaluated
 //! based on the new data.
 
+use std::collections::HashMap;
+
 use crate::error::{Error, Result};
 use crate::fp::{FlightPlanning, FlightPlanningBuilder};
 use crate::nd::NavigationData;
@@ -76,8 +78,9 @@ impl FMS {
         F: FnOnce(&mut NavigationData),
     {
         f(&mut self.nd);
-        self.eval_route().inspect_err(|_| self.route.clear())?;
-        self.eval_fp()
+        EvalPipeline::default()
+            .inspect_err(EvalStage::Route, |_, fms| fms.route.clear())
+            .eval(self)
     }
 
     pub fn route(&self) -> &Route {
@@ -90,12 +93,12 @@ impl FMS {
         F: FnOnce(&mut Route),
     {
         f(&mut self.route);
-        self.eval()
+        EvalPipeline::default().eval(self)
     }
 
     pub fn decode(&mut self, route: String) -> Result<()> {
         self.context.route = Some(route);
-        self.eval()
+        EvalPipeline::default().eval(self)
     }
 
     /// Sets an alternate on the route.
@@ -109,8 +112,7 @@ impl FMS {
         match self.nd.find(ident) {
             Some(alternate) => {
                 self.route.set_alternate(Some(alternate));
-                self.eval()?;
-                Ok(())
+                EvalPipeline::default().eval(self)
             }
             None => Err(Error::UnknownIdent(ident.to_string())),
         }
@@ -118,7 +120,9 @@ impl FMS {
 
     pub fn set_flight_planning(&mut self, builder: FlightPlanningBuilder) -> Result<()> {
         self.context.flight_planning_builder = Some(builder);
-        self.eval()
+        EvalPipeline::default()
+            .skip_until(EvalStage::FlightPlanning)
+            .eval(self)
     }
 
     pub fn flight_planning(&self) -> Option<&FlightPlanning> {
@@ -133,25 +137,94 @@ impl FMS {
             .print(&self.route, self.flight_planning.as_ref())
             .unwrap_or_default()
     }
+}
 
-    fn eval(&mut self) -> Result<()> {
-        self.eval_route()?;
-        self.eval_fp()?;
-        Ok(())
+/////////////////////////////////////////////////////////////////////////////
+// Evaluation pipeline
+/////////////////////////////////////////////////////////////////////////////
+
+/// Evaluates the FMS in a defined order.
+///
+/// The FMS is evaluated in stages, where each stage can fail. If a stage fails,
+/// it can be inspected to run e.g. clean-up tasks on the FMS. If a certain
+/// action doesn't require an update of the entire pipeline, stages can be
+/// skipped to start at a specific stage.
+struct EvalPipeline {
+    stages: [EvalStage; 2],
+    stage_range: std::ops::Range<usize>,
+    inspectors: HashMap<EvalStage, Box<dyn FnOnce(&Error, &mut FMS)>>,
+}
+
+impl EvalPipeline {
+    fn skip_until(mut self, stage: EvalStage) -> Self {
+        if let Some(i) = self.stages[self.stage_range.clone()]
+            .iter()
+            .position(|s| s == &stage)
+        {
+            self.stage_range.start = self.stage_range.start + i;
+        }
+        self
     }
 
-    fn eval_route(&mut self) -> Result<()> {
-        if let Some(prompt) = &self.context.route {
-            self.route.decode(&prompt, &self.nd)?;
+    /// Adds an error inspector for a specific stage.
+    ///
+    /// The inspector is called if that stage fails, before the error is propagated.
+    fn inspect_err<F>(mut self, stage: EvalStage, f: F) -> Self
+    where
+        F: FnOnce(&Error, &mut FMS) + 'static,
+    {
+        self.inspectors.insert(stage, Box::new(f));
+        self
+    }
+
+    /// Executes the evaluation pipeline.
+    fn eval(mut self, fms: &mut FMS) -> Result<()> {
+        for stage in &self.stages[self.stage_range] {
+            let result = stage.eval(fms);
+
+            if let Err(ref e) = result {
+                if let Some(inspector) = self.inspectors.remove(stage) {
+                    inspector(e, fms);
+                }
+            }
+
+            result?;
         }
 
         Ok(())
     }
+}
 
-    fn eval_fp(&mut self) -> Result<()> {
-        if let Some(builder) = &self.context.flight_planning_builder.clone() {
-            let flight_planning = builder.build(&self.route)?;
-            self.flight_planning = Some(flight_planning);
+impl Default for EvalPipeline {
+    fn default() -> Self {
+        Self {
+            stages: [EvalStage::Route, EvalStage::FlightPlanning],
+            stage_range: 0..2,
+            inspectors: HashMap::new(),
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Hash, Clone, Copy)]
+enum EvalStage {
+    Route,
+    FlightPlanning,
+}
+
+impl EvalStage {
+    fn eval(&self, fms: &mut FMS) -> Result<()> {
+        match self {
+            EvalStage::Route => {
+                if let Some(prompt) = &fms.context.route {
+                    fms.route.decode(&prompt, &fms.nd)?;
+                }
+            }
+            EvalStage::FlightPlanning => {
+                if let Some(builder) = &fms.context.flight_planning_builder.clone() {
+                    let flight_planning = builder.build(&fms.route)?;
+                    fms.flight_planning = Some(flight_planning);
+                }
+            }
         }
 
         Ok(())
