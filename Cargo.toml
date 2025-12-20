@@ -15,6 +15,7 @@
 
 [workspace]
 members = [
+    "aixm",
     "arinc424",
     "arinc424-derive",
     "efb",

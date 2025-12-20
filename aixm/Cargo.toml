@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2024 Joe Pearson
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[package]
+name = "aixm"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "AIXM 5.1 parser for aeronautical information exchange"
+keywords = ["AIXM", "aviation", "GML", "XML"]
+homepage = "https://github.com/pearjo/libefb"
+repository = "https://github.com/pearjo/libefb"
+
+[dependencies]
+# XML parsing - optional, enabled by aixm feature
+quick-xml = { version = "0.37", features = ["serialize"], optional = true }
+serde = { version = "1.0", features = ["derive"] }
+xsd-parser-types = "0.1.2"
+
+[build-dependencies]
+xsd-parser = { version = "1.4.0", features = ["web-resolver"] }
+syn = { version = "2.0", features = ["full"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+prettyplease = "0.2"
