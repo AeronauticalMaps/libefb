@@ -100,10 +100,22 @@ impl JsRoute {
         serde_wasm_bindgen::to_value(&fms.route().origin()).unwrap_or_default()
     }
 
+    #[wasm_bindgen(getter, js_name = takeoffRwy)]
+    pub fn takeoff_rwy(&self) -> JsValue {
+        let fms = self.inner.borrow();
+        serde_wasm_bindgen::to_value(&fms.route().takeoff_rwy()).unwrap_or_default()
+    }
+
     #[wasm_bindgen(getter)]
     pub fn destination(&self) -> JsValue {
         let fms = self.inner.borrow();
         serde_wasm_bindgen::to_value(&fms.route().destination()).unwrap_or_default()
+    }
+
+    #[wasm_bindgen(getter, js_name = landingRwy)]
+    pub fn landing_rwy(&self) -> JsValue {
+        let fms = self.inner.borrow();
+        serde_wasm_bindgen::to_value(&fms.route().landing_rwy()).unwrap_or_default()
     }
 
     pub fn legs(&self) -> Vec<JsLeg> {
