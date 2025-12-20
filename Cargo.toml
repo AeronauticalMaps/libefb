@@ -15,6 +15,7 @@
 
 [workspace]
 members = [
+    "aixm",
     "arinc424",
     "efb",
     "bindings/c",
