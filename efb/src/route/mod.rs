@@ -281,7 +281,7 @@ impl Route {
                     Some(prev) => prev.accumulate(leg, perf),
                 });
                 // the totals up to this leg
-                totals_to_leg.clone()
+                *totals_to_leg
             })
     }
 
