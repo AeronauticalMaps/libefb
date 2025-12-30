@@ -47,6 +47,9 @@ pub enum Error {
     UnexpectedRunwayInRoute(String),
     /// The route includes a runway that is not found on the associated airport.
     UnknownRunwayInRoute { aprt: String, rwy: String },
+    /// Terminal waypoints should only be defined within one explicit terminal
+    /// area. Terminal areas are delimited by the direct via.
+    AmbiguousTerminalArea { wp: String, a: String, b: String },
 
     // Errors that are related to parsing of input data:
     //
@@ -101,6 +104,9 @@ impl fmt::Display for Error {
             }
             Self::UnknownRunwayInRoute { aprt, rwy } => {
                 write!(f, "unknown runway {rwy} found for {aprt}")
+            }
+            Self::AmbiguousTerminalArea { wp, a, b } => {
+                write!(f, "waypoint {wp} in ambiguous terminal area {a} and {b}")
             }
 
             Self::UnexpectedString => write!(f, "unexpected string"),

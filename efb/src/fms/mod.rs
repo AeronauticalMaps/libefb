@@ -179,6 +179,7 @@ impl EvalPipeline {
 
     /// Executes the evaluation pipeline.
     fn eval(mut self, fms: &mut FMS) -> Result<()> {
+        // TODO: Return stage errors and continue evaluation even if one stage fails.
         for stage in &self.stages[self.stage_range] {
             let result = stage.eval(fms);
 

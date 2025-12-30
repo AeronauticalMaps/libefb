@@ -191,7 +191,7 @@ impl NavigationData {
     /// # fn search(nd: &NavigationData) {
     /// // Find visual reporting point N1 (NOVEMBER 1) in the EDDH terminal area
     /// if let Some(waypoint) = nd.find_terminal_waypoint("EDDH", "N1") {
-    ///     println!("Found VRP: {}", waypoint.fix_ident);
+    ///     println!("Found VRP: {}", waypoint.ident());
     /// }
     /// # }
     /// ```

@@ -58,11 +58,10 @@ impl FromStr for Arinc424Record {
                         Region::TerminalArea(ident) => {
                             // TODO: Add a new e.g. FourLetterCode type which is used as key so no conversions are needed.
                             let ident = str::from_utf8(ident).expect("ident should be valid UTF-8");
-                            if let Some(twp) = terminal_waypoints.get_mut(ident) {
-                                twp.push(Rc::new(wp));
-                            } else {
-                                terminal_waypoints.insert(ident.to_string(), vec![Rc::new(wp)]);
-                            }
+                            terminal_waypoints
+                                .entry(ident.to_string())
+                                .or_default()
+                                .push(Rc::new(wp));
                         }
                     }
                 }
