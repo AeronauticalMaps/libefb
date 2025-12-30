@@ -158,11 +158,11 @@ impl Route {
         Ok(())
     }
 
-    pub fn insert(&mut self, index: usize, word: &str) -> Result<(), Error> {
+    fn insert(&mut self, _index: usize, _word: &str) -> Result<(), Error> {
         unimplemented!()
     }
 
-    pub fn push(&mut self, word: &str) -> Result<(), Error> {
+    fn push(&mut self, _word: &str) -> Result<(), Error> {
         unimplemented!()
     }
 
