@@ -25,8 +25,8 @@
 //! solely on its format:
 //!
 //! - `"N0107"` → `Word::Speed` (try different parser)
-//! - `"EDDH"` → `Word::NavAid` (found in navigation data)
-//! - `"RWY33"` → `Word::RunwayDesignator` (RWY prefix)
+//! - `"EDDH"` → `Word::Airport` (found in navigation data)
+//! - `"EDDH33"` → `Word::Airport` (found after splitting and matching runway)
 //! - `"W"` → `Word::VFRWaypoint` (not in navigation data)
 //! - `"DCT"` → `Word::Via(Via::Direct)`
 //!
@@ -57,9 +57,13 @@ pub enum Token {
     Level(VerticalDistance),
     /// Wind conditions for subsequent legs.
     Wind(Wind),
+    /// Airport with optional runway specification.
+    Airport {
+        aprt: Rc<Airport>,
+        rwy: Option<Runway>,
+    },
+    /// Navigation aid (waypoint, VOR, NDB, etc.) - but NOT airports.
     NavAid(NavAid),
-    /// Runway for takeoff or landing for the previous airport.
-    Runway(Runway),
     /// Route connection type.
     Via(Via),
 }
@@ -80,7 +84,7 @@ pub struct Tokens {
 
 impl Tokens {
     pub fn try_new(s: &str, nd: &NavigationData) -> Result<Self, Error> {
-        let words = Lexer::lex(s, nd);
+        let words = Lexer::lex(s, nd)?;
         let tokens = Self::tokenize(words, nd)?;
         Ok(Self { tokens })
     }
@@ -100,50 +104,39 @@ impl Tokens {
                 Word::Level(level) => tokens.push(Token::Level(*level)),
                 Word::Wind(wind) => tokens.push(Token::Wind(*wind)),
 
-                Word::RunwayDesignator(designator) => {
-                    if let Some(ref terminal) = terminal {
-                        let rwy = terminal
-                            .runways
-                            .iter()
-                            .find(|rwy| &rwy.designator == designator)
-                            .cloned()
-                            .ok_or(Error::UnknownRunwayInRoute {
-                                aprt: terminal.ident(),
-                                rwy: designator.clone(),
-                            })?;
-
-                        tokens.push(Token::Runway(rwy));
-                    } else {
-                        return Err(Error::UnexpectedRunwayInRoute(designator.clone()));
-                    }
-                }
-
                 Word::Via(via) => {
                     terminal = None;
                     tokens.push(Token::Via(via.clone()));
                 }
 
-                Word::NavAid(navaid) => {
-                    if let NavAid::Airport(airport) = navaid {
-                        // Each airport sets a new terminal scope
-                        terminal = Some(Rc::clone(airport));
+                Word::Airport { aprt, rwy } => {
+                    // Each airport sets a new terminal scope
+                    terminal = Some(Rc::clone(aprt));
 
-                        if i == 0 {
-                            tokens.push(Token::NavAid(navaid.clone()));
-                        } else {
-                            // If we go direct to this airport (previous is DCT) and
-                            // the next word is a terminal waypoint, we don't add
-                            // the airport since it is used only to open the
-                            // terminal scope.
-                            match (words.get(i - 1), words.get(i + 1)) {
-                                (Some(Word::Via(Via::Direct)), Some(Word::VFRWaypoint(_))) => (),
-                                _ => tokens.push(Token::NavAid(navaid.clone())),
-                            };
-                        }
+                    if i == 0 {
+                        // First airport always gets added
+                        tokens.push(Token::Airport {
+                            aprt: Rc::clone(aprt),
+                            rwy: rwy.clone(),
+                        });
                     } else {
-                        // It's a waypoint or other navaid - just pass through
-                        tokens.push(Token::NavAid(navaid.clone()));
+                        // If we go direct to this airport (previous is DCT) and
+                        // the next word is a terminal waypoint, we don't add
+                        // the airport since it is used only to open the
+                        // terminal scope.
+                        match (words.get(i - 1), words.get(i + 1)) {
+                            (Some(Word::Via(Via::Direct)), Some(Word::VFRWaypoint(_))) => (),
+                            _ => tokens.push(Token::Airport {
+                                aprt: Rc::clone(aprt),
+                                rwy: rwy.clone(),
+                            }),
+                        };
                     }
+                }
+
+                Word::NavAid(navaid) => {
+                    // Waypoint, VOR, NDB, or other navaid - just pass through
+                    tokens.push(Token::NavAid(navaid.clone()));
                 }
 
                 Word::VFRWaypoint(fix) => {
@@ -195,7 +188,7 @@ impl Tokens {
     fn lookahead_terminal_area(words: &[Word]) -> Option<Rc<Airport>> {
         for word in words {
             match word {
-                Word::NavAid(NavAid::Airport(airport)) => return Some(Rc::clone(airport)),
+                Word::Airport { aprt, .. } => return Some(Rc::clone(aprt)),
                 // next direct terminates any terminal area we would be looking in
                 Word::Via(Via::Direct) => return None,
                 _ => continue,
@@ -242,7 +235,10 @@ enum Word {
     Speed(Speed),
     Level(VerticalDistance),
     Wind(Wind),
-    RunwayDesignator(String),
+    Airport {
+        aprt: Rc<Airport>,
+        rwy: Option<Runway>,
+    },
     NavAid(NavAid),
     VFRWaypoint(String),
 }
@@ -250,47 +246,65 @@ enum Word {
 struct Lexer;
 
 impl Lexer {
-    fn lex(s: &str, nd: &NavigationData) -> Vec<Word> {
+    fn lex(s: &str, nd: &NavigationData) -> Result<Vec<Word>, Error> {
         s.to_uppercase()
             .split_whitespace()
             .map(|s| Self::classify(s, nd))
             .collect()
     }
 
-    fn classify(s: &str, nd: &NavigationData) -> Word {
-        // most points are probably a NavAid, thus try this first
-        if let Some(navaid) = nd.find(&s) {
+    fn classify(s: &str, nd: &NavigationData) -> Result<Word, Error> {
+        // Check for special keywords first
+        if s == "DCT" {
+            return Ok(Word::Via(Via::Direct));
+        }
+
+        // Try navaids or airports
+        if let Some(navaid) = nd.find(s) {
             return match navaid {
                 NavAid::Waypoint(wp) => match &wp.usage {
-                    WaypointUsage::VFROnly => Word::VFRWaypoint(wp.fix_ident.clone()),
-                    _ => Word::NavAid(NavAid::Waypoint(wp)),
+                    WaypointUsage::VFROnly => Ok(Word::VFRWaypoint(wp.fix_ident.clone())),
+                    _ => Ok(Word::NavAid(NavAid::Waypoint(wp))),
                 },
-                navaid => Word::NavAid(navaid),
+                NavAid::Airport(aprt) => Ok(Word::Airport { aprt, rwy: None }),
             };
         }
 
-        if s == "DCT" {
-            return Word::Via(Via::Direct);
-        }
-
+        // Try parsing as performance elements
         if let Ok(speed) = s.parse::<Speed>() {
-            return Word::Speed(speed);
+            return Ok(Word::Speed(speed));
         }
 
         if let Ok(level) = s.parse::<VerticalDistance>() {
-            return Word::Level(level);
+            return Ok(Word::Level(level));
         }
 
         if let Ok(wind) = s.parse::<Wind>() {
-            return Word::Wind(wind);
+            return Ok(Word::Wind(wind));
         }
 
-        if s.starts_with("RWY") {
-            let designator = s.strip_prefix("RWY").unwrap_or_default().to_string();
-            return Word::RunwayDesignator(designator);
+        // try airport with runway
+        if let Some((ident, rwy_designator)) = s.split_at_checked(4) {
+            if let Some(NavAid::Airport(aprt)) = nd.find(ident) {
+                let rwy = aprt
+                    .runways
+                    .iter()
+                    .find(|rwy| rwy.designator == rwy_designator)
+                    .cloned()
+                    .ok_or(Error::UnknownRunwayInRoute {
+                        aprt: aprt.ident(),
+                        rwy: rwy_designator.to_string(),
+                    })?;
+
+                return Ok(Word::Airport {
+                    aprt,
+                    rwy: Some(rwy),
+                });
+            }
         }
 
-        Word::VFRWaypoint(s.to_string())
+        // Fallback: treat as potential VFR waypoint
+        Ok(Word::VFRWaypoint(s.to_string()))
     }
 }
 
@@ -309,6 +323,7 @@ mod tests {
 SEURPCEDDHED N1    ED0    V     N53482105E010015451                                 WGE           NOVEMBER1                359892409
 SEURPCEDDHED N2    ED0    V     N53405701E010000576                                 WGE           NOVEMBER2                359902409
 SEURP EDHLEDA        0        N N53481800E010430400E002000055                   P    MWGE    LUBECK-BLANKENSEE             385832513
+SEURP EDHLEDGRW07    0068960720 N53480876E010421519                          197                                           141222513
 SEURPCEDHLED W     ED0    V     N53495526E010331676                                 WGE           WHISKEY                  380672513
 SEURP EDAHEDA        0        N N53524334E014090845E004000094                   P    MWGE    HERINGSDORF                   480342513
 SEURPCEDAHED W     ED0    V     N53505381E013552347                                 WGE           WHISKEY                  476562513
@@ -326,8 +341,11 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
             }
         }
 
-        fn navaid(&self, ident: &str) -> NavAid {
-            self.nd.find(ident).expect("should find NavAid {ident}")
+        fn airport(&self, ident: &str) -> Rc<Airport> {
+            match self.nd.find(ident) {
+                Some(NavAid::Airport(aprt)) => aprt,
+                _ => panic!("should find airport {ident}"),
+            }
         }
 
         fn vrp(&self, airport_ident: &str, fix_ident: &str) -> NavAid {
@@ -341,18 +359,27 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
     #[test]
     fn lexes_words() {
         let data = TestData::new();
-        let words = Lexer::lex("N0107 A0250 EDDH D DCT EDHL RWY07", &data.nd);
+        let words =
+            Lexer::lex("N0107 A0250 EDDH D DCT EDHL07", &data.nd).expect("should lex words");
+
+        let edhl = data.airport("EDHL");
+        let rwy07 = edhl.runways.iter().find(|r| r.designator == "07").cloned();
 
         assert_eq!(
-            &words,
-            &[
+            words,
+            vec![
                 Word::Speed(Speed::kt(107.0)),
                 Word::Level(VerticalDistance::Altitude(2500)),
-                Word::NavAid(data.navaid("EDDH")),
+                Word::Airport {
+                    aprt: data.airport("EDDH"),
+                    rwy: None
+                },
                 Word::VFRWaypoint("D".to_string()),
                 Word::Via(Via::Direct),
-                Word::NavAid(data.navaid("EDHL")),
-                Word::RunwayDesignator("07".to_string())
+                Word::Airport {
+                    aprt: edhl,
+                    rwy: rwy07
+                }
             ]
         );
     }
@@ -366,10 +393,13 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
 
         assert_eq!(
             tokens.tokens,
-            [
+            vec![
                 Token::Speed(Speed::kt(107.0)),
                 Token::Level(VerticalDistance::Altitude(2500)),
-                Token::NavAid(data.navaid("EDDH")),
+                Token::Airport {
+                    aprt: data.airport("EDDH"),
+                    rwy: None
+                },
                 Token::NavAid(data.vrp("EDDH", "N2")),
                 Token::NavAid(data.vrp("EDDH", "N1")),
                 Token::Via(Via::Direct),
@@ -377,7 +407,10 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
                 Token::NavAid(data.vrp("EDHL", "W")),
                 Token::Via(Via::Direct),
                 Token::NavAid(data.vrp("EDAH", "W")),
-                Token::NavAid(data.navaid("EDAH")),
+                Token::Airport {
+                    aprt: data.airport("EDAH"),
+                    rwy: None
+                },
             ]
         );
     }

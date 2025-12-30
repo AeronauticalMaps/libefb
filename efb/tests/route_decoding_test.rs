@@ -24,7 +24,7 @@ SEURP EDHFEDA        0        N N53593300E009343600E000000082                   
 SEURP EDHFEDGRW20    0034122060 N53594752E009344856                          098                                           120792502
 "#;
 
-const ROUTE: &'static str = r#"EDDH RWY33 N2 N1 DCT EDHF RWY20"#;
+const ROUTE: &'static str = r#"EDDH33 N2 N1 DCT EDHF20"#;
 
 fn route() -> Route {
     let nd = NavigationData::try_from_arinc424(ARINC_424_RECORDS).expect("records should be valid");

@@ -90,7 +90,6 @@ impl Route {
         self.takeoff_rwy.take();
         self.landing_rwy.take();
 
-        // TODO: Set cruise speed and level from tokens.
         let mut level: Option<VerticalDistance> = None;
         let mut tas: Option<Speed> = None;
         let mut wind: Option<Wind> = None;
@@ -117,30 +116,37 @@ impl Route {
 
                 Token::Wind(value) => wind = Some(*value),
 
+                Token::Airport { aprt, rwy } => {
+                    // Track for leg building
+                    if from.is_none() {
+                        from = Some(NavAid::Airport(Rc::clone(aprt)));
+                    } else if to.is_none() {
+                        to = Some(NavAid::Airport(Rc::clone(aprt)));
+                    }
+
+                    // First airport is origin, subsequent airports are destinations
+                    match &self.origin {
+                        None => {
+                            // First airport = origin with optional takeoff runway
+                            self.origin = Some(Rc::clone(aprt));
+                            self.takeoff_rwy = rwy.clone();
+                        }
+                        Some(_) => {
+                            // Any subsequent airport = destination with optional landing runway
+                            self.destination = Some(Rc::clone(aprt));
+                            self.landing_rwy = rwy.clone();
+                        }
+                    }
+                }
+
                 Token::NavAid(navaid) => {
+                    // Non-airport navaids (waypoints, VOR, NDB, etc.)
                     if from.is_none() {
                         from = Some(navaid.clone());
                     } else if to.is_none() {
                         to = Some(navaid.clone());
                     }
-
-                    // first airport is origin and the last the destination
-                    match (navaid, &self.origin, &self.destination) {
-                        (NavAid::Airport(aprt), None, _) => self.origin = Some(Rc::clone(aprt)),
-                        (NavAid::Airport(aprt), Some(_), _) => {
-                            self.destination = Some(Rc::clone(aprt))
-                        }
-                        _ => (),
-                    }
                 }
-
-                Token::Runway(rwy) => match (&from, &self.takeoff_rwy, &self.landing_rwy) {
-                    (Some(NavAid::Airport(_)), None, None) => self.takeoff_rwy = Some(rwy.clone()),
-                    (Some(NavAid::Airport(_)), Some(_), None) => {
-                        self.landing_rwy = Some(rwy.clone())
-                    }
-                    _ => return Err(Error::UnexpectedRunwayInRoute(rwy.designator.clone())),
-                },
                 _ => (),
             }
 
