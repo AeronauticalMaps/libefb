@@ -203,7 +203,7 @@ impl Route {
 
     /// Returns the final leg but going to the alternate.
     pub fn alternate(&self) -> Option<Leg> {
-        let final_leg = self.legs[self.legs.len() - 1].clone();
+        let final_leg = self.legs.last()?.clone();
         Some(Leg::new(
             final_leg.from().clone(),
             self.alternate.clone()?,
