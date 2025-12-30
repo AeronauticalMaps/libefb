@@ -36,7 +36,7 @@ fn main() -> Result<(), Error> {
 
     // Decode a route from EDDH to EDHF with winds at 20 kt from 290° and
     // cruising speed of 107 kt and an altitude of 2500 ft.
-    fms.decode("29020KT N0107 A0250 EDDH DHN2 DHN1 EDHF".to_string())?;
+    fms.decode("29020KT N0107 A0250 EDDH N2 N1 EDHF".to_string())?;
 
     // Now we could define an aircraft and continue with our planning
     // but for now we'll just print the route
@@ -54,10 +54,10 @@ Running this example with a proper ARINC 424 file, we get the following output:
 ----------------------------------------
 
 TO          HDG           DIST      ETE
-DHN2       354 °M       3.2 NM     113 s
+N2         354 °M       3.2 NM     113 s
 
 TO          HDG           DIST      ETE
-DHN1       354 °M       7.5 NM     266 s
+N1         354 °M       7.5 NM     266 s
 
 TO          HDG           DIST      ETE
 EDHF       298 °M      19.6 NM     806 s

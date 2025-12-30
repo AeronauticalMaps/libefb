@@ -15,7 +15,7 @@ fn main() -> Result<(), Error> {
 
     // Decode a route from EDDH to EDHF with winds at 20 kt from 290° and
     // cruising speed of 107 kt and an altitude of 2500 ft.
-    fms.decode("29020KT N0107 A0250 EDDH DHN2 DHN1 EDHF".to_string())?;
+    fms.decode("29020KT N0107 A0250 EDDH N2 N1 EDHF".to_string())?;
 
     // Now we could define an aircraft and continue with our planning
     // but for now we'll just print the route
