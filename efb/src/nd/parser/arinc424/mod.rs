@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::str::FromStr;
 
@@ -25,6 +25,7 @@ mod from;
 pub struct Arinc424Record {
     pub(crate) airports: Vec<Rc<Airport>>,
     pub(crate) waypoints: Vec<Rc<Waypoint>>,
+    pub(crate) terminal_waypoints: TerminalWaypoints,
     pub(crate) locations: Vec<LocationIndicator>,
     pub(crate) cycle: Option<AiracCycle>,
 }
@@ -36,6 +37,7 @@ impl FromStr for Arinc424Record {
         let mut airports: Vec<Airport> = Vec::new();
         let mut rwy_record_lines: Vec<&str> = Vec::new();
         let mut waypoints: Vec<Rc<Waypoint>> = Vec::new();
+        let mut terminal_waypoints: TerminalWaypoints = HashMap::new();
         let mut locations: HashSet<LocationIndicator> = HashSet::new();
         let mut cycle: Option<AiracCycle> = None;
 
@@ -50,7 +52,18 @@ impl FromStr for Arinc424Record {
                     if let Some(c) = wp.cycle {
                         cycle = Some(cycle.map_or(c, |cycle| cycle.min(c)));
                     }
-                    waypoints.push(Rc::new(wp));
+
+                    match &wp.region {
+                        Region::Enroute => waypoints.push(Rc::new(wp)),
+                        Region::TerminalArea(ident) => {
+                            // TODO: Add a new e.g. FourLetterCode type which is used as key so no conversions are needed.
+                            let ident = str::from_utf8(ident).expect("ident should be valid UTF-8");
+                            terminal_waypoints
+                                .entry(ident.to_string())
+                                .or_default()
+                                .push(Rc::new(wp));
+                        }
+                    }
                 }
             }
             "P " => match &line[12..13] {
@@ -87,8 +100,9 @@ impl FromStr for Arinc424Record {
         Ok(Self {
             airports: airports.into_iter().map(Rc::new).collect(),
             waypoints,
+            terminal_waypoints,
             locations: locations.into_iter().collect(),
-            cycle,
+            cycle, // TODO: Get cycle from HDR section if available
         })
     }
 }

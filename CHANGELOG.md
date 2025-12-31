@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Takeoff and landing runway in WASM route
 
+### Changed
+
+- Prepend runway to airport identifier in route prompt (EDDH15)
+- Resolve ambiguous terminal waypoints in route
+
 ## [0.5.0] - 2025-12-20
 
 ### Added

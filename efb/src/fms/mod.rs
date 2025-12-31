@@ -143,6 +143,8 @@ impl FMS {
 // Evaluation pipeline
 /////////////////////////////////////////////////////////////////////////////
 
+type Inspector = Box<dyn FnOnce(&Error, &mut FMS)>;
+
 /// Evaluates the FMS in a defined order.
 ///
 /// The FMS is evaluated in stages, where each stage can fail. If a stage fails,
@@ -152,7 +154,7 @@ impl FMS {
 struct EvalPipeline {
     stages: [EvalStage; 2],
     stage_range: std::ops::Range<usize>,
-    inspectors: HashMap<EvalStage, Box<dyn FnOnce(&Error, &mut FMS)>>,
+    inspectors: HashMap<EvalStage, Inspector>,
 }
 
 impl EvalPipeline {
@@ -161,7 +163,7 @@ impl EvalPipeline {
             .iter()
             .position(|s| s == &stage)
         {
-            self.stage_range.start = self.stage_range.start + i;
+            self.stage_range.start += i;
         }
         self
     }
@@ -179,6 +181,7 @@ impl EvalPipeline {
 
     /// Executes the evaluation pipeline.
     fn eval(mut self, fms: &mut FMS) -> Result<()> {
+        // TODO: Return stage errors and continue evaluation even if one stage fails.
         for stage in &self.stages[self.stage_range] {
             let result = stage.eval(fms);
 
@@ -216,7 +219,7 @@ impl EvalStage {
         match self {
             EvalStage::Route => {
                 if let Some(prompt) = &fms.context.route {
-                    fms.route.decode(&prompt, &fms.nd)?;
+                    fms.route.decode(prompt, &fms.nd)?;
                 }
             }
             EvalStage::FlightPlanning => {

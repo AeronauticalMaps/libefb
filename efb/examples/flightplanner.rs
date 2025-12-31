@@ -150,7 +150,7 @@ fn main() -> Result<()> {
     // decode a route from EDDH to EDHF with winds at 20 kt from 290° and
     // cruising speed of 107 kt and an altitude of 2500 ft. Takeoff runway in
     // EDDH is runway 33 and landing runway in EDHF is 20.
-    fms.decode("29020KT N0107 A0250 EDDH RWY33 DHN2 DHN1 EDHF RWY20".to_string())?;
+    fms.decode("29020KT N0107 A0250 EDDH33 N2 N1 DCT EDHF20".to_string())?;
 
     // Now we can enter some data into the flight planning to get a fuel planning
     // and mass & balance calculation.

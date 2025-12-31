@@ -23,18 +23,11 @@ use crate::{VerticalDistance, Wind};
 
 mod accumulator;
 mod leg;
+mod token;
 
 pub use accumulator::TotalsToLeg;
 pub use leg::Leg;
-
-#[derive(Clone, PartialEq, Debug)]
-pub enum RouteElement {
-    Speed(Speed),
-    Level(VerticalDistance),
-    Wind(Wind),
-    NavAid(NavAid),
-    RunwayDesignator(String),
-}
+use token::{Token, Tokens};
 
 /// A route that goes from an origin to a destination.
 ///
@@ -47,7 +40,7 @@ pub enum RouteElement {
 /// and performance elements. The route elements
 ///
 /// ```text
-/// 13509KT N0107 EDDH DHD HLW EDHL
+/// 13509KT N0107 EDDH D DCT W EDHL
 /// ```
 ///
 /// would create a route from Hamburg to Luebeck via outbound delta routing and
@@ -59,20 +52,24 @@ pub enum RouteElement {
 /// on the route. Extending our route to
 ///
 /// ```text
-/// 13509KT N0107 EDDH DHD 18009KT HLW EDHL
+/// 13509KT N0107 EDDH D DCT 18009KT DCT W EDHL
 /// ```
 ///
-/// we would have wind from south-east (135°) on the leg from EDDH to DHD, but
+/// we would have wind from south-east (135°) on the leg from EDDH to D (VRP Delta), but
 /// the wind would turn to south (180°) for the remaining legs.
 ///
 /// [`leg`]: Leg
 /// [`fixes`]: crate::nd::Fix
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Route {
-    elements: Vec<RouteElement>,
+    tokens: Tokens,
     legs: Vec<Leg>,
     speed: Option<Speed>,
     level: Option<VerticalDistance>,
+    origin: Option<Rc<Airport>>,
+    takeoff_rwy: Option<Runway>,
+    destination: Option<Rc<Airport>>,
+    landing_rwy: Option<Runway>,
     alternate: Option<NavAid>,
 }
 
@@ -84,65 +81,102 @@ impl Route {
     /// Decodes a `route` that is composed of a space separated list of fix
     /// idents read from the navigation data `nd`.
     pub fn decode(&mut self, route: &str, nd: &NavigationData) -> Result<(), Error> {
-        let mut elements: Vec<RouteElement> = Vec::new();
+        self.tokens = Tokens::try_new(route, nd)?;
+        self.legs.clear();
 
-        // TODO level and speed needs to be properly update from decoder
-        for element in route.split_whitespace() {
-            if let Some(navaid) = nd.find(element) {
-                elements.push(RouteElement::NavAid(navaid));
-            } else if let Ok(value) = element.parse::<VerticalDistance>() {
-                self.level.get_or_insert(value);
-                elements.push(RouteElement::Level(value));
-            } else if let Ok(value) = element.parse::<Speed>() {
-                self.speed.get_or_insert(value);
-                elements.push(RouteElement::Speed(value));
-            } else if let Ok(value) = element.parse::<Wind>() {
-                elements.push(RouteElement::Wind(value));
-            } else if element.starts_with("RWY") {
-                if let Some(RouteElement::NavAid(NavAid::Airport(aprt))) = elements.last() {
-                    let designator = element.strip_prefix("RWY").unwrap_or_default().to_string();
-                    match aprt.runways.iter().find(|rwy| rwy.designator == designator) {
-                        Some(_) => elements.push(RouteElement::RunwayDesignator(designator)),
+        // clear values relevant during parsing of all tokens
+        self.origin.take();
+        self.destination.take();
+        self.takeoff_rwy.take();
+        self.landing_rwy.take();
+
+        let mut level: Option<VerticalDistance> = None;
+        let mut tas: Option<Speed> = None;
+        let mut wind: Option<Wind> = None;
+        let mut from: Option<NavAid> = None;
+        let mut to: Option<NavAid> = None;
+
+        for token in &self.tokens {
+            match token {
+                Token::Speed(value) => {
+                    tas = Some(*value);
+                    // first speed is cruise speed
+                    if self.speed.is_none() {
+                        self.speed = Some(*value);
+                    }
+                }
+
+                Token::Level(value) => {
+                    level = Some(*value);
+                    // first level is cruise level
+                    if self.level.is_none() {
+                        self.level = Some(*value);
+                    }
+                }
+
+                Token::Wind(value) => wind = Some(*value),
+
+                Token::Airport { aprt, rwy } => {
+                    // Track for leg building
+                    if from.is_none() {
+                        from = Some(NavAid::Airport(Rc::clone(aprt)));
+                    } else if to.is_none() {
+                        to = Some(NavAid::Airport(Rc::clone(aprt)));
+                    }
+
+                    // First airport is origin, subsequent airports are destinations
+                    match &self.origin {
                         None => {
-                            return Err(Error::UnknownRunwayInRoute {
-                                aprt: aprt.icao_ident.to_string(),
-                                rwy: designator,
-                            })
+                            // First airport = origin with optional takeoff runway
+                            self.origin = Some(Rc::clone(aprt));
+                            self.takeoff_rwy = rwy.clone();
+                        }
+                        Some(_) => {
+                            // Any subsequent airport = destination with optional landing runway
+                            self.destination = Some(Rc::clone(aprt));
+                            self.landing_rwy = rwy.clone();
                         }
                     }
-                } else {
-                    return Err(Error::UnexpectedRunwayInRoute(element.to_string()));
                 }
-            } else {
-                return Err(Error::UnexpectedRouteElement(element.to_string()));
-            }
-        }
 
-        self.elements = elements;
-        self.legs = Self::legs_from_elements(&self.elements);
+                Token::NavAid(navaid) => {
+                    // Non-airport navaids (waypoints, VOR, NDB, etc.)
+                    if from.is_none() {
+                        from = Some(navaid.clone());
+                    } else if to.is_none() {
+                        to = Some(navaid.clone());
+                    }
+                }
+                _ => (),
+            }
+
+            match (&from, &to) {
+                (Some(from), Some(to)) => {
+                    self.legs
+                        .push(Leg::new(from.clone(), to.clone(), level, tas, wind));
+                }
+                _ => continue,
+            }
+
+            (from, to) = (to, None);
+        }
 
         Ok(())
     }
 
-    pub fn insert(&mut self, index: usize, element: RouteElement) {
-        self.elements.insert(index, element);
-        self.legs = Self::legs_from_elements(&self.elements);
+    fn insert(&mut self, _index: usize, _word: &str) -> Result<(), Error> {
+        unimplemented!()
     }
 
-    pub fn push(&mut self, element: RouteElement) {
-        self.elements.push(element);
-        self.legs = Self::legs_from_elements(&self.elements);
+    fn push(&mut self, _word: &str) -> Result<(), Error> {
+        unimplemented!()
     }
 
     /// Clears the route elements, legs and alternate.
     pub fn clear(&mut self) {
-        self.elements.clear();
+        self.tokens.clear();
         self.legs.clear();
         self.alternate.take();
-    }
-
-    pub fn elements(&self) -> &Vec<RouteElement> {
-        &self.elements
     }
 
     /// Returns the legs of the route.
@@ -175,7 +209,7 @@ impl Route {
 
     /// Returns the final leg but going to the alternate.
     pub fn alternate(&self) -> Option<Leg> {
-        let final_leg = self.legs[self.legs.len() - 1].clone();
+        let final_leg = self.legs.last()?.clone();
         Some(Leg::new(
             final_leg.from().clone(),
             self.alternate.clone()?,
@@ -187,30 +221,22 @@ impl Route {
 
     /// Returns the origin airport if one is defined in the route.
     pub fn origin(&self) -> Option<Rc<Airport>> {
-        self.legs.first().and_then(|leg| match leg.from() {
-            NavAid::Airport(aprt) => Some(aprt.clone()),
-            _ => None,
-        })
+        self.origin.as_ref().map(Rc::clone)
     }
 
     /// Returns the takeoff runway if a defined in the route.
-    pub fn takeoff_rwy(&self) -> Option<Runway> {
-        let aprt = self.origin()?;
-        self.aprt_rwy_from_elements(aprt)
+    pub fn takeoff_rwy(&self) -> Option<&Runway> {
+        self.takeoff_rwy.as_ref()
     }
 
     /// Returns  the destination airport if one is defined in the route.
     pub fn destination(&self) -> Option<Rc<Airport>> {
-        self.legs.last().and_then(|leg| match leg.to() {
-            NavAid::Airport(aprt) => Some(aprt.clone()),
-            _ => None,
-        })
+        self.destination.as_ref().map(Rc::clone)
     }
 
     /// Returns the landing runway if a defined in the route.
-    pub fn landing_rwy(&self) -> Option<Runway> {
-        let aprt = self.destination()?;
-        self.aprt_rwy_from_elements(aprt)
+    pub fn landing_rwy(&self) -> Option<&Runway> {
+        self.landing_rwy.as_ref()
     }
 
     /// Returns an iterator that accumulates totals progressively through each
@@ -255,73 +281,12 @@ impl Route {
                     Some(prev) => prev.accumulate(leg, perf),
                 });
                 // the totals up to this leg
-                totals_to_leg.clone()
+                *totals_to_leg
             })
     }
 
     /// Returns the totals of the entire route.
     pub fn totals(&self, perf: Option<&Performance>) -> Option<TotalsToLeg> {
         self.accumulate_legs(perf).last()
-    }
-}
-
-impl Route {
-    /// Returns the runway from an airport if a designator is next to the
-    /// airport element.
-    // TODO: Return Result rather than Option.
-    fn aprt_rwy_from_elements(&self, aprt: Rc<Airport>) -> Option<Runway> {
-        let designator = self
-            .elements
-            .iter()
-            .position(|element| match element {
-                RouteElement::NavAid(NavAid::Airport(other)) => &aprt == other,
-                _ => false,
-            })
-            // the next element to our airport must be the runway
-            .and_then(|position| match self.elements.get(position + 1) {
-                Some(RouteElement::RunwayDesignator(designator)) => Some(designator),
-                _ => None,
-            })?;
-
-        aprt.runways
-            .iter()
-            .find(|rwy| &rwy.designator == designator)
-            .cloned()
-    }
-
-    fn legs_from_elements(elements: &Vec<RouteElement>) -> Vec<Leg> {
-        let mut level: Option<VerticalDistance> = None;
-        let mut tas: Option<Speed> = None;
-        let mut wind: Option<Wind> = None;
-        let mut from: Option<NavAid> = None;
-        let mut to: Option<NavAid> = None;
-        let mut legs: Vec<Leg> = Vec::new();
-
-        for element in elements {
-            match element {
-                RouteElement::Speed(value) => tas = Some(*value),
-                RouteElement::Level(value) => level = Some(*value),
-                RouteElement::Wind(value) => wind = Some(*value),
-                RouteElement::NavAid(navaid) => {
-                    if from.is_none() {
-                        from = Some(navaid.clone());
-                    } else if to.is_none() {
-                        to = Some(navaid.clone());
-                    }
-                }
-                _ => (),
-            }
-
-            match (from.clone(), to.clone()) {
-                (Some(from), Some(to)) => {
-                    legs.push(Leg::new(from, to, level, tas, wind));
-                }
-                _ => continue,
-            }
-
-            (from, to) = (to, None);
-        }
-
-        legs
     }
 }

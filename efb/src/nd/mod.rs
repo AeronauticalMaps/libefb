@@ -53,12 +53,15 @@ pub enum InputFormat {
     OpenAir,
 }
 
+type TerminalWaypoints = HashMap<String, Vec<Rc<Waypoint>>>;
+
 #[derive(Clone, PartialEq, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct NavigationData {
     airports: Vec<Rc<Airport>>,
     airspaces: Airspaces,
     waypoints: Vec<Rc<Waypoint>>,
+    terminal_waypoints: TerminalWaypoints,
     locations: Vec<LocationIndicator>,
     cycle: Option<AiracCycle>,
     partition_id: u64,
@@ -82,6 +85,7 @@ impl NavigationData {
             airports: record.airports,
             airspaces: Vec::new(),
             waypoints: record.waypoints,
+            terminal_waypoints: record.terminal_waypoints,
             locations: record.locations,
             cycle: record.cycle,
             partition_id,
@@ -101,6 +105,7 @@ impl NavigationData {
             airports: Vec::new(),
             airspaces: record.airspaces,
             waypoints: Vec::new(),
+            terminal_waypoints: HashMap::new(),
             locations: Vec::new(),
             cycle: None,
             partition_id,
@@ -158,9 +163,9 @@ impl NavigationData {
     ///
     /// ```
     /// # use efb::prelude::*;
-    /// # fn search(mut fms: FMS) -> Result<(), Error> {
+    /// # fn search(nd: &NavigationData) -> Result<(), Error> {
     /// // Search for Hamburg airport
-    /// match fms.nd().find("EDDH") {
+    /// match nd.find("EDDH") {
     ///     Some(navaid) => println!("Found: {}", navaid.ident()),
     ///     None => return Err(Error::UnknownIdent("EDDH".to_string())),
     /// }
@@ -175,6 +180,38 @@ impl NavigationData {
                 .airports()
                 .find(|&aprt| aprt.ident() == ident)
                 .map(|aprt| NavAid::Airport(Rc::clone(aprt))))
+    }
+
+    /// Searches for a waypoint within a terminal area.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use efb::prelude::*;
+    /// # fn search(nd: &NavigationData) {
+    /// // Find visual reporting point N1 (NOVEMBER 1) in the EDDH terminal area
+    /// if let Some(waypoint) = nd.find_terminal_waypoint("EDDH", "N1") {
+    ///     println!("Found VRP: {}", waypoint.ident());
+    /// }
+    /// # }
+    /// ```
+    pub fn find_terminal_waypoint(&self, airport_ident: &str, fix_ident: &str) -> Option<NavAid> {
+        // search in main terminal waypoints
+        self.terminal_waypoints
+            .get(airport_ident)
+            .and_then(|waypoints| waypoints.iter().find(|&wp| wp.fix_ident == fix_ident))
+            // now check the partitions
+            .or_else(|| {
+                self.partitions.values().find_map(|partition| {
+                    partition
+                        .terminal_waypoints
+                        .get(airport_ident)
+                        .and_then(|waypoints| {
+                            waypoints.iter().find(|&wp| wp.fix_ident == fix_ident)
+                        })
+                })
+            })
+            .map(|wp| NavAid::Waypoint(Rc::clone(wp)))
     }
 
     /// Appends other navigation data.
@@ -258,6 +295,7 @@ mod tests {
             }],
             airports: Vec::new(),
             waypoints: Vec::new(),
+            terminal_waypoints: HashMap::new(),
             locations: vec!["ED".try_into().expect("ED should be a valid location")],
             cycle: None,
             partition_id: u64::default(),

@@ -54,20 +54,8 @@ pub struct Waypoint {
 }
 
 impl Fix for Waypoint {
-    /// Returns the identifier used in routes. This is the `fix_ident` with a
-    /// region prefix in case the waypoint is within a terminal area. In that
-    /// case, the last two character of the airport ident are prefixed. For
-    /// example, a waypoint with ident `W1` at the Hamburg terminal area `EDDH`
-    /// would be `DHW1`.
     fn ident(&self) -> String {
-        let region_prefix: String = match self.region {
-            Region::Enroute => String::default(),
-            Region::TerminalArea(airport_ident) => {
-                String::from_utf8(vec![airport_ident[2], airport_ident[3]]).unwrap_or_default()
-            }
-        };
-
-        region_prefix + &self.fix_ident
+        self.fix_ident.clone()
     }
 
     fn coordinate(&self) -> Coordinate {

@@ -24,7 +24,7 @@ SEURP EDHFEDA        0        N N53593300E009343600E000000082                   
 SEURP EDHFEDGRW20    0034122060 N53594752E009344856                          098                                           120792502
 "#;
 
-const ROUTE: &'static str = r#"EDDH RWY33 DHN2 DHN1 EDHF RWY20"#;
+const ROUTE: &'static str = r#"EDDH33 N2 N1 DCT EDHF20"#;
 
 fn route() -> Route {
     let nd = NavigationData::try_from_arinc424(ARINC_424_RECORDS).expect("records should be valid");
@@ -51,14 +51,14 @@ fn origin_and_destination() {
 #[test]
 fn takeoff_rwy() {
     let route = route();
-    let designator = route.takeoff_rwy().map(|rwy| rwy.designator);
+    let designator = route.takeoff_rwy().map(|rwy| rwy.designator.clone());
     assert_eq!(designator, Some(String::from("33")));
 }
 
 #[test]
 fn landing_rwy() {
     let route = route();
-    let designator = route.landing_rwy().map(|rwy| rwy.designator);
+    let designator = route.landing_rwy().map(|rwy| rwy.designator.clone());
     assert_eq!(designator, Some(String::from("20")));
 }
 
@@ -67,7 +67,7 @@ fn accumulate_legs() {
     let route = route();
     let mut iter = route.accumulate_legs(None);
 
-    // total to DHN2
+    // total to N2
     assert_eq!(
         iter.next()
             .expect("route should have leg")
@@ -77,7 +77,7 @@ fn accumulate_legs() {
         3.0
     );
 
-    // total to DHN1
+    // total to N1
     assert_eq!(
         iter.next()
             .expect("route should have leg")
