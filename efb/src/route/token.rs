@@ -125,7 +125,7 @@ impl Tokens {
                         // the airport since it is used only to open the
                         // terminal scope.
                         match (words.get(i - 1), words.get(i + 1)) {
-                            (Some(Word::Via(Via::Direct)), Some(Word::VFRWaypoint(_))) => (),
+                            (Some(Word::Via(Via::Direct)), Some(Word::VFRWaypoint { .. })) => (),
                             _ => tokens.push(Token::Airport {
                                 aprt: Rc::clone(aprt),
                                 rwy: rwy.clone(),
@@ -139,40 +139,39 @@ impl Tokens {
                     tokens.push(Token::NavAid(navaid.clone()));
                 }
 
-                Word::VFRWaypoint(fix) => {
+                Word::VFRWaypoint { ident, wp } => {
                     // Set the current terminal area scope. There should be only one
                     // explicit terminal area. If we are already in one and we
                     // find another looking ahead, this fix is ambiguous and
                     // can't be resolved! If there is no terminal area at all,
                     // something went wrong too.
-                    terminal = match (terminal, Self::lookahead_terminal_area(&words[i + 1..])) {
-                        (Some(current_terminal), None) => Ok(current_terminal),
-                        (None, Some(next_terminal)) => Ok(next_terminal),
-                        (Some(a), Some(b)) => {
-                            // we have multiple waypoints in the same terminal area going inbound
-                            if a == b {
-                                Ok(a)
-                            } else {
-                                Err(Error::AmbiguousTerminalArea {
-                                    wp: fix.clone(),
-                                    a: a.ident(),
-                                    b: b.ident(),
-                                })
+                    terminal = match Self::resolve_terminal_area(
+                        terminal,
+                        Self::lookahead_terminal_area(&words[i + 1..]),
+                        ident,
+                    )? {
+                        Some(t) => Some(t),
+                        // TODO: VFR enroute waypoints are highly ambiguous
+                        //       since they don't belong to any terminal areas
+                        //       and can be named e.g. WHISKEY. For now we just
+                        //       take the first name matching point, but for the
+                        //       future we should resolve the point in relation
+                        //       to neighboring waypoints.
+                        None => match wp {
+                            Some(wp) => {
+                                tokens.push(Token::NavAid(NavAid::Waypoint(wp.clone())));
+                                None
                             }
-                        }
-                        // TODO: This might actually be a valid VFR enroute
-                        //       waypoint. We would need to find all points for
-                        //       this ident and pick the closest.
-                        (None, None) => Err(Error::UnexpectedRouteElement(fix.clone())),
-                    }?
-                    .into();
+                            None => return Err(Error::UnexpectedRouteElement(ident.clone())),
+                        },
+                    };
 
                     if let Some(ref terminal) = terminal {
                         // We have a terminal scope - try to resolve as VRP
-                        if let Some(navaid) = nd.find_terminal_waypoint(&terminal.ident(), fix) {
+                        if let Some(navaid) = nd.find_terminal_waypoint(&terminal.ident(), ident) {
                             tokens.push(Token::NavAid(navaid));
                         } else {
-                            return Err(Error::UnknownIdent(fix.clone()));
+                            return Err(Error::UnknownIdent(ident.clone()));
                         }
                     }
                 }
@@ -182,6 +181,36 @@ impl Tokens {
         }
 
         Ok(tokens)
+    }
+
+    /// Resolves the terminal area scope.
+    ///
+    /// # Errors
+    ///
+    /// If there is a current and next terminal area and they are not the same,
+    /// we have an ambiguity error.
+    fn resolve_terminal_area(
+        current: Option<Rc<Airport>>,
+        lookahead: Option<Rc<Airport>>,
+        ident: &str,
+    ) -> Result<Option<Rc<Airport>>, Error> {
+        match (current, lookahead) {
+            (Some(current_terminal), None) => Ok(Some(current_terminal)),
+            (None, Some(next_terminal)) => Ok(Some(next_terminal)),
+            (Some(a), Some(b)) => {
+                // we have multiple waypoints in the same terminal area going inbound
+                if a == b {
+                    Ok(Some(a))
+                } else {
+                    Err(Error::AmbiguousTerminalArea {
+                        wp: ident.to_string(),
+                        a: a.ident(),
+                        b: b.ident(),
+                    })
+                }
+            }
+            (None, None) => Ok(None),
+        }
     }
 
     /// Looks ahead in the word stream to find the next airport.
@@ -240,7 +269,10 @@ enum Word {
         rwy: Option<Runway>,
     },
     NavAid(NavAid),
-    VFRWaypoint(String),
+    VFRWaypoint {
+        ident: String,
+        wp: Option<Rc<Waypoint>>,
+    },
 }
 
 struct Lexer;
@@ -263,7 +295,10 @@ impl Lexer {
         if let Some(navaid) = nd.find(s) {
             return match navaid {
                 NavAid::Waypoint(wp) => match &wp.usage {
-                    WaypointUsage::VFROnly => Ok(Word::VFRWaypoint(wp.fix_ident.clone())),
+                    WaypointUsage::VFROnly => Ok(Word::VFRWaypoint {
+                        ident: wp.fix_ident.clone(),
+                        wp: Some(wp),
+                    }),
                     _ => Ok(Word::NavAid(NavAid::Waypoint(wp))),
                 },
                 NavAid::Airport(aprt) => Ok(Word::Airport { aprt, rwy: None }),
@@ -304,7 +339,10 @@ impl Lexer {
         }
 
         // Fallback: treat as potential VFR waypoint
-        Ok(Word::VFRWaypoint(s.to_string()))
+        Ok(Word::VFRWaypoint {
+            ident: s.to_string(),
+            wp: None,
+        })
     }
 }
 
@@ -374,7 +412,10 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
                     aprt: data.airport("EDDH"),
                     rwy: None
                 },
-                Word::VFRWaypoint("D".to_string()),
+                Word::VFRWaypoint {
+                    ident: "D".to_string(),
+                    wp: None
+                },
                 Word::Via(Via::Direct),
                 Word::Airport {
                     aprt: edhl,
