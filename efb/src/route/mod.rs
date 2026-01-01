@@ -27,7 +27,8 @@ mod token;
 
 pub use accumulator::TotalsToLeg;
 pub use leg::Leg;
-use token::{TokenKind, Tokens};
+use token::Tokens;
+pub use token::{Token, TokenKind};
 
 /// A route that goes from an origin to a destination.
 ///
@@ -170,6 +171,11 @@ impl Route {
 
     fn push(&mut self, _word: &str) -> Result<(), Error> {
         unimplemented!()
+    }
+
+    /// Returns the tokens used to build the route.
+    pub fn tokens(&self) -> &[Token] {
+        self.tokens.tokens()
     }
 
     /// Clears the route elements, legs and alternate.

@@ -40,12 +40,16 @@
 use std::ops::Range;
 use std::rc::Rc;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 use crate::error::Error;
 use crate::measurements::Speed;
 use crate::nd::*;
 use crate::{VerticalDistance, Wind};
 
 #[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Token {
     range: Range<usize>,
     kind: TokenKind,
@@ -67,6 +71,7 @@ impl Token {
 /// All context-dependent resolution (e.g., which airport a VFR waypoint belongs to)
 /// has been completed during tokenization.
 #[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum TokenKind {
     /// True airspeed (TAS) for subsequent legs.
     Speed(Speed),
@@ -87,6 +92,7 @@ pub enum TokenKind {
 
 /// Route connection type between waypoints.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Via {
     /// Direct connection between waypoints.
     Direct,
@@ -106,7 +112,11 @@ impl Tokens {
         Ok(Self { tokens })
     }
 
-    pub fn clear(&mut self) {
+    pub fn tokens(&self) -> &[Token] {
+        &self.tokens
+    }
+
+    pub(super) fn clear(&mut self) {
         self.tokens.clear();
     }
 

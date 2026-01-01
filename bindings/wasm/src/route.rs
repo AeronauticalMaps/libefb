@@ -95,6 +95,12 @@ pub struct JsRoute {
 #[wasm_bindgen(js_class = Route)]
 impl JsRoute {
     #[wasm_bindgen(getter)]
+    pub fn tokens(&self) -> JsValue {
+        let fms = self.inner.borrow();
+        serde_wasm_bindgen::to_value(&fms.route().tokens()).unwrap_or_default()
+    }
+
+    #[wasm_bindgen(getter)]
     pub fn origin(&self) -> JsValue {
         let fms = self.inner.borrow();
         serde_wasm_bindgen::to_value(&fms.route().origin()).unwrap_or_default()
