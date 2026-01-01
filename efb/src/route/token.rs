@@ -135,45 +135,52 @@ impl Tokens {
                 }
 
                 Word::NavAid(navaid) => {
-                    // Waypoint, VOR, NDB, or other navaid - just pass through
                     tokens.push(Token::NavAid(navaid.clone()));
                 }
 
                 Word::VFRWaypoint { ident, wp } => {
-                    // Set the current terminal area scope. There should be only one
-                    // explicit terminal area. If we are already in one and we
-                    // find another looking ahead, this fix is ambiguous and
-                    // can't be resolved! If there is no terminal area at all,
-                    // something went wrong too.
-                    terminal = match Self::resolve_terminal_area(
-                        terminal,
-                        Self::lookahead_terminal_area(&words[i + 1..]),
-                        ident,
-                    )? {
-                        Some(t) => Some(t),
-                        // TODO: VFR enroute waypoints are highly ambiguous
-                        //       since they don't belong to any terminal areas
-                        //       and can be named e.g. WHISKEY. For now we just
-                        //       take the first name matching point, but for the
-                        //       future we should resolve the point in relation
-                        //       to neighboring waypoints.
-                        None => match wp {
-                            Some(wp) => {
-                                tokens.push(Token::NavAid(NavAid::Waypoint(wp.clone())));
-                                None
-                            }
-                            None => return Err(Error::UnexpectedRouteElement(ident.clone())),
-                        },
-                    };
-
-                    if let Some(ref terminal) = terminal {
-                        // We have a terminal scope - try to resolve as VRP
-                        if let Some(navaid) = nd.find_terminal_waypoint(&terminal.ident(), ident) {
-                            tokens.push(Token::NavAid(navaid));
-                        } else {
-                            return Err(Error::UnknownIdent(ident.clone()));
+                    // Check for out- or inbound terminal areas and if any of
+                    // them includes this point. If we find two different
+                    // terminal areas and both have a matching waypoint, the
+                    // prompt is ambiguous and can't be resolved!
+                    match Self::resolve_in_terminal_areas(
+                        terminal.as_ref(),
+                        Self::lookahead_terminal_area(&words[i + 1..]).as_ref(),
+                        &ident,
+                        nd,
+                    ) {
+                        (Some(wp), None) | (None, Some(wp)) => {
+                            tokens.push(Token::NavAid(wp));
                         }
-                    }
+
+                        (Some(NavAid::Waypoint(a)), Some(NavAid::Waypoint(b))) => {
+                            // we are in the same terminal area
+                            if a == b {
+                                tokens.push(Token::NavAid(NavAid::Waypoint(a)));
+                            } else {
+                                return Err(Error::AmbiguousTerminalArea {
+                                    wp: ident.to_string(),
+                                    a: a.terminal_area().unwrap_or("ZZZZ").to_string(),
+                                    b: b.terminal_area().unwrap_or("ZZZZ").to_string(),
+                                });
+                            }
+                        }
+
+                        _ => {
+                            if let Some(wp) = wp {
+                                // TODO: VFR enroute waypoints are highly
+                                //       ambiguous since they don't belong to
+                                //       any terminal areas and can be named
+                                //       e.g. WHISKEY. For now we just take the
+                                //       first name matching point, but for the
+                                //       future we should resolve the point in
+                                //       relation to neighboring waypoints.
+                                tokens.push(Token::NavAid(NavAid::Waypoint(wp.clone())));
+                            } else {
+                                return Err(Error::UnexpectedRouteToken(ident.clone()));
+                            }
+                        }
+                    };
                 }
             }
 
@@ -183,33 +190,20 @@ impl Tokens {
         Ok(tokens)
     }
 
-    /// Resolves the terminal area scope.
-    ///
-    /// # Errors
-    ///
-    /// If there is a current and next terminal area and they are not the same,
-    /// we have an ambiguity error.
-    fn resolve_terminal_area(
-        current: Option<Rc<Airport>>,
-        lookahead: Option<Rc<Airport>>,
+    fn resolve_in_terminal_areas(
+        current: Option<&Rc<Airport>>,
+        next: Option<&Rc<Airport>>,
         ident: &str,
-    ) -> Result<Option<Rc<Airport>>, Error> {
-        match (current, lookahead) {
-            (Some(current_terminal), None) => Ok(Some(current_terminal)),
-            (None, Some(next_terminal)) => Ok(Some(next_terminal)),
-            (Some(a), Some(b)) => {
-                // we have multiple waypoints in the same terminal area going inbound
-                if a == b {
-                    Ok(Some(a))
-                } else {
-                    Err(Error::AmbiguousTerminalArea {
-                        wp: ident.to_string(),
-                        a: a.ident(),
-                        b: b.ident(),
-                    })
-                }
-            }
-            (None, None) => Ok(None),
+        nd: &NavigationData,
+    ) -> (Option<NavAid>, Option<NavAid>) {
+        match (current, next) {
+            (Some(a), None) => (nd.find_terminal_waypoint(&a.ident(), ident), None),
+            (None, Some(b)) => (None, nd.find_terminal_waypoint(&b.ident(), ident)),
+            (Some(a), Some(b)) => (
+                nd.find_terminal_waypoint(&a.ident(), ident),
+                nd.find_terminal_waypoint(&b.ident(), ident),
+            ),
+            (None, None) => (None, None),
         }
     }
 
@@ -294,13 +288,13 @@ impl Lexer {
         // Try navaids or airports
         if let Some(navaid) = nd.find(s) {
             return match navaid {
-                NavAid::Waypoint(wp) => match &wp.usage {
-                    WaypointUsage::VFROnly => Ok(Word::VFRWaypoint {
+                NavAid::Waypoint(wp) if wp.usage == WaypointUsage::VFROnly => {
+                    Ok(Word::VFRWaypoint {
                         ident: wp.fix_ident.clone(),
                         wp: Some(wp),
-                    }),
-                    _ => Ok(Word::NavAid(NavAid::Waypoint(wp))),
-                },
+                    })
+                }
+                NavAid::Waypoint(_) => Ok(Word::NavAid(navaid)),
                 NavAid::Airport(aprt) => Ok(Word::Airport { aprt, rwy: None }),
             };
         }
@@ -457,8 +451,33 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
     }
 
     #[test]
+    fn tokenizes_implicit_prompt() {
+        let data = TestData::new();
+
+        let prompt = "EDDH N2 N1 W EDHL";
+        let tokens = Tokens::try_new(prompt, &data.nd).expect("should tokenize prompt");
+
+        assert_eq!(
+            tokens.tokens,
+            vec![
+                Token::Airport {
+                    aprt: data.airport("EDDH"),
+                    rwy: None
+                },
+                Token::NavAid(data.vrp("EDDH", "N2")),
+                Token::NavAid(data.vrp("EDDH", "N1")),
+                Token::NavAid(data.vrp("EDHL", "W")),
+                Token::Airport {
+                    aprt: data.airport("EDHL"),
+                    rwy: None
+                },
+            ]
+        );
+    }
+
+    #[test]
     #[should_panic(expected = "AmbiguousTerminalArea")]
-    fn fails_tokenize_on_invalid_prompt() {
+    fn fails_tokenize_on_ambiguous_prompt() {
         let data = TestData::new();
         let prompt = "EDAH W W EDHL";
         let _ = Tokens::try_new(prompt, &data.nd).unwrap();

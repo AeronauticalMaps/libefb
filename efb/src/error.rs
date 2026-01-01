@@ -40,15 +40,15 @@ pub enum Error {
     /// The entered flight plan does not include a cruise level as one of the
     /// first two elements.
     ExpectedLevelOnFPL,
-    /// The route to decode includes an element that was not expected.
-    UnexpectedRouteElement(String),
+    /// The route prompt includes a token that was not expected.
+    UnexpectedRouteToken(String),
     /// The route includes a runway at a position that is not next to an
     /// airport.
     UnexpectedRunwayInRoute(String),
     /// The route includes a runway that is not found on the associated airport.
     UnknownRunwayInRoute { aprt: String, rwy: String },
-    /// Terminal waypoints should only be defined within one explicit terminal
-    /// area. Terminal areas are delimited by the direct via.
+    /// A terminal waypoint needs to match to exactly one of the terminal areas
+    /// in scope.
     AmbiguousTerminalArea { wp: String, a: String, b: String },
 
     // Errors that are related to parsing of input data:
@@ -98,7 +98,7 @@ impl fmt::Display for Error {
         match self {
             Self::ExpectedSpeedOnFPL => write!(f, "FPL is missing cruise speed"),
             Self::ExpectedLevelOnFPL => write!(f, "FPL is missing cruise level"),
-            Self::UnexpectedRouteElement(e) => write!(f, "invalid element {e} found in route"),
+            Self::UnexpectedRouteToken(e) => write!(f, "invalid token {e} found in route"),
             Self::UnexpectedRunwayInRoute(rwy) => {
                 write!(f, "runway {rwy} should follow an airport")
             }
@@ -106,7 +106,7 @@ impl fmt::Display for Error {
                 write!(f, "unknown runway {rwy} found for {aprt}")
             }
             Self::AmbiguousTerminalArea { wp, a, b } => {
-                write!(f, "waypoint {wp} in ambiguous terminal area {a} and {b}")
+                write!(f, "waypoint {wp} found in terminal area {a} and {b}")
             }
 
             Self::UnexpectedString => write!(f, "unexpected string"),

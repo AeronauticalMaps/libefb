@@ -43,6 +43,7 @@ pub enum Region {
 #[derive(Clone, PartialEq, Debug, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Waypoint {
+    // TODO: Make all fields private and add getter methods.
     pub(crate) fix_ident: String,
     pub(crate) desc: String,
     pub(crate) usage: WaypointUsage,
@@ -51,6 +52,20 @@ pub struct Waypoint {
     pub(crate) region: Region,
     pub(crate) location: Option<LocationIndicator>,
     pub(crate) cycle: Option<AiracCycle>,
+}
+
+impl Waypoint {
+    /// The terminal area of the waypoint.
+    ///
+    /// Returns `None` if the waypoint is not within a terminal area.
+    pub(crate) fn terminal_area(&self) -> Option<&str> {
+        match self.region {
+            Region::TerminalArea(ref ident) => {
+                Some(str::from_utf8(ident).expect("ident should be valid UTF-8"))
+            }
+            _ => None,
+        }
+    }
 }
 
 impl Fix for Waypoint {
