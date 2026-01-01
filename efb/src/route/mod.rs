@@ -165,14 +165,6 @@ impl Route {
         Ok(())
     }
 
-    fn insert(&mut self, _index: usize, _word: &str) -> Result<(), Error> {
-        unimplemented!()
-    }
-
-    fn push(&mut self, _word: &str) -> Result<(), Error> {
-        unimplemented!()
-    }
-
     /// Returns the tokens used to build the route.
     pub fn tokens(&self) -> &[Token] {
         self.tokens.tokens()
@@ -186,7 +178,7 @@ impl Route {
     }
 
     /// Returns the legs of the route.
-    pub fn legs(&self) -> &Vec<Leg> {
+    pub fn legs(&self) -> &[Leg] {
         &self.legs
     }
 

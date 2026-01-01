@@ -134,6 +134,12 @@ impl JsRoute {
             .collect()
     }
 
+    pub fn clear(&self) -> Result<(), JsError> {
+        let mut fms = self.inner.borrow_mut();
+        fms.modify_route(|route| route.clear())?;
+        Ok(())
+    }
+
     #[wasm_bindgen(js_name = accumulateLegs)]
     pub fn accumulate_legs(&self, perf: Option<JsPerformance>) -> JsValue {
         let fms = self.inner.borrow();
