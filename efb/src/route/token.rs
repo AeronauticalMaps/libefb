@@ -24,11 +24,11 @@
 //! variants without any semantic context. Each space-separated element is classified based
 //! solely on its format:
 //!
-//! - `"N0107"` → `Word::Speed` (try different parser)
-//! - `"EDDH"` → `Word::Airport` (found in navigation data)
-//! - `"EDDH33"` → `Word::Airport` (found after splitting and matching runway)
-//! - `"W"` → `Word::VFRWaypoint` (not in navigation data)
-//! - `"DCT"` → `Word::Via(Via::Direct)`
+//! - `"N0107"` → `WordKind::Speed` (try different parser)
+//! - `"EDDH"` → `WordKind::Airport` (found in navigation data)
+//! - `"EDDH33"` → `WordKind::Airport` (found after splitting and matching runway)
+//! - `"W"` → `WordKind::VFRWaypoint` (not in navigation data)
+//! - `"DCT"` → `WordKind::Via(Via::Direct)`
 //!
 //! # Tokenization (Context-Aware)
 //!
@@ -37,6 +37,7 @@
 //! surrounding words. This includes resolving VFR waypoints within a terminal
 //! area.
 
+use std::ops::Range;
 use std::rc::Rc;
 
 use crate::error::Error;
@@ -44,13 +45,29 @@ use crate::measurements::Speed;
 use crate::nd::*;
 use crate::{VerticalDistance, Wind};
 
+#[derive(Clone, PartialEq, Debug)]
+pub struct Token {
+    range: Range<usize>,
+    kind: TokenKind,
+}
+
+impl Token {
+    pub fn range(&self) -> &Range<usize> {
+        &self.range
+    }
+
+    pub fn kind(&self) -> &TokenKind {
+        &self.kind
+    }
+}
+
 /// Semantic token representing a resolved route element.
 ///
 /// Tokens contain fully resolved references to navigation data objects.
 /// All context-dependent resolution (e.g., which airport a VFR waypoint belongs to)
 /// has been completed during tokenization.
 #[derive(Clone, PartialEq, Debug)]
-pub enum Token {
+pub enum TokenKind {
     /// True airspeed (TAS) for subsequent legs.
     Speed(Speed),
     /// Flight level or altitude for subsequent legs.
@@ -99,46 +116,53 @@ impl Tokens {
         let mut i = 0;
 
         while i < words.len() {
-            match &words[i] {
-                Word::Speed(speed) => tokens.push(Token::Speed(*speed)),
-                Word::Level(level) => tokens.push(Token::Level(*level)),
-                Word::Wind(wind) => tokens.push(Token::Wind(*wind)),
+            let kind = match &words[i].kind {
+                WordKind::Speed(speed) => Some(TokenKind::Speed(*speed)),
+                WordKind::Level(level) => Some(TokenKind::Level(*level)),
+                WordKind::Wind(wind) => Some(TokenKind::Wind(*wind)),
 
-                Word::Via(via) => {
+                WordKind::Via(via) => {
                     terminal = None;
-                    tokens.push(Token::Via(via.clone()));
+                    Some(TokenKind::Via(via.clone()))
                 }
 
-                Word::Airport { aprt, rwy } => {
+                WordKind::Airport { aprt, rwy } => {
                     // Each airport sets a new terminal scope
                     terminal = Some(Rc::clone(aprt));
 
                     if i == 0 {
                         // First airport always gets added
-                        tokens.push(Token::Airport {
+                        Some(TokenKind::Airport {
                             aprt: Rc::clone(aprt),
                             rwy: rwy.clone(),
-                        });
+                        })
                     } else {
                         // If we go direct to this airport (previous is DCT) and
                         // the next word is a terminal waypoint, we don't add
                         // the airport since it is used only to open the
                         // terminal scope.
                         match (words.get(i - 1), words.get(i + 1)) {
-                            (Some(Word::Via(Via::Direct)), Some(Word::VFRWaypoint { .. })) => (),
-                            _ => tokens.push(Token::Airport {
+                            (
+                                Some(Word {
+                                    kind: WordKind::Via(Via::Direct),
+                                    ..
+                                }),
+                                Some(Word {
+                                    kind: WordKind::VFRWaypoint { .. },
+                                    ..
+                                }),
+                            ) => None,
+                            _ => Some(TokenKind::Airport {
                                 aprt: Rc::clone(aprt),
                                 rwy: rwy.clone(),
                             }),
-                        };
+                        }
                     }
                 }
 
-                Word::NavAid(navaid) => {
-                    tokens.push(Token::NavAid(navaid.clone()));
-                }
+                WordKind::NavAid(navaid) => Some(TokenKind::NavAid(navaid.clone())),
 
-                Word::VFRWaypoint { ident, wp } => {
+                WordKind::VFRWaypoint { ident, wp } => {
                     // Check for out- or inbound terminal areas and if any of
                     // them includes this point. If we find two different
                     // terminal areas and both have a matching waypoint, the
@@ -149,14 +173,12 @@ impl Tokens {
                         &ident,
                         nd,
                     ) {
-                        (Some(wp), None) | (None, Some(wp)) => {
-                            tokens.push(Token::NavAid(wp));
-                        }
+                        (Some(wp), None) | (None, Some(wp)) => Some(TokenKind::NavAid(wp)),
 
                         (Some(NavAid::Waypoint(a)), Some(NavAid::Waypoint(b))) => {
                             // we are in the same terminal area
                             if a == b {
-                                tokens.push(Token::NavAid(NavAid::Waypoint(a)));
+                                Some(TokenKind::NavAid(NavAid::Waypoint(a)))
                             } else {
                                 return Err(Error::AmbiguousTerminalArea {
                                     wp: ident.to_string(),
@@ -175,13 +197,20 @@ impl Tokens {
                                 //       first name matching point, but for the
                                 //       future we should resolve the point in
                                 //       relation to neighboring waypoints.
-                                tokens.push(Token::NavAid(NavAid::Waypoint(wp.clone())));
+                                Some(TokenKind::NavAid(NavAid::Waypoint(wp.clone())))
                             } else {
                                 return Err(Error::UnexpectedRouteToken(ident.clone()));
                             }
                         }
-                    };
+                    }
                 }
+            };
+
+            if let Some(kind) = kind {
+                tokens.push(Token {
+                    range: words[i].range.clone(),
+                    kind,
+                });
             }
 
             i += 1;
@@ -210,10 +239,10 @@ impl Tokens {
     /// Looks ahead in the word stream to find the next airport.
     fn lookahead_terminal_area(words: &[Word]) -> Option<Rc<Airport>> {
         for word in words {
-            match word {
-                Word::Airport { aprt, .. } => return Some(Rc::clone(aprt)),
+            match &word.kind {
+                WordKind::Airport { aprt, .. } => return Some(aprt.clone()),
                 // next direct terminates any terminal area we would be looking in
-                Word::Via(Via::Direct) => return None,
+                WordKind::Via(Via::Direct) => return None,
                 _ => continue,
             }
         }
@@ -253,7 +282,13 @@ impl<'a> IntoIterator for &'a mut Tokens {
 /////////////////////////////////////////////////////////////////////////////
 
 #[derive(Debug, Clone, PartialEq)]
-enum Word {
+struct Word {
+    range: Range<usize>,
+    kind: WordKind,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum WordKind {
     Via(Via),
     Speed(Speed),
     Level(VerticalDistance),
@@ -272,44 +307,53 @@ enum Word {
 struct Lexer;
 
 impl Lexer {
-    fn lex(s: &str, nd: &NavigationData) -> Result<Vec<Word>, Error> {
-        s.to_uppercase()
+    fn lex(prompt: &str, nd: &NavigationData) -> Result<Vec<Word>, Error> {
+        let upper = prompt.to_uppercase();
+        let base = upper.as_ptr() as usize;
+
+        upper
             .split_whitespace()
-            .map(|s| Self::classify(s, nd))
+            .map(|s| {
+                let start = s.as_ptr() as usize - base;
+                Ok(Word {
+                    range: start..start + s.len(),
+                    kind: Self::classify(s, nd)?,
+                })
+            })
             .collect()
     }
 
-    fn classify(s: &str, nd: &NavigationData) -> Result<Word, Error> {
+    fn classify(s: &str, nd: &NavigationData) -> Result<WordKind, Error> {
         // Check for special keywords first
         if s == "DCT" {
-            return Ok(Word::Via(Via::Direct));
+            return Ok(WordKind::Via(Via::Direct));
         }
 
         // Try navaids or airports
         if let Some(navaid) = nd.find(s) {
             return match navaid {
                 NavAid::Waypoint(wp) if wp.usage == WaypointUsage::VFROnly => {
-                    Ok(Word::VFRWaypoint {
+                    Ok(WordKind::VFRWaypoint {
                         ident: wp.fix_ident.clone(),
                         wp: Some(wp),
                     })
                 }
-                NavAid::Waypoint(_) => Ok(Word::NavAid(navaid)),
-                NavAid::Airport(aprt) => Ok(Word::Airport { aprt, rwy: None }),
+                NavAid::Waypoint(_) => Ok(WordKind::NavAid(navaid)),
+                NavAid::Airport(aprt) => Ok(WordKind::Airport { aprt, rwy: None }),
             };
         }
 
         // Try parsing as performance elements
         if let Ok(speed) = s.parse::<Speed>() {
-            return Ok(Word::Speed(speed));
+            return Ok(WordKind::Speed(speed));
         }
 
         if let Ok(level) = s.parse::<VerticalDistance>() {
-            return Ok(Word::Level(level));
+            return Ok(WordKind::Level(level));
         }
 
         if let Ok(wind) = s.parse::<Wind>() {
-            return Ok(Word::Wind(wind));
+            return Ok(WordKind::Wind(wind));
         }
 
         // try airport with runway
@@ -325,7 +369,7 @@ impl Lexer {
                         rwy: rwy_designator.to_string(),
                     })?;
 
-                return Ok(Word::Airport {
+                return Ok(WordKind::Airport {
                     aprt,
                     rwy: Some(rwy),
                 });
@@ -333,7 +377,7 @@ impl Lexer {
         }
 
         // Fallback: treat as potential VFR waypoint
-        Ok(Word::VFRWaypoint {
+        Ok(WordKind::VFRWaypoint {
             ident: s.to_string(),
             wp: None,
         })
@@ -400,21 +444,39 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
         assert_eq!(
             words,
             vec![
-                Word::Speed(Speed::kt(107.0)),
-                Word::Level(VerticalDistance::Altitude(2500)),
-                Word::Airport {
-                    aprt: data.airport("EDDH"),
-                    rwy: None
+                Word {
+                    range: 0..5,
+                    kind: WordKind::Speed(Speed::kt(107.0)),
                 },
-                Word::VFRWaypoint {
-                    ident: "D".to_string(),
-                    wp: None
+                Word {
+                    range: 6..11,
+                    kind: WordKind::Level(VerticalDistance::Altitude(2500)),
                 },
-                Word::Via(Via::Direct),
-                Word::Airport {
-                    aprt: edhl,
-                    rwy: rwy07
-                }
+                Word {
+                    range: 12..16,
+                    kind: WordKind::Airport {
+                        aprt: data.airport("EDDH"),
+                        rwy: None
+                    },
+                },
+                Word {
+                    range: 17..18,
+                    kind: WordKind::VFRWaypoint {
+                        ident: "D".to_string(),
+                        wp: None
+                    },
+                },
+                Word {
+                    range: 19..22,
+                    kind: WordKind::Via(Via::Direct),
+                },
+                Word {
+                    range: 23..29,
+                    kind: WordKind::Airport {
+                        aprt: edhl,
+                        rwy: rwy07
+                    },
+                },
             ]
         );
     }
@@ -424,25 +486,30 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
         let data = TestData::new();
 
         let prompt = "N0107 A0250 EDDH N2 N1 DCT EDHL W DCT W EDAH";
-        let tokens = Tokens::try_new(prompt, &data.nd).expect("should tokenize prompt");
+        let tokens: Vec<TokenKind> = Tokens::try_new(prompt, &data.nd)
+            .expect("should tokenize prompt")
+            .tokens
+            .into_iter()
+            .map(|token| token.kind)
+            .collect();
 
         assert_eq!(
-            tokens.tokens,
+            tokens,
             vec![
-                Token::Speed(Speed::kt(107.0)),
-                Token::Level(VerticalDistance::Altitude(2500)),
-                Token::Airport {
+                TokenKind::Speed(Speed::kt(107.0)),
+                TokenKind::Level(VerticalDistance::Altitude(2500)),
+                TokenKind::Airport {
                     aprt: data.airport("EDDH"),
                     rwy: None
                 },
-                Token::NavAid(data.vrp("EDDH", "N2")),
-                Token::NavAid(data.vrp("EDDH", "N1")),
-                Token::Via(Via::Direct),
+                TokenKind::NavAid(data.vrp("EDDH", "N2")),
+                TokenKind::NavAid(data.vrp("EDDH", "N1")),
+                TokenKind::Via(Via::Direct),
                 // EDHL should be parsed out since it only opens the terminal scope
-                Token::NavAid(data.vrp("EDHL", "W")),
-                Token::Via(Via::Direct),
-                Token::NavAid(data.vrp("EDAH", "W")),
-                Token::Airport {
+                TokenKind::NavAid(data.vrp("EDHL", "W")),
+                TokenKind::Via(Via::Direct),
+                TokenKind::NavAid(data.vrp("EDAH", "W")),
+                TokenKind::Airport {
                     aprt: data.airport("EDAH"),
                     rwy: None
                 },
@@ -455,19 +522,24 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
         let data = TestData::new();
 
         let prompt = "EDDH N2 N1 W EDHL";
-        let tokens = Tokens::try_new(prompt, &data.nd).expect("should tokenize prompt");
+        let tokens: Vec<TokenKind> = Tokens::try_new(prompt, &data.nd)
+            .expect("should tokenize prompt")
+            .tokens
+            .into_iter()
+            .map(|token| token.kind)
+            .collect();
 
         assert_eq!(
-            tokens.tokens,
+            tokens,
             vec![
-                Token::Airport {
+                TokenKind::Airport {
                     aprt: data.airport("EDDH"),
                     rwy: None
                 },
-                Token::NavAid(data.vrp("EDDH", "N2")),
-                Token::NavAid(data.vrp("EDDH", "N1")),
-                Token::NavAid(data.vrp("EDHL", "W")),
-                Token::Airport {
+                TokenKind::NavAid(data.vrp("EDDH", "N2")),
+                TokenKind::NavAid(data.vrp("EDDH", "N1")),
+                TokenKind::NavAid(data.vrp("EDHL", "W")),
+                TokenKind::Airport {
                     aprt: data.airport("EDHL"),
                     rwy: None
                 },

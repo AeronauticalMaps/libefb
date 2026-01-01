@@ -27,7 +27,7 @@ mod token;
 
 pub use accumulator::TotalsToLeg;
 pub use leg::Leg;
-use token::{Token, Tokens};
+use token::{TokenKind, Tokens};
 
 /// A route that goes from an origin to a destination.
 ///
@@ -97,8 +97,8 @@ impl Route {
         let mut to: Option<NavAid> = None;
 
         for token in &self.tokens {
-            match token {
-                Token::Speed(value) => {
+            match token.kind() {
+                TokenKind::Speed(value) => {
                     tas = Some(*value);
                     // first speed is cruise speed
                     if self.speed.is_none() {
@@ -106,7 +106,7 @@ impl Route {
                     }
                 }
 
-                Token::Level(value) => {
+                TokenKind::Level(value) => {
                     level = Some(*value);
                     // first level is cruise level
                     if self.level.is_none() {
@@ -114,9 +114,9 @@ impl Route {
                     }
                 }
 
-                Token::Wind(value) => wind = Some(*value),
+                TokenKind::Wind(value) => wind = Some(*value),
 
-                Token::Airport { aprt, rwy } => {
+                TokenKind::Airport { aprt, rwy } => {
                     // Track for leg building
                     if from.is_none() {
                         from = Some(NavAid::Airport(Rc::clone(aprt)));
@@ -139,7 +139,7 @@ impl Route {
                     }
                 }
 
-                Token::NavAid(navaid) => {
+                TokenKind::NavAid(navaid) => {
                     // Non-airport navaids (waypoints, VOR, NDB, etc.)
                     if from.is_none() {
                         from = Some(navaid.clone());
