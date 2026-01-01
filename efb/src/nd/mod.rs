@@ -196,21 +196,8 @@ impl NavigationData {
     /// # }
     /// ```
     pub fn find_terminal_waypoint(&self, airport_ident: &str, fix_ident: &str) -> Option<NavAid> {
-        // search in main terminal waypoints
-        self.terminal_waypoints
-            .get(airport_ident)
-            .and_then(|waypoints| waypoints.iter().find(|&wp| wp.fix_ident == fix_ident))
-            // now check the partitions
-            .or_else(|| {
-                self.partitions.values().find_map(|partition| {
-                    partition
-                        .terminal_waypoints
-                        .get(airport_ident)
-                        .and_then(|waypoints| {
-                            waypoints.iter().find(|&wp| wp.fix_ident == fix_ident)
-                        })
-                })
-            })
+        self.terminal_waypoints(airport_ident)
+            .find(|&wp| wp.fix_ident == fix_ident)
             .map(|wp| NavAid::Waypoint(Rc::clone(wp)))
     }
 
@@ -242,7 +229,7 @@ impl NavigationData {
             .collect()
     }
 
-    fn airports(&self) -> impl Iterator<Item = &Rc<Airport>> {
+    pub(crate) fn airports(&self) -> impl Iterator<Item = &Rc<Airport>> {
         self.airports.iter().chain(
             self.partitions
                 .values()
@@ -250,7 +237,7 @@ impl NavigationData {
         )
     }
 
-    fn waypoints(&self) -> impl Iterator<Item = &Rc<Waypoint>> {
+    pub(crate) fn waypoints(&self) -> impl Iterator<Item = &Rc<Waypoint>> {
         self.waypoints.iter().chain(
             self.partitions
                 .values()
@@ -258,7 +245,23 @@ impl NavigationData {
         )
     }
 
-    fn airspaces(&self) -> impl Iterator<Item = &Airspace> {
+    pub(crate) fn terminal_waypoints<'a>(
+        &'a self,
+        ident: &'a str,
+    ) -> impl Iterator<Item = &'a Rc<Waypoint>> + 'a {
+        self.terminal_waypoints
+            .get(ident)
+            .into_iter()
+            .flatten()
+            .chain(
+                self.partitions
+                    .values()
+                    .filter_map(move |partition| partition.terminal_waypoints.get(ident))
+                    .flatten(),
+            )
+    }
+
+    pub(crate) fn airspaces(&self) -> impl Iterator<Item = &Airspace> {
         self.airspaces.iter().chain(
             self.partitions
                 .values()
