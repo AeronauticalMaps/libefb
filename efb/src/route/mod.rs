@@ -82,7 +82,7 @@ impl Route {
     /// Decodes a `route` that is composed of a space separated list of fix
     /// idents read from the navigation data `nd`.
     pub fn decode(&mut self, route: &str, nd: &NavigationData) -> Result<(), Error> {
-        self.tokens = Tokens::try_new(route, nd)?;
+        self.tokens = Tokens::new(route, nd);
         self.legs.clear();
 
         // clear values relevant during parsing of all tokens
@@ -148,6 +148,11 @@ impl Route {
                         to = Some(navaid.clone());
                     }
                 }
+
+                TokenKind::Err(err) => {
+                    return Err(err.clone());
+                }
+
                 _ => (),
             }
 

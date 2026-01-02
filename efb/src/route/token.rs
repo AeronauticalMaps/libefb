@@ -88,6 +88,8 @@ pub enum TokenKind {
     NavAid(NavAid),
     /// Route connection type.
     Via(Via),
+    /// Erroneous word found in prompt.
+    Err(Error),
 }
 
 /// Route connection type between waypoints.
@@ -106,10 +108,10 @@ pub struct Tokens {
 }
 
 impl Tokens {
-    pub fn try_new(s: &str, nd: &NavigationData) -> Result<Self, Error> {
-        let words = Lexer::lex(s, nd)?;
-        let tokens = Self::tokenize(words, nd)?;
-        Ok(Self { tokens })
+    pub fn new(s: &str, nd: &NavigationData) -> Self {
+        let words = Lexer::lex(s, nd);
+        let tokens = Self::tokenize(words, nd);
+        Self { tokens }
     }
 
     pub fn tokens(&self) -> &[Token] {
@@ -120,20 +122,19 @@ impl Tokens {
         self.tokens.clear();
     }
 
-    fn tokenize(words: Vec<Word>, nd: &NavigationData) -> Result<Vec<Token>, Error> {
+    fn tokenize(words: Vec<Word>, nd: &NavigationData) -> Vec<Token> {
         let mut tokens: Vec<Token> = Vec::new();
         let mut terminal: Option<Rc<Airport>> = None;
-        let mut i = 0;
 
-        while i < words.len() {
-            let kind = match &words[i].kind {
-                WordKind::Speed(speed) => Some(TokenKind::Speed(*speed)),
-                WordKind::Level(level) => Some(TokenKind::Level(*level)),
-                WordKind::Wind(wind) => Some(TokenKind::Wind(*wind)),
+        for (i, word) in words.iter().enumerate() {
+            let kind = match &word.kind {
+                WordKind::Speed(speed) => TokenKind::Speed(*speed),
+                WordKind::Level(level) => TokenKind::Level(*level),
+                WordKind::Wind(wind) => TokenKind::Wind(*wind),
 
                 WordKind::Via(via) => {
                     terminal = None;
-                    Some(TokenKind::Via(via.clone()))
+                    TokenKind::Via(via.clone())
                 }
 
                 WordKind::Airport { aprt, rwy } => {
@@ -142,10 +143,10 @@ impl Tokens {
 
                     if i == 0 {
                         // First airport always gets added
-                        Some(TokenKind::Airport {
+                        TokenKind::Airport {
                             aprt: Rc::clone(aprt),
                             rwy: rwy.clone(),
-                        })
+                        }
                     } else {
                         // If we go direct to this airport (previous is DCT) and
                         // the next word is a terminal waypoint, we don't add
@@ -161,16 +162,16 @@ impl Tokens {
                                     kind: WordKind::VFRWaypoint { .. },
                                     ..
                                 }),
-                            ) => None,
-                            _ => Some(TokenKind::Airport {
+                            ) => continue,
+                            _ => TokenKind::Airport {
                                 aprt: Rc::clone(aprt),
                                 rwy: rwy.clone(),
-                            }),
+                            },
                         }
                     }
                 }
 
-                WordKind::NavAid(navaid) => Some(TokenKind::NavAid(navaid.clone())),
+                WordKind::NavAid(navaid) => TokenKind::NavAid(navaid.clone()),
 
                 WordKind::VFRWaypoint { ident, wp } => {
                     // Check for out- or inbound terminal areas and if any of
@@ -183,18 +184,18 @@ impl Tokens {
                         &ident,
                         nd,
                     ) {
-                        (Some(wp), None) | (None, Some(wp)) => Some(TokenKind::NavAid(wp)),
+                        (Some(wp), None) | (None, Some(wp)) => TokenKind::NavAid(wp),
 
                         (Some(NavAid::Waypoint(a)), Some(NavAid::Waypoint(b))) => {
                             // we are in the same terminal area
                             if a == b {
-                                Some(TokenKind::NavAid(NavAid::Waypoint(a)))
+                                TokenKind::NavAid(NavAid::Waypoint(a))
                             } else {
-                                return Err(Error::AmbiguousTerminalArea {
+                                TokenKind::Err(Error::AmbiguousTerminalArea {
                                     wp: ident.to_string(),
                                     a: a.terminal_area().unwrap_or("ZZZZ").to_string(),
                                     b: b.terminal_area().unwrap_or("ZZZZ").to_string(),
-                                });
+                                })
                             }
                         }
 
@@ -207,26 +208,24 @@ impl Tokens {
                                 //       first name matching point, but for the
                                 //       future we should resolve the point in
                                 //       relation to neighboring waypoints.
-                                Some(TokenKind::NavAid(NavAid::Waypoint(wp.clone())))
+                                TokenKind::NavAid(NavAid::Waypoint(wp.clone()))
                             } else {
-                                return Err(Error::UnexpectedRouteToken(ident.clone()));
+                                TokenKind::Err(Error::UnexpectedRouteToken(ident.clone()))
                             }
                         }
                     }
                 }
+
+                WordKind::Err(err) => TokenKind::Err(err.clone()),
             };
 
-            if let Some(kind) = kind {
-                tokens.push(Token {
-                    range: words[i].range.clone(),
-                    kind,
-                });
-            }
-
-            i += 1;
+            tokens.push(Token {
+                range: words[i].range.clone(),
+                kind,
+            });
         }
 
-        Ok(tokens)
+        tokens
     }
 
     fn resolve_in_terminal_areas(
@@ -312,12 +311,13 @@ enum WordKind {
         ident: String,
         wp: Option<Rc<Waypoint>>,
     },
+    Err(Error),
 }
 
 struct Lexer;
 
 impl Lexer {
-    fn lex(prompt: &str, nd: &NavigationData) -> Result<Vec<Word>, Error> {
+    fn lex(prompt: &str, nd: &NavigationData) -> Vec<Word> {
         let upper = prompt.to_uppercase();
         let base = upper.as_ptr() as usize;
 
@@ -325,45 +325,45 @@ impl Lexer {
             .split_whitespace()
             .map(|s| {
                 let start = s.as_ptr() as usize - base;
-                Ok(Word {
+                Word {
                     range: start..start + s.len(),
-                    kind: Self::classify(s, nd)?,
-                })
+                    kind: Self::classify(s, nd),
+                }
             })
             .collect()
     }
 
-    fn classify(s: &str, nd: &NavigationData) -> Result<WordKind, Error> {
+    fn classify(s: &str, nd: &NavigationData) -> WordKind {
         // Check for special keywords first
         if s == "DCT" {
-            return Ok(WordKind::Via(Via::Direct));
+            return WordKind::Via(Via::Direct);
         }
 
         // Try navaids or airports
         if let Some(navaid) = nd.find(s) {
             return match navaid {
                 NavAid::Waypoint(wp) if wp.usage == WaypointUsage::VFROnly => {
-                    Ok(WordKind::VFRWaypoint {
+                    WordKind::VFRWaypoint {
                         ident: wp.fix_ident.clone(),
                         wp: Some(wp),
-                    })
+                    }
                 }
-                NavAid::Waypoint(_) => Ok(WordKind::NavAid(navaid)),
-                NavAid::Airport(aprt) => Ok(WordKind::Airport { aprt, rwy: None }),
+                NavAid::Waypoint(_) => WordKind::NavAid(navaid),
+                NavAid::Airport(aprt) => WordKind::Airport { aprt, rwy: None },
             };
         }
 
         // Try parsing as performance elements
         if let Ok(speed) = s.parse::<Speed>() {
-            return Ok(WordKind::Speed(speed));
+            return WordKind::Speed(speed);
         }
 
         if let Ok(level) = s.parse::<VerticalDistance>() {
-            return Ok(WordKind::Level(level));
+            return WordKind::Level(level);
         }
 
         if let Ok(wind) = s.parse::<Wind>() {
-            return Ok(WordKind::Wind(wind));
+            return WordKind::Wind(wind);
         }
 
         // try airport with runway
@@ -373,24 +373,23 @@ impl Lexer {
                     .runways
                     .iter()
                     .find(|rwy| rwy.designator == rwy_designator)
-                    .cloned()
-                    .ok_or(Error::UnknownRunwayInRoute {
+                    .cloned();
+
+                return match rwy {
+                    Some(_) => WordKind::Airport { aprt, rwy },
+                    None => WordKind::Err(Error::UnknownRunwayInRoute {
                         aprt: aprt.ident(),
                         rwy: rwy_designator.to_string(),
-                    })?;
-
-                return Ok(WordKind::Airport {
-                    aprt,
-                    rwy: Some(rwy),
-                });
+                    }),
+                };
             }
         }
 
         // Fallback: treat as potential VFR waypoint
-        Ok(WordKind::VFRWaypoint {
+        WordKind::VFRWaypoint {
             ident: s.to_string(),
             wp: None,
-        })
+        }
     }
 }
 
@@ -445,8 +444,7 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
     #[test]
     fn lexes_words() {
         let data = TestData::new();
-        let words =
-            Lexer::lex("N0107 A0250 EDDH D DCT EDHL07", &data.nd).expect("should lex words");
+        let words = Lexer::lex("N0107 A0250 EDDH D DCT EDHL07", &data.nd);
 
         let edhl = data.airport("EDHL");
         let rwy07 = edhl.runways.iter().find(|r| r.designator == "07").cloned();
@@ -496,9 +494,7 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
         let data = TestData::new();
 
         let prompt = "N0107 A0250 EDDH N2 N1 DCT EDHL W DCT W EDAH";
-        let tokens: Vec<TokenKind> = Tokens::try_new(prompt, &data.nd)
-            .expect("should tokenize prompt")
-            .tokens
+        let tokens: Vec<TokenKind> = Tokens::new(prompt, &data.nd)
             .into_iter()
             .map(|token| token.kind)
             .collect();
@@ -532,9 +528,7 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
         let data = TestData::new();
 
         let prompt = "EDDH N2 N1 W EDHL";
-        let tokens: Vec<TokenKind> = Tokens::try_new(prompt, &data.nd)
-            .expect("should tokenize prompt")
-            .tokens
+        let tokens: Vec<TokenKind> = Tokens::new(prompt, &data.nd)
             .into_iter()
             .map(|token| token.kind)
             .collect();
@@ -558,10 +552,16 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
     }
 
     #[test]
-    #[should_panic(expected = "AmbiguousTerminalArea")]
     fn fails_tokenize_on_ambiguous_prompt() {
         let data = TestData::new();
         let prompt = "EDAH W W EDHL";
-        let _ = Tokens::try_new(prompt, &data.nd).unwrap();
+        let err = Tokens::new(prompt, &data.nd)
+            .into_iter()
+            .find(|token| match token.kind {
+                TokenKind::Err(Error::AmbiguousTerminalArea { .. }) => true,
+                _ => false,
+            });
+
+        assert!(err.is_some());
     }
 }

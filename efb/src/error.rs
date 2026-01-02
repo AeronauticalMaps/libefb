@@ -28,9 +28,13 @@ use std::error;
 use std::fmt;
 use std::result;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 pub type Result<T> = result::Result<T, Error>;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Error {
     // Errors that can occur while decoding a route:
     //
