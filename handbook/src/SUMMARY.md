@@ -1,6 +1,6 @@
 # Summary
 
-- [Route](./Route.md)
+- [Route Prompt](./RoutePrompt.md)
 - [Aircraft Configuration](./AircraftConfiguration.md)
 - [Performance Profiles](./PerformanceProfiles.md)
 - [Runway Analysis](./RunwayAnalysis.md)
