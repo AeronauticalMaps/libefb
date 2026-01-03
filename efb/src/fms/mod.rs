@@ -33,7 +33,7 @@ pub use printer::*;
 
 #[derive(Clone, PartialEq, Debug, Default)]
 struct Context {
-    route: Option<String>,
+    route: String,
     flight_planning_builder: Option<FlightPlanningBuilder>,
 }
 
@@ -93,11 +93,12 @@ impl FMS {
         F: FnOnce(&mut Route),
     {
         f(&mut self.route);
+        self.context.route = self.route.to_string();
         EvalPipeline::default().eval(self)
     }
 
     pub fn decode(&mut self, route: String) -> Result<()> {
-        self.context.route = Some(route);
+        self.context.route = route;
         EvalPipeline::default().eval(self)
     }
 
@@ -218,9 +219,7 @@ impl EvalStage {
     fn eval(&self, fms: &mut FMS) -> Result<()> {
         match self {
             EvalStage::Route => {
-                if let Some(prompt) = &fms.context.route {
-                    fms.route.decode(prompt, &fms.nd)?;
-                }
+                fms.route.decode(&fms.context.route, &fms.nd)?;
             }
             EvalStage::FlightPlanning => {
                 if let Some(builder) = &fms.context.flight_planning_builder.clone() {

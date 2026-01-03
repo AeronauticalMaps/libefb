@@ -37,6 +37,7 @@
 //! surrounding words. This includes resolving VFR waypoints within a terminal
 //! area.
 
+use std::fmt;
 use std::ops::Range;
 use std::rc::Rc;
 
@@ -52,6 +53,7 @@ use crate::{VerticalDistance, Wind};
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Token {
     range: Range<usize>,
+    raw: String,
     kind: TokenKind,
 }
 
@@ -221,6 +223,7 @@ impl Tokens {
 
             tokens.push(Token {
                 range: words[i].range.clone(),
+                raw: words[i].raw.clone(),
                 kind,
             });
         }
@@ -259,6 +262,19 @@ impl Tokens {
     }
 }
 
+impl fmt::Display for Tokens {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut iter = self.tokens.iter();
+        if let Some(first) = iter.next() {
+            write!(f, "{}", first.raw)?;
+            for token in iter {
+                write!(f, " {}", token.raw)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl IntoIterator for Tokens {
     type Item = Token;
     type IntoIter = std::vec::IntoIter<Token>;
@@ -293,6 +309,7 @@ impl<'a> IntoIterator for &'a mut Tokens {
 #[derive(Debug, Clone, PartialEq)]
 struct Word {
     range: Range<usize>,
+    raw: String,
     kind: WordKind,
 }
 
@@ -327,6 +344,7 @@ impl Lexer {
                 let start = s.as_ptr() as usize - base;
                 Word {
                     range: start..start + s.len(),
+                    raw: s.to_string(),
                     kind: Self::classify(s, nd),
                 }
             })
@@ -454,14 +472,17 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
             vec![
                 Word {
                     range: 0..5,
+                    raw: "N0107".to_string(),
                     kind: WordKind::Speed(Speed::kt(107.0)),
                 },
                 Word {
                     range: 6..11,
+                    raw: "A0250".to_string(),
                     kind: WordKind::Level(VerticalDistance::Altitude(2500)),
                 },
                 Word {
                     range: 12..16,
+                    raw: "EDDH".to_string(),
                     kind: WordKind::Airport {
                         aprt: data.airport("EDDH"),
                         rwy: None
@@ -469,6 +490,7 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
                 },
                 Word {
                     range: 17..18,
+                    raw: "D".to_string(),
                     kind: WordKind::VFRWaypoint {
                         ident: "D".to_string(),
                         wp: None
@@ -476,10 +498,12 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
                 },
                 Word {
                     range: 19..22,
+                    raw: "DCT".to_string(),
                     kind: WordKind::Via(Via::Direct),
                 },
                 Word {
                     range: 23..29,
+                    raw: "EDHL07".to_string(),
                     kind: WordKind::Airport {
                         aprt: edhl,
                         rwy: rwy07

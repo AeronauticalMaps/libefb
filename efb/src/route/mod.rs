@@ -13,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fmt;
 use std::rc::Rc;
 
 use crate::error::Error;
@@ -291,5 +292,11 @@ impl Route {
     /// Returns the totals of the entire route.
     pub fn totals(&self, perf: Option<&Performance>) -> Option<TotalsToLeg> {
         self.accumulate_legs(perf).last()
+    }
+}
+
+impl fmt::Display for Route {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.tokens)
     }
 }
