@@ -40,3 +40,4 @@ world_magnetic_model = "0.2.0"
 [features]
 geojson = ["dep:geojson"]
 serde = ["dep:serde"]
+handbook = []

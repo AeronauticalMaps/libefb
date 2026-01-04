@@ -142,3 +142,6 @@ pub mod prelude {
 
 #[cfg(feature = "geojson")]
 pub mod geojson;
+
+#[cfg(feature = "handbook")]
+pub mod handbook;

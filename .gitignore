@@ -10,3 +10,6 @@ __pycache__
 
 # emacs
 .projectile-cache.eld
+
+# Generated files
+efb/src/handbook.rs
