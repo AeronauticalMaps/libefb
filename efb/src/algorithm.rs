@@ -19,10 +19,10 @@
 #[derive(Copy, Clone, PartialEq, PartialOrd, Debug, Default)]
 pub struct Point {
     /// The x coordinate.
-    pub x: f32,
+    pub x: f64,
 
     /// The y coordinate.
-    pub y: f32,
+    pub y: f64,
 }
 
 type Line = (Point, Point);
@@ -55,7 +55,7 @@ pub fn winding_number(p: &Point, v: &[Point]) -> i32 {
     wn
 }
 
-fn is_left_of_line(point: &Point, line: &Line) -> f32 {
+fn is_left_of_line(point: &Point, line: &Line) -> f64 {
     (line.1.x - line.0.x) * (point.y - line.0.y) - (point.x - line.0.x) * (line.1.y - line.0.y)
 }
 

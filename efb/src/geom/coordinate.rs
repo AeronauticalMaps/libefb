@@ -32,10 +32,10 @@ mod constants {
 #[repr(C)]
 pub struct Coordinate {
     /// Latitude in the range from -90° (south) to 90° (north).
-    pub latitude: f32,
+    pub latitude: f64,
 
     /// Longitude in the range from -180° (west) to 180° (east).
-    pub longitude: f32,
+    pub longitude: f64,
 }
 
 impl Hash for Coordinate {
@@ -47,7 +47,7 @@ impl Hash for Coordinate {
 
 impl Coordinate {
     /// Creates a new coordinate.
-    pub fn new(latitude: f32, longitude: f32) -> Self {
+    pub fn new(latitude: f64, longitude: f64) -> Self {
         Self {
             latitude,
             longitude,
@@ -65,7 +65,7 @@ impl Coordinate {
         let x = lat_a.cos() * lat_b.sin() - lat_a.sin() * lat_b.cos() * delta_long.cos();
         let y = lat_b.cos() * delta_long.sin();
 
-        Angle::t(y.atan2(x).to_degrees())
+        Angle::t(y.atan2(x).to_degrees() as f32)
     }
 
     // TODO fix distance calculation and add some comments regarding Haversine
@@ -82,14 +82,14 @@ impl Coordinate {
             * other.latitude.to_radians().cos()
             * haversine_delta_long;
         let x = 2.0 * y.sqrt().asin();
-        Length::m(x * constants::EARTH_MEAN_RADIUS * 1000.0)
+        Length::m(x as f32 * constants::EARTH_MEAN_RADIUS * 1000.0)
     }
 
     pub fn from_dms(latitude: (i8, u8, u8), longitude: (i16, u8, u8)) -> Self {
         Self {
-            latitude: latitude.0.signum() as f32
+            latitude: latitude.0.signum() as f64
                 * fc::dms_to_decimal(latitude.0 as u8, latitude.1, latitude.2),
-            longitude: longitude.0.signum() as f32
+            longitude: longitude.0.signum() as f64
                 * fc::dms_to_decimal(longitude.0 as u8, longitude.1, longitude.2),
         }
     }

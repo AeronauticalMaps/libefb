@@ -64,8 +64,8 @@ impl From<Coordinate> for MagneticVariation {
     fn from(value: Coordinate) -> Self {
         let mag_var = match GeomagneticField::new(
             Length::new::<meter>(0.0),
-            Angle::new::<radian>(value.latitude.to_radians()),
-            Angle::new::<radian>(value.longitude.to_radians()),
+            Angle::new::<radian>(value.latitude.to_radians() as f32),
+            Angle::new::<radian>(value.longitude.to_radians() as f32),
             OffsetDateTime::now_utc().date(),
         ) {
             Ok(field) => field.declination().get::<degree>(),
