@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,10 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{Field, FieldError};
-use std::str::FromStr;
+use crate::{Alphanumeric, Error, FixedField};
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum SecCode {
     MORA,
     Navaid,
@@ -28,28 +27,30 @@ pub enum SecCode {
     Airspace,
 }
 
-impl Field for SecCode {}
+impl FixedField<'_> for SecCode {
+    const LENGTH: usize = 1;
 
-impl FromStr for SecCode {
-    type Err = FieldError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match &s[4..5] {
-            "A" => Ok(Self::MORA),
-            "D" => Ok(Self::Navaid),
-            "E" => Ok(Self::Enroute),
-            "H" => Ok(Self::Heliport),
-            "P" => Ok(Self::Airport),
-            "R" => Ok(Self::CompanyRoute),
-            "T" => Ok(Self::Table),
-            "U" => Ok(Self::Airspace),
-            _ => Err(FieldError::InvalidValue("unkown SEC CODE")),
+    fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        match bytes[0] {
+            b'A' => Ok(Self::MORA),
+            b'D' => Ok(Self::Navaid),
+            b'E' => Ok(Self::Enroute),
+            b'H' => Ok(Self::Heliport),
+            b'P' => Ok(Self::Airport),
+            b'R' => Ok(Self::CompanyRoute),
+            b'T' => Ok(Self::Table),
+            b'U' => Ok(Self::Airspace),
+            byte => Err(Error::InvalidCharacter {
+                field: "Section Code",
+                byte,
+                expected: "SEC CODE according to ARINC 424-23 5.4",
+            }),
         }
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub enum SubCode<const I: usize> {
+pub enum SubCodeKind {
     // MORA
     GridMORA,
     // Navaid
@@ -75,57 +76,59 @@ pub enum SubCode<const I: usize> {
     ControlledAirspace,
 }
 
-impl<const I: usize> Field for SubCode<I> {}
-
 macro_rules! sub_code_error {
-    ($sub_code:expr) => {
-        Err(FieldError::InvalidValue(concat!(
-            "invalid SEC CODE for SUB CODE: ",
-            $sub_code
-        )))
+    ($byte:expr) => {
+        Err(Error::InvalidCharacter {
+            field: "Subsection Code",
+            byte: $byte,
+            expected: "SUB CODE according to ARINC 424-23 5.5",
+        })
     };
 }
 
-impl<const I: usize> FromStr for SubCode<I> {
-    type Err = FieldError;
+pub type SubCode<'a> = Alphanumeric<'a, 1>;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let sec_code: SecCode = s.parse()?;
-
-        match &s[I..I + 1] {
-            " " => match sec_code {
-                SecCode::Navaid => Ok(Self::VHFNavaid),
-                SecCode::CompanyRoute => Ok(Self::CompanyRoute),
-                _ => sub_code_error!("BLANK"),
+impl<'a> SubCode<'a> {
+    /// Subsection code kind for the section.
+    ///
+    /// # Errors
+    ///
+    /// Will return an error if the subsection code is invalid for the section.
+    pub fn kind(&self, sec_code: &SecCode) -> Result<SubCodeKind, Error> {
+        match self.first() {
+            b' ' => match sec_code {
+                SecCode::Navaid => Ok(SubCodeKind::VHFNavaid),
+                SecCode::CompanyRoute => Ok(SubCodeKind::CompanyRoute),
+                _ => sub_code_error!(b' '),
             },
-            "A" => match sec_code {
-                SecCode::Enroute => Ok(Self::Waypoint),
-                SecCode::Heliport => Ok(Self::Pad),
-                SecCode::Airport => Ok(Self::ReferencePoint),
-                SecCode::CompanyRoute => Ok(Self::AlternateRecord),
-                _ => sub_code_error!("A"),
+            b'A' => match sec_code {
+                SecCode::Enroute => Ok(SubCodeKind::Waypoint),
+                SecCode::Heliport => Ok(SubCodeKind::Pad),
+                SecCode::Airport => Ok(SubCodeKind::ReferencePoint),
+                SecCode::CompanyRoute => Ok(SubCodeKind::AlternateRecord),
+                _ => sub_code_error!(b'A'),
             },
-            "B" => match sec_code {
-                SecCode::Navaid => Ok(Self::NDBNavaid),
-                SecCode::Airport => Ok(Self::Gate),
-                _ => sub_code_error!("B"),
+            b'B' => match sec_code {
+                SecCode::Navaid => Ok(SubCodeKind::NDBNavaid),
+                SecCode::Airport => Ok(SubCodeKind::Gate),
+                _ => sub_code_error!(b'B'),
             },
-            "C" => match sec_code {
-                SecCode::Heliport | SecCode::Airport => Ok(Self::TerminalWaypoint),
-                SecCode::Table => Ok(Self::CruisingTable),
-                SecCode::Airspace => Ok(Self::ControlledAirspace),
-                _ => sub_code_error!("C"),
+            b'C' => match sec_code {
+                SecCode::Heliport | SecCode::Airport => Ok(SubCodeKind::TerminalWaypoint),
+                SecCode::Table => Ok(SubCodeKind::CruisingTable),
+                SecCode::Airspace => Ok(SubCodeKind::ControlledAirspace),
+                _ => sub_code_error!(b'C'),
             },
-            "G" => match sec_code {
-                SecCode::Airport => Ok(Self::Runway),
-                _ => sub_code_error!("G"),
+            b'G' => match sec_code {
+                SecCode::Airport => Ok(SubCodeKind::Runway),
+                _ => sub_code_error!(b'G'),
             },
-            "S" => match sec_code {
-                SecCode::MORA => Ok(Self::GridMORA),
-                SecCode::Heliport | SecCode::Airport => Ok(Self::MSA),
-                _ => sub_code_error!("S"),
+            b'S' => match sec_code {
+                SecCode::MORA => Ok(SubCodeKind::GridMORA),
+                SecCode::Heliport | SecCode::Airport => Ok(SubCodeKind::MSA),
+                _ => sub_code_error!(b'S'),
             },
-            _ => todo!("implement missing SUB CODE D..Z"),
+            _ => unimplemented!("SUB CODE D..Z"),
         }
     }
 }

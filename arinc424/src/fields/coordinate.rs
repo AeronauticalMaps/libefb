@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,115 +13,79 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{Field, FieldError};
-use std::ops::RangeInclusive;
-use std::str::FromStr;
+use crate::{Alphanumeric, Error};
 
-fn parse_numeric_field(
-    s: &str,
-    idx: usize,
-    len: usize,
-    range: RangeInclusive<u8>,
-) -> Result<u8, FieldError> {
-    s[idx..idx + len]
-        .parse()
-        .map_err(|_| FieldError::NotANumber)
-        .and_then(|v| {
-            range
-                .contains(&v)
-                .then_some(v)
-                .ok_or(FieldError::NumberOutOfRange)
-        })
-}
+pub type Latitude<'a> = Alphanumeric<'a, 9>;
 
-#[derive(Debug, PartialEq)]
-pub enum CardinalDirection {
-    North,
-    South,
-    East,
-    West,
-}
+impl<'a> Latitude<'a> {
+    /// Returns the latitude as decimal in the range -90.0 (south) to 90.0 (north).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if blank or if the hemisphere is neither `N` nor `S`.
+    pub fn as_decimal(&self) -> Result<f64, Error> {
+        let hem = self.first();
+        let deg = parse_numeric!(2, u8, &self.0[1..3])? as f64;
+        let min = parse_numeric!(2, u8, &self.0[3..5])? as f64;
+        let sec = parse_numeric!(4, u32, &self.0[5..9])? as f64 / 100.0; // includes centiseconds
 
-#[derive(Debug, PartialEq)]
-pub struct Latitude<const I: usize> {
-    pub cardinal: CardinalDirection,
-    pub degree: u8,
-    pub minutes: u8,
-    pub seconds: u8,
-    pub centiseconds: u8,
-}
+        let decimal = deg + min / 60.0 + sec / 3600.0;
 
-impl<const I: usize> Field for Latitude<I> {}
-
-impl<const I: usize> FromStr for Latitude<I> {
-    type Err = FieldError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let cardinal = match &s[I..I + 1] {
-            "N" => Ok(CardinalDirection::North),
-            "S" => Ok(CardinalDirection::South),
-            _ => Err(FieldError::UnexpectedChar(
-                "expected N or S cardinal direction",
-            )),
-        }?;
-
-        let degree = parse_numeric_field(s, I + 1, 2, 0..=90)?;
-        let minutes = parse_numeric_field(s, I + 3, 2, 0..=60)?;
-        let seconds = parse_numeric_field(s, I + 5, 2, 0..=60)?;
-        let centiseconds = parse_numeric_field(s, I + 7, 2, 0..=99)?;
-
-        if degree == 90 && (minutes > 0 || seconds > 0 || centiseconds > 0) {
-            Err(FieldError::NumberOutOfRange)
-        } else {
-            Ok(Self {
-                cardinal,
-                degree,
-                minutes,
-                seconds,
-                centiseconds,
-            })
+        match hem {
+            b'N' => Ok(decimal),
+            b'S' => Ok(-decimal),
+            _ => Err(Error::InvalidCharacter {
+                field: "Latitude",
+                byte: hem,
+                expected: "N or S",
+            }),
         }
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Longitude<const I: usize> {
-    pub cardinal: CardinalDirection,
-    pub degree: u8,
-    pub minutes: u8,
-    pub seconds: u8,
-    pub centiseconds: u8,
+pub type Longitude<'a> = Alphanumeric<'a, 10>;
+
+impl<'a> Longitude<'a> {
+    /// Returns the longitude as decimal in the range -180.0 (west) to 180.0 (east).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if blank or if the hemisphere is neither `W` nor `E`.
+    pub fn as_decimal(&self) -> Result<f64, Error> {
+        let hem = self.first();
+        let deg = parse_numeric!(3, u8, &self.0[1..4])? as f64;
+        let min = parse_numeric!(2, u8, &self.0[4..6])? as f64;
+        let sec = parse_numeric!(4, u32, &self.0[6..10])? as f64 / 100.0; // includes centiseconds
+
+        let decimal = deg + min / 60.0 + sec / 3600.0;
+
+        match hem {
+            b'E' => Ok(decimal),
+            b'W' => Ok(-decimal),
+            _ => Err(Error::InvalidCharacter {
+                field: "Longitude",
+                byte: hem,
+                expected: "E or W",
+            }),
+        }
+    }
 }
 
-impl<const I: usize> Field for Longitude<I> {}
+#[cfg(test)]
+mod tests {
+    use crate::FixedField;
 
-impl<const I: usize> FromStr for Longitude<I> {
-    type Err = FieldError;
+    use super::*;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let cardinal = match &s[I..I + 1] {
-            "W" => Ok(CardinalDirection::West),
-            "E" => Ok(CardinalDirection::East),
-            _ => Err(FieldError::UnexpectedChar(
-                "expected E or W cardinal direction",
-            )),
-        }?;
+    #[test]
+    fn parses_latitude() {
+        let lat = Latitude::from_bytes(b"N40394857").expect("latitude should parse");
+        assert_eq!(lat.as_decimal(), Ok(40.663491666666665));
+    }
 
-        let degree = parse_numeric_field(s, I + 1, 3, 0..=180)?;
-        let minutes = parse_numeric_field(s, I + 4, 2, 0..=60)?;
-        let seconds = parse_numeric_field(s, I + 6, 2, 0..=60)?;
-        let centiseconds = parse_numeric_field(s, I + 8, 2, 0..=99)?;
-
-        if degree == 180 && (minutes > 0 || seconds > 0 || centiseconds > 0) {
-            Err(FieldError::NumberOutOfRange)
-        } else {
-            Ok(Self {
-                cardinal,
-                degree,
-                minutes,
-                seconds,
-                centiseconds,
-            })
-        }
+    #[test]
+    fn parses_longitude() {
+        let long = Longitude::from_bytes(b"W0741444230").expect("longitude should parse");
+        assert_eq!(long.as_decimal(), Ok(-74.24561944444444));
     }
 }

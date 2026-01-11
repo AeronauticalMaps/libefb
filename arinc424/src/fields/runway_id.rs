@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,26 +13,54 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::str::FromStr;
+use crate::{Alphanumeric, Error};
 
-use super::{Field, FieldError};
+pub type RunwayId<'a> = Alphanumeric<'a, 5>;
 
-pub struct RunwayId<const I: usize> {
-    pub designator: String,
+impl<'a> RunwayId<'a> {
+    /// Returns the runway's designator.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the field can not be parsed as number.
+    pub fn designator(&self) -> Result<&str, Error> {
+        match &self.0[..2] {
+            b"RW" => match (&self.0[2], &self.0[3]) {
+                // TODO: Improve error handling.
+                (b'0'..=b'2', b'0'..=b'9') | (b'3', b'0'..=b'6') => {
+                    Ok(str::from_utf8(&self.0[2..]).unwrap_or("").trim())
+                }
+                _ => Err(Error::InvalidVariant {
+                    field: "Runway Identifier",
+                    bytes: Vec::from(&self.0[2..]),
+                    expected: "two digits in the range from 00 to 36",
+                }),
+            },
+            // there are runways with designator just being N, S, etc.
+            _ => Ok(str::from_utf8(self.0).unwrap_or("").trim()),
+        }
+    }
 }
 
-impl<const I: usize> Field for RunwayId<I> {}
+#[cfg(test)]
+mod tests {
+    use crate::FixedField;
 
-impl<const I: usize> FromStr for RunwayId<I> {
-    type Err = FieldError;
+    use super::*;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match &s[I + 4..I + 5] {
-            " " | "C" | "L" | "R" | "W" | "G" | "U" => {
-                let designator = s[I + 2..I + 5].trim_end().to_string();
-                Ok(Self { designator })
-            }
-            _ => Err(FieldError::UnexpectedChar("unexpected designation suffix")),
-        }
+    #[test]
+    #[should_panic(expected = "InvalidVariant")]
+    fn fail_on_invalid_designator() {
+        let rwy = RunwayId::from_bytes(b"RW39L".as_slice()).expect("runway should parse");
+        rwy.designator().unwrap();
+    }
+
+    #[test]
+    fn parses_designator_range() {
+        let rwy = RunwayId::from_bytes(b"RW36L".as_slice()).expect("runway should parse");
+        assert_eq!(rwy.designator(), Ok("36L"));
+
+        let rwy = RunwayId::from_bytes(b"RW29R".as_slice()).expect("runway should parse");
+        assert_eq!(rwy.designator(), Ok("29R"));
     }
 }

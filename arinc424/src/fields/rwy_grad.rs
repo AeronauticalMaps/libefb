@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,57 +13,50 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::str::FromStr;
+use crate::{Alphanumeric, Error};
 
-use super::{Field, FieldError};
+pub type RwyGrad<'a> = Alphanumeric<'a, 6>;
 
-#[derive(Debug, Default, PartialEq)]
-pub struct RwyGrad<const I: usize> {
-    pub degree: f32,
-}
+impl<'a> RwyGrad<'a> {
+    /// Returns the gradient as decimal number.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the field can not be parsed as number.
+    pub fn as_decimal(&self) -> Result<f32, Error> {
+        let slope = parse_numeric!(5, u32, self.0[1..])? as f32 / 1000.0;
 
-impl<const I: usize> Field for RwyGrad<I> {}
-
-impl<const I: usize> FromStr for RwyGrad<I> {
-    type Err = FieldError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let sign = match &s[I..I + 1] {
-            "+" => Ok(1.0),
-            "-" => Ok(-1.0),
-            _ => Err(FieldError::UnexpectedChar("expected + or -")),
-        }?;
-
-        let degree = {
-            let degree = s[I + 1..I + 3]
-                .parse::<f32>()
-                .map_err(|_| FieldError::NotANumber)?;
-            let decimal = s[I + 3..I + 6]
-                .parse::<f32>()
-                .map_err(|_| FieldError::NotANumber)?;
-            Ok(degree + decimal / 1000.0)
-        }?;
-
-        Ok(Self {
-            degree: degree * sign,
-        })
+        match self.first() {
+            b'+' => Ok(slope),
+            b'-' => Ok(-slope),
+            byte => Err(Error::InvalidCharacter {
+                field: "Runway Gradient",
+                byte,
+                expected: "+ or -",
+            }),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::FixedField;
+
     use super::*;
 
     #[test]
     fn parse_upwward_gradient() {
-        assert_eq!("+10000".parse::<RwyGrad<0>>(), Ok(RwyGrad { degree: 10.0 }));
+        assert_eq!(
+            RwyGrad::from_bytes(b"+10000").and_then(|v| v.as_decimal()),
+            Ok(10.0)
+        );
     }
 
     #[test]
     fn parse_downwward_gradient() {
         assert_eq!(
-            "-00450".parse::<RwyGrad<0>>(),
-            Ok(RwyGrad { degree: -0.45 })
+            RwyGrad::from_bytes(b"-00450").and_then(|v| v.as_decimal()),
+            Ok(-0.45)
         );
     }
 }

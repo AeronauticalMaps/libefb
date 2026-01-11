@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,24 +13,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{Field, FieldError};
-use std::str::FromStr;
+use crate::{Error, FixedField, Numeric};
 
-#[derive(Debug, PartialEq)]
-pub struct Cycle {
-    pub year: u8,
-    pub cycle: u8,
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+pub struct Cycle<'a> {
+    year: Numeric<'a, 2>,
+    cycle: Numeric<'a, 2>,
 }
 
-impl Field for Cycle {}
+impl<'a> Cycle<'a> {
+    /// The last two digits of the cycle's year.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the field is not a number.
+    pub fn year(&self) -> Result<u8, Error> {
+        self.year.as_u8()
+    }
 
-impl FromStr for Cycle {
-    type Err = FieldError;
+    /// The numeric identity of the 28-day data update cycle.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the field is not a number.
+    pub fn cycle(&self) -> Result<u8, Error> {
+        self.cycle.as_u8()
+    }
+}
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let year: u8 = s[128..130].parse().map_err(|_| FieldError::NotANumber)?;
-        let cycle: u8 = s[130..132].parse().map_err(|_| FieldError::NotANumber)?;
+impl<'a> FixedField<'a> for Cycle<'a> {
+    const LENGTH: usize = 4;
 
-        Ok(Self { year, cycle })
+    fn from_bytes(bytes: &'a [u8]) -> Result<Self, Error> {
+        Ok(Self {
+            year: Numeric::from_bytes(&bytes[0..2])?,
+            cycle: Numeric::from_bytes(&bytes[2..4])?,
+        })
     }
 }

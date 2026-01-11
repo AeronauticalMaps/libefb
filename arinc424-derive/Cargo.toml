@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2024, 2026 Joe Pearson
+# Copyright 2026 Joe Pearson
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,22 +14,21 @@
 # limitations under the License.
 
 [package]
-name = "arinc424"
+name = "arinc424-derive"
 version = "0.2.0"
 edition = "2021"
 license = "Apache-2.0"
-description = "ARINC 424 parser"
-keywords = ["ARINC", "ARINC-424"]
+description = "Derive macros for arinc424"
 homepage = "https://github.com/AeronauticalMaps/libefb"
 repository = "https://github.com/AeronauticalMaps/libefb"
-readme = "README.md"
+
+[lib]
+proc-macro = true
 
 [dependencies]
-arinc424-derive = { path = "../arinc424-derive" }
+syn = { version = "2.0", features = ["full", "extra-traits"] }
+quote = "1.0"
+proc-macro2 = "1.0"
 
-[dev-dependencies]
-criterion = "0.8.1"
-
-[[bench]]
-name = "record_benchmark"
-harness = false
+[lints]
+workspace = true

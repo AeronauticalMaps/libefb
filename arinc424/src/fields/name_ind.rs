@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,11 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{Field, FieldError};
-use std::str::FromStr;
+use crate::{Error, FixedField};
 
-#[derive(Debug, PartialEq)]
-pub enum NameInd<const I: usize> {
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+pub enum NameInd {
     AbeamFix,
     BearingDistanceFix,
     AirportNameAsFix,
@@ -32,38 +31,38 @@ pub enum NameInd<const I: usize> {
     PublishedNameFixMoreThanFiveLetters,
     AirportRwyRelatedFix,
     UIRFix,
+    VFRReportingPointFix,
     LocalizerMarkerWithPublishedFiveLetter,
     LocalizerMarkerWithoutPublishedFiveLetter,
-    Unspecified, // TODO this is not valid ARINC 424-17
 }
 
-impl<const I: usize> Field for NameInd<I> {}
+impl FixedField<'_> for NameInd {
+    const LENGTH: usize = 3;
 
-impl<const I: usize> FromStr for NameInd<I> {
-    type Err = FieldError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match &s[I..I + 3] {
-            "A  " => Ok(Self::AbeamFix),
-            "B  " => Ok(Self::BearingDistanceFix),
-            "D  " => Ok(Self::AirportNameAsFix),
-            "F  " => Ok(Self::FIRFix),
-            "H  " => Ok(Self::PhoneticLetterNameFix),
-            "I  " => Ok(Self::AirportIdentFix),
-            "L  " => Ok(Self::LatitudeLongitudeFix),
-            "M  " => Ok(Self::MultipleWordNameFix),
-            "N  " => Ok(Self::NavaidIdentFix),
-            "P  " => Ok(Self::PublishedFiveLetterNameFix),
-            "Q  " => Ok(Self::PublishedNameFixLessThanFiveLetters),
-            "R  " => Ok(Self::PublishedNameFixMoreThanFiveLetters),
-            "T  " => Ok(Self::AirportRwyRelatedFix),
-            "U  " => Ok(Self::UIRFix),
-            " O " => Ok(Self::LocalizerMarkerWithPublishedFiveLetter),
-            " M " => Ok(Self::LocalizerMarkerWithoutPublishedFiveLetter),
-            "   " => Ok(Self::Unspecified),
-            _ => Err(FieldError::UnexpectedChar(
-                "unexpected name format indicator",
-            )),
+    fn from_bytes(bytes: &'_ [u8]) -> Result<Self, Error> {
+        match &bytes[0..3] {
+            b"A  " => Ok(Self::AbeamFix),
+            b"B  " => Ok(Self::BearingDistanceFix),
+            b"D  " => Ok(Self::AirportNameAsFix),
+            b"F  " => Ok(Self::FIRFix),
+            b"H  " => Ok(Self::PhoneticLetterNameFix),
+            b"I  " => Ok(Self::AirportIdentFix),
+            b"L  " => Ok(Self::LatitudeLongitudeFix),
+            b"M  " => Ok(Self::MultipleWordNameFix),
+            b"N  " => Ok(Self::NavaidIdentFix),
+            b"P  " => Ok(Self::PublishedFiveLetterNameFix),
+            b"Q  " => Ok(Self::PublishedNameFixLessThanFiveLetters),
+            b"R  " => Ok(Self::PublishedNameFixMoreThanFiveLetters),
+            b"T  " => Ok(Self::AirportRwyRelatedFix),
+            b"U  " => Ok(Self::UIRFix),
+            b"V  " => Ok(Self::VFRReportingPointFix),
+            b" O " => Ok(Self::LocalizerMarkerWithPublishedFiveLetter),
+            b" M " => Ok(Self::LocalizerMarkerWithoutPublishedFiveLetter),
+            _ => Err(Error::InvalidVariant {
+                field: "Name Format Indicator",
+                bytes: Vec::from(bytes),
+                expected: "according to ARINC 424-17 5.196",
+            }),
         }
     }
 }

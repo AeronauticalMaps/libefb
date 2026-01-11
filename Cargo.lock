@@ -98,7 +98,17 @@ dependencies = [
 name = "arinc424"
 version = "0.2.0"
 dependencies = [
+ "arinc424-derive",
  "criterion",
+]
+
+[[package]]
+name = "arinc424-derive"
+version = "0.2.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

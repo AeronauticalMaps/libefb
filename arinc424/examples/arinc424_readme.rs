@@ -1,15 +1,3 @@
-# ARINC 424 Navigation Data Parser
-
-> [!NOTE]
-> This library is incomplete and parses only a few records for now.
-
-This crate provides an iterator to iterate over ARINC 424
-records. Records can then by converted from the fixed 132 bytes.
-
-The following example iterates over two ARINC 424 records and print
-some information of the records:
-
-```rust
 use arinc424::records::{Airport, RecordKind, Records, Runway};
 use arinc424::Error;
 
@@ -41,11 +29,6 @@ fn main() -> Result<(), Error> {
 
     Ok(())
 }
-```
 
-This will print
-
-```
-Airport JOHN F KENNEDY INTL (KJFK)
-Runway 04L of KJFK is 12079ft long
-```
+// => Airport JOHN F KENNEDY INTL (KJFK)
+// => Runway 04L of KJFK is 12079ft long

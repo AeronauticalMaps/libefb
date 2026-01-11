@@ -67,6 +67,7 @@
 //! ## A
 //!
 //! - **AFM** Aircraft Flight Manual
+//! - **ARINC** Aeronautical Radio Incorporated
 //!
 //! ## E
 //!
