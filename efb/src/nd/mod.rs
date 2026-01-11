@@ -30,6 +30,7 @@ mod airac_cycle;
 mod airport;
 mod airspace;
 mod builder;
+mod convert;
 mod fix;
 mod location;
 mod navaid;
@@ -74,26 +75,6 @@ pub struct NavigationData {
 impl NavigationData {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Creates navigation data from an ARINC 424 string.
-    pub fn try_from_arinc424(s: &str) -> Result<Self, Error> {
-        let record: Arinc424Record = s.parse()?;
-
-        let mut hasher = DefaultHasher::new();
-        s.hash(&mut hasher);
-        let partition_id = hasher.finish();
-
-        Ok(Self {
-            airports: record.airports,
-            airspaces: Vec::new(),
-            waypoints: record.waypoints,
-            terminal_waypoints: record.terminal_waypoints,
-            locations: record.locations,
-            cycle: record.cycle,
-            partition_id,
-            partitions: HashMap::new(),
-        })
     }
 
     /// Creates navigation data from an OpenAir string.
@@ -186,8 +167,8 @@ impl NavigationData {
             .map(|wp| NavAid::Waypoint(Rc::clone(wp)))
             .or(self
                 .airports()
-                .find(|&aprt| aprt.ident() == ident)
-                .map(|aprt| NavAid::Airport(Rc::clone(aprt))))
+                .find(|&arpt| arpt.ident() == ident)
+                .map(|arpt| NavAid::Airport(Rc::clone(arpt))))
     }
 
     /// Searches for a waypoint within a terminal area.

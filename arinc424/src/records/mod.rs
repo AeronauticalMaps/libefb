@@ -48,7 +48,7 @@ impl<'a> Records<'a> {
     /// for (kind, bytes) in Records::new(data) {
     ///     match kind {
     ///         RecordKind::Airport => {
-    ///             let aprt = Airport::try_from(bytes)?;
+    ///             let arpt = Airport::try_from(bytes)?;
     ///             // now you can read the airport's fields or convert it
     ///             // to some other type
     ///         },

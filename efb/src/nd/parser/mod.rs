@@ -20,10 +20,10 @@
 // use std::io::ErrorKind;
 // use std::path::Path;
 
-mod arinc424;
+// mod arinc424;
 mod openair;
 
-pub use arinc424::*;
+// pub use arinc424::*;
 pub use openair::*;
 
 //     fn read(path: &Path) -> Result<NavigationData, ParserError> {

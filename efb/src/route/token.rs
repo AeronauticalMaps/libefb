@@ -83,7 +83,7 @@ pub enum TokenKind {
     Wind(Wind),
     /// Airport with optional runway specification.
     Airport {
-        aprt: Rc<Airport>,
+        arpt: Rc<Airport>,
         rwy: Option<Runway>,
     },
     /// Navigation aid (waypoint, VOR, NDB, etc.) - but NOT airports.
@@ -139,14 +139,14 @@ impl Tokens {
                     TokenKind::Via(via.clone())
                 }
 
-                WordKind::Airport { aprt, rwy } => {
+                WordKind::Airport { arpt, rwy } => {
                     // Each airport sets a new terminal scope
-                    terminal = Some(Rc::clone(aprt));
+                    terminal = Some(Rc::clone(arpt));
 
                     if i == 0 {
                         // First airport always gets added
                         TokenKind::Airport {
-                            aprt: Rc::clone(aprt),
+                            arpt: Rc::clone(arpt),
                             rwy: rwy.clone(),
                         }
                     } else {
@@ -166,7 +166,7 @@ impl Tokens {
                                 }),
                             ) => continue,
                             _ => TokenKind::Airport {
-                                aprt: Rc::clone(aprt),
+                                arpt: Rc::clone(arpt),
                                 rwy: rwy.clone(),
                             },
                         }
@@ -252,7 +252,7 @@ impl Tokens {
     fn lookahead_terminal_area(words: &[Word]) -> Option<Rc<Airport>> {
         for word in words {
             match &word.kind {
-                WordKind::Airport { aprt, .. } => return Some(aprt.clone()),
+                WordKind::Airport { arpt, .. } => return Some(arpt.clone()),
                 // next direct terminates any terminal area we would be looking in
                 WordKind::Via(Via::Direct) => return None,
                 _ => continue,
@@ -320,7 +320,7 @@ enum WordKind {
     Level(VerticalDistance),
     Wind(Wind),
     Airport {
-        aprt: Rc<Airport>,
+        arpt: Rc<Airport>,
         rwy: Option<Runway>,
     },
     NavAid(NavAid),
@@ -367,7 +367,7 @@ impl Lexer {
                     }
                 }
                 NavAid::Waypoint(_) => WordKind::NavAid(navaid),
-                NavAid::Airport(aprt) => WordKind::Airport { aprt, rwy: None },
+                NavAid::Airport(arpt) => WordKind::Airport { arpt, rwy: None },
             };
         }
 
@@ -386,17 +386,17 @@ impl Lexer {
 
         // try airport with runway
         if let Some((ident, rwy_designator)) = s.split_at_checked(4) {
-            if let Some(NavAid::Airport(aprt)) = nd.find(ident) {
-                let rwy = aprt
+            if let Some(NavAid::Airport(arpt)) = nd.find(ident) {
+                let rwy = arpt
                     .runways
                     .iter()
                     .find(|rwy| rwy.designator == rwy_designator)
                     .cloned();
 
                 return match rwy {
-                    Some(_) => WordKind::Airport { aprt, rwy },
+                    Some(_) => WordKind::Airport { arpt, rwy },
                     None => WordKind::Err(Error::UnknownRunwayInRoute {
-                        aprt: aprt.ident(),
+                        arpt: arpt.ident(),
                         rwy: rwy_designator.to_string(),
                     }),
                 };
@@ -447,7 +447,7 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
 
         fn airport(&self, ident: &str) -> Rc<Airport> {
             match self.nd.find(ident) {
-                Some(NavAid::Airport(aprt)) => aprt,
+                Some(NavAid::Airport(arpt)) => arpt,
                 _ => panic!("should find airport {ident}"),
             }
         }
@@ -485,7 +485,7 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
                     range: 12..16,
                     raw: "EDDH".to_string(),
                     kind: WordKind::Airport {
-                        aprt: data.airport("EDDH"),
+                        arpt: data.airport("EDDH"),
                         rwy: None
                     },
                 },
@@ -506,7 +506,7 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
                     range: 23..29,
                     raw: "EDHL07".to_string(),
                     kind: WordKind::Airport {
-                        aprt: edhl,
+                        arpt: edhl,
                         rwy: rwy07
                     },
                 },
@@ -530,7 +530,7 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
                 TokenKind::Speed(Speed::kt(107.0)),
                 TokenKind::Level(VerticalDistance::Altitude(2500)),
                 TokenKind::Airport {
-                    aprt: data.airport("EDDH"),
+                    arpt: data.airport("EDDH"),
                     rwy: None
                 },
                 TokenKind::NavAid(data.vrp("EDDH", "N2")),
@@ -541,7 +541,7 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
                 TokenKind::Via(Via::Direct),
                 TokenKind::NavAid(data.vrp("EDAH", "W")),
                 TokenKind::Airport {
-                    aprt: data.airport("EDAH"),
+                    arpt: data.airport("EDAH"),
                     rwy: None
                 },
             ]
@@ -562,14 +562,14 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
             tokens,
             vec![
                 TokenKind::Airport {
-                    aprt: data.airport("EDDH"),
+                    arpt: data.airport("EDDH"),
                     rwy: None
                 },
                 TokenKind::NavAid(data.vrp("EDDH", "N2")),
                 TokenKind::NavAid(data.vrp("EDDH", "N1")),
                 TokenKind::NavAid(data.vrp("EDHL", "W")),
                 TokenKind::Airport {
-                    aprt: data.airport("EDHL"),
+                    arpt: data.airport("EDHL"),
                     rwy: None
                 },
             ]

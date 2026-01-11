@@ -48,7 +48,7 @@ pub struct Waypoint {
     pub(crate) desc: String,
     pub(crate) usage: WaypointUsage,
     pub(crate) coordinate: Coordinate,
-    pub(crate) mag_var: MagneticVariation,
+    pub(crate) mag_var: Option<MagneticVariation>,
     pub(crate) region: Region,
     pub(crate) location: Option<LocationIndicator>,
     pub(crate) cycle: Option<AiracCycle>,

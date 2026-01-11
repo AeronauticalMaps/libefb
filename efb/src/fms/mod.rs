@@ -67,7 +67,7 @@ impl FMS {
     /// ```
     /// # use efb::prelude::*;
     /// #
-    /// # fn modify_nd(fms: &mut FMS, records: &str) -> Result<(), Error> {
+    /// # fn modify_nd(fms: &mut FMS, records: &[u8]) -> Result<(), Error> {
     /// let new_nd = NavigationData::try_from_arinc424(records)?;
     /// fms.modify_nd(|nd| nd.append(new_nd))?;
     /// # Ok(())

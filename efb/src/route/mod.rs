@@ -118,24 +118,24 @@ impl Route {
 
                 TokenKind::Wind(value) => wind = Some(*value),
 
-                TokenKind::Airport { aprt, rwy } => {
+                TokenKind::Airport { arpt, rwy } => {
                     // Track for leg building
                     if from.is_none() {
-                        from = Some(NavAid::Airport(Rc::clone(aprt)));
+                        from = Some(NavAid::Airport(Rc::clone(arpt)));
                     } else if to.is_none() {
-                        to = Some(NavAid::Airport(Rc::clone(aprt)));
+                        to = Some(NavAid::Airport(Rc::clone(arpt)));
                     }
 
                     // First airport is origin, subsequent airports are destinations
                     match &self.origin {
                         None => {
                             // First airport = origin with optional takeoff runway
-                            self.origin = Some(Rc::clone(aprt));
+                            self.origin = Some(Rc::clone(arpt));
                             self.takeoff_rwy = rwy.clone();
                         }
                         Some(_) => {
                             // Any subsequent airport = destination with optional landing runway
-                            self.destination = Some(Rc::clone(aprt));
+                            self.destination = Some(Rc::clone(arpt));
                             self.landing_rwy = rwy.clone();
                         }
                     }

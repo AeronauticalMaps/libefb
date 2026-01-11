@@ -38,14 +38,14 @@ pub enum NavAid {
 impl NavAid {
     pub fn location(&self) -> Option<LocationIndicator> {
         match self {
-            Self::Airport(aprt) => aprt.location,
+            Self::Airport(arpt) => arpt.location,
             Self::Waypoint(wp) => wp.location,
         }
     }
 
     pub fn cycle(&self) -> Option<AiracCycle> {
         match self {
-            Self::Airport(aprt) => aprt.cycle,
+            Self::Airport(arpt) => arpt.cycle,
             Self::Waypoint(wp) => wp.cycle,
         }
     }
@@ -54,21 +54,21 @@ impl NavAid {
 impl Fix for NavAid {
     fn ident(&self) -> String {
         match self {
-            Self::Airport(aprt) => aprt.ident(),
+            Self::Airport(arpt) => arpt.ident(),
             Self::Waypoint(wp) => wp.ident(),
         }
     }
 
     fn coordinate(&self) -> Coordinate {
         match self {
-            Self::Airport(aprt) => aprt.coordinate(),
+            Self::Airport(arpt) => arpt.coordinate(),
             Self::Waypoint(wp) => wp.coordinate(),
         }
     }
 
     fn mag_var(&self) -> MagneticVariation {
         match self {
-            Self::Airport(aprt) => aprt.mag_var(),
+            Self::Airport(arpt) => arpt.mag_var(),
             Self::Waypoint(wp) => wp.mag_var(),
         }
     }

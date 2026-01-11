@@ -54,7 +54,15 @@ impl<'a, const N: usize> Alphanumeric<'a, N> {
     /// Returns an empty string if the field contains invalid UTF-8.
     #[inline]
     pub fn as_str(&self) -> &'a str {
-        std::str::from_utf8(self.0).unwrap_or("").trim_end()
+        self.as_raw_str().trim_end()
+    }
+
+    /// Returns the field as a UTF-8 string.
+    ///
+    /// Returns an empty string if the field contains invalid UTF-8.
+    #[inline]
+    pub fn as_raw_str(&self) -> &'a str {
+        std::str::from_utf8(self.0).unwrap_or("")
     }
 
     /// Returns `true` if the field contains only spaces.

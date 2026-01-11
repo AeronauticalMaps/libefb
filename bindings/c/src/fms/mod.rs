@@ -64,7 +64,9 @@ pub unsafe extern "C" fn efb_fms_nd_read(fms: &mut EfbFMS, s: *const c_char, fmt
     // TODO: Shouldn't crash when passing the wrong format!
     if let Ok(s) = unsafe { CStr::from_ptr(s).to_str() } {
         let new_nd = match fmt {
-            InputFormat::Arinc424 => NavigationData::try_from_arinc424(s),
+            // TODO: This is quite inefficient. Change the reader function once
+            //       OpenAir is parsed from an byte array too.
+            InputFormat::Arinc424 => NavigationData::try_from_arinc424(s.as_bytes()),
             InputFormat::OpenAir => NavigationData::try_from_openair(s),
         };
 
