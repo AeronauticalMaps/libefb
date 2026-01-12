@@ -23,3 +23,10 @@ keywords = ["ARINC", "ARINC-424"]
 homepage = "https://github.com/pearjo/libefb"
 repository = "https://github.com/pearjo/libefb"
 readme = "README.md"
+
+[dev-dependencies]
+criterion = "0.8.1"
+
+[[bench]]
+name = "record_benchmark"
+harness = false
