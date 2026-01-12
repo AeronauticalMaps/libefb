@@ -16,7 +16,8 @@
 use efb::nd::{Fix, NavigationData};
 use efb::route::Route;
 
-const ARINC_424_RECORDS: &'static str = r#"SEURP EDDHEDA        0        N N53374900E009591762E002000053                   P    MWGE    HAMBURG                       356462409
+const ARINC_424_RECORDS: &'static [u8] = br#"
+SEURP EDDHEDA        0        N N53374900E009591762E002000053                   P    MWGE    HAMBURG                       356462409
 SEURP EDDHEDGRW33    0120273330 N53374300E009595081                          151                                           124362502
 SEURPCEDDHED N1    ED0    V     N53482105E010015451                                 WGE           NOVEMBER1                359892409
 SEURPCEDDHED N2    ED0    V     N53405701E010000576                                 WGE           NOVEMBER2                359902409
