@@ -22,7 +22,6 @@ use std::rc::Rc;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::error::Error;
 use crate::geom::Coordinate;
 use crate::MagneticVariation;
 
@@ -34,7 +33,6 @@ mod convert;
 mod fix;
 mod location;
 mod navaid;
-mod parser;
 mod runway;
 mod waypoint;
 
@@ -44,7 +42,6 @@ pub use airspace::{Airspace, AirspaceClass, Airspaces};
 pub use fix::Fix;
 pub use location::LocationIndicator;
 pub use navaid::NavAid;
-use parser::*;
 pub use runway::*;
 pub use waypoint::*;
 
@@ -75,26 +72,6 @@ pub struct NavigationData {
 impl NavigationData {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Creates navigation data from an OpenAir string.
-    pub fn try_from_openair(s: &str) -> Result<Self, Error> {
-        let record: OpenAirRecord = s.parse()?;
-
-        let mut hasher = DefaultHasher::new();
-        s.hash(&mut hasher);
-        let partition_id = hasher.finish();
-
-        Ok(Self {
-            airports: Vec::new(),
-            airspaces: record.airspaces,
-            waypoints: Vec::new(),
-            terminal_waypoints: HashMap::new(),
-            locations: Vec::new(),
-            cycle: None,
-            partition_id,
-            partitions: HashMap::new(),
-        })
     }
 
     /// Returns a factory to build navigation data.

@@ -33,6 +33,7 @@ use crate::VerticalDistance;
 
 impl NavigationData {
     pub fn try_from_openair(s: &str) -> Result<Self, Error> {
+        // TODO: Move OpenAir parser into dedicated crate and optimize parsing.
         let record: OpenAirRecord = s.parse()?;
 
         let mut hasher = DefaultHasher::new();
