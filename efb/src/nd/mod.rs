@@ -22,6 +22,7 @@ use std::rc::Rc;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+use crate::error::Error;
 use crate::geom::Coordinate;
 use crate::MagneticVariation;
 
@@ -67,6 +68,7 @@ pub struct NavigationData {
     cycle: Option<AiracCycle>,
     partition_id: u64,
     partitions: HashMap<u64, NavigationData>,
+    errors: Vec<Error>,
 }
 
 impl NavigationData {
@@ -193,6 +195,11 @@ impl NavigationData {
                     .map(|_| id)
             })
             .collect()
+    }
+
+    /// Returns all possible data errors.
+    pub fn errors(&self) -> &[Error] {
+        &self.errors
     }
 
     pub(crate) fn airports(&self) -> impl Iterator<Item = &Rc<Airport>> {

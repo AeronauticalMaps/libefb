@@ -51,7 +51,7 @@ impl NavigationData {
 
                 Ok(())
             }() {
-                return Err(Error::InvalidA424 {
+                builder.add_error(Error::InvalidA424 {
                     record: bytes.to_vec(),
                     error: e.to_string(),
                 });

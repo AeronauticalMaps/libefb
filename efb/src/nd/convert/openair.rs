@@ -49,6 +49,7 @@ impl NavigationData {
             cycle: None,
             partition_id,
             partitions: HashMap::new(),
+            errors: Vec::new(),
         })
     }
 }

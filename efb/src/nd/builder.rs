@@ -68,6 +68,7 @@ impl NavigationDataBuilder {
             cycle: self.cycle,
             partition_id: self.partition_id,
             partitions: HashMap::new(),
+            errors: self.errors,
         }
     }
 
@@ -100,6 +101,13 @@ impl NavigationDataBuilder {
                     .push(Rc::new(wp));
             }
         }
+    }
+
+    pub fn add_error<E>(&mut self, e: E)
+    where
+        E: Into<Error>,
+    {
+        self.errors.push(e.into());
     }
 
     pub fn with_source(mut self, data: &[u8]) -> Self {
