@@ -44,5 +44,5 @@ fn main() {
     }
 
     // Write the generated code
-    fs::write(&handbook, content).unwrap();
+    fs::write(handbook, content).unwrap();
 }

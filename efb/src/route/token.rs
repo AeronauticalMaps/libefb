@@ -183,7 +183,7 @@ impl Tokens {
                     match Self::resolve_in_terminal_areas(
                         terminal.as_ref(),
                         Self::lookahead_terminal_area(&words[i + 1..]).as_ref(),
-                        &ident,
+                        ident,
                         nd,
                     ) {
                         (Some(wp), None) | (None, Some(wp)) => TokenKind::NavAid(wp),
