@@ -29,6 +29,7 @@ use crate::MagneticVariation;
 mod airac_cycle;
 mod airport;
 mod airspace;
+mod builder;
 mod fix;
 mod location;
 mod navaid;
@@ -45,6 +46,8 @@ pub use navaid::NavAid;
 use parser::*;
 pub use runway::*;
 pub use waypoint::*;
+
+use builder::NavigationDataBuilder;
 
 #[repr(C)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -111,6 +114,11 @@ impl NavigationData {
             partition_id,
             partitions: HashMap::new(),
         })
+    }
+
+    /// Returns a factory to build navigation data.
+    pub(super) fn builder() -> NavigationDataBuilder {
+        NavigationDataBuilder::new()
     }
 
     pub fn locations(&self) -> &[LocationIndicator] {
@@ -279,32 +287,25 @@ mod tests {
 
     #[test]
     fn airspace_at_point() {
+        let mut builder = NavigationData::builder();
         let inside = coord!(53.03759, 9.00533);
         let outside = coord!(53.04892, 8.90907);
 
-        let nd = NavigationData {
-            airspaces: vec![Airspace {
-                name: String::from("TMA BREMEN A"),
-                class: AirspaceClass::D,
-                ceiling: VerticalDistance::Fl(65),
-                floor: VerticalDistance::Msl(1500),
-                polygon: polygon![
-                    (53.10111, 8.974999),
-                    (53.102776, 9.079166),
-                    (52.97028, 9.084444),
-                    (52.96889, 8.982222),
-                    (53.10111, 8.974999)
-                ],
-            }],
-            airports: Vec::new(),
-            waypoints: Vec::new(),
-            terminal_waypoints: HashMap::new(),
-            locations: vec!["ED".try_into().expect("ED should be a valid location")],
-            cycle: None,
-            partition_id: u64::default(),
-            partitions: HashMap::new(),
-        };
+        builder.add_airspace(Airspace {
+            name: String::from("TMA BREMEN A"),
+            class: AirspaceClass::D,
+            ceiling: VerticalDistance::Fl(65),
+            floor: VerticalDistance::Msl(1500),
+            polygon: polygon![
+                (53.10111, 8.974999),
+                (53.102776, 9.079166),
+                (52.97028, 9.084444),
+                (52.96889, 8.982222),
+                (53.10111, 8.974999)
+            ],
+        });
 
+        let nd = builder.build();
         assert_eq!(nd.at(&inside), vec![&nd.airspaces[0]]);
         assert!(nd.at(&outside).is_empty());
     }
