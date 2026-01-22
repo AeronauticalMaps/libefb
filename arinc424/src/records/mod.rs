@@ -14,10 +14,12 @@
 // limitations under the License.
 
 mod airport;
+mod controlled_airspace;
 mod runway;
 mod waypoint;
 
 pub use airport::Airport;
+pub use controlled_airspace::ControlledAirspace;
 pub use runway::Runway;
 pub use waypoint::Waypoint;
 
@@ -26,6 +28,7 @@ use crate::record::RECORD_LENGTH;
 #[derive(Debug)]
 pub enum RecordKind {
     Airport,
+    ControlledAirspace,
     Waypoint,
     Runway,
 }
@@ -98,6 +101,7 @@ impl<'a> Iterator for Records<'a> {
                             }
                             _ => {}
                         },
+                        (b'U', b'C') => record!(RecordKind::ControlledAirspace),
                         _ => {}
                     }
                 }

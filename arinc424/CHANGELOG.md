@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Controlled airspace record
 - Record iterator (`Records`) for streaming raw ARINC 424 data
 - Derive macro for generating record parsers with less boilerplate
 - Benchmarks for record parsing performance
