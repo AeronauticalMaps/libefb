@@ -114,16 +114,16 @@ impl CGEnvelope {
             .limits
             .iter()
             .map(|mb| algorithm::Point {
-                x: mb.distance.to_si(),
-                y: mb.mass.to_si(),
+                x: mb.distance.to_si() as f64,
+                y: mb.mass.to_si() as f64,
             })
             .collect();
 
         let wn = |mass: &Mass, balance: &Length| -> i32 {
             algorithm::winding_number(
                 &algorithm::Point {
-                    x: balance.to_si(),
-                    y: mass.to_si(),
+                    x: balance.to_si() as f64,
+                    y: mass.to_si() as f64,
                 },
                 &envelope,
             )

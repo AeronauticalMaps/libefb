@@ -34,7 +34,8 @@
 //!
 //! // Read navigation data from ARINC 424 records. Here we have the two airports
 //! // EDDH (Hamburg) with the runway 33 and EDHF (Itzehoe) with runway 20.
-//! let records = r#"SEURP EDDHEDA        0        N N53374900E009591762E002000053                   P    MWGE    HAMBURG                       356462409
+//! let records = br#"
+//! SEURP EDDHEDA        0        N N53374900E009591762E002000053                   P    MWGE    HAMBURG                       356462409
 //! SEURP EDDHEDGRW33    0120273330 N53374300E009595081                          151                                           124362502
 //! SEURP EDHFEDA        0        N N53593300E009343600E000000082                   P    MWGE    ITZEHOE/HUNGRIGER WOLF        320782409
 //! SEURP EDHFEDGRW20    0034122060 N53594752E009344856                          098                                           120792502
@@ -67,6 +68,7 @@
 //! ## A
 //!
 //! - **AFM** Aircraft Flight Manual
+//! - **ARINC** Aeronautical Radio Incorporated
 //!
 //! ## E
 //!

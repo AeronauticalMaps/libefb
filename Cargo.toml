@@ -16,6 +16,7 @@
 [workspace]
 members = [
     "arinc424",
+    "arinc424-derive",
     "efb",
     "bindings/c",
     "bindings/python",

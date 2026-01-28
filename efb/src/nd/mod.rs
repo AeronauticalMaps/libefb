@@ -29,10 +29,11 @@ use crate::MagneticVariation;
 mod airac_cycle;
 mod airport;
 mod airspace;
+mod builder;
+mod convert;
 mod fix;
 mod location;
 mod navaid;
-mod parser;
 mod runway;
 mod waypoint;
 
@@ -42,9 +43,10 @@ pub use airspace::{Airspace, AirspaceClass, Airspaces};
 pub use fix::Fix;
 pub use location::LocationIndicator;
 pub use navaid::NavAid;
-use parser::*;
 pub use runway::*;
 pub use waypoint::*;
+
+use builder::NavigationDataBuilder;
 
 #[repr(C)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -66,6 +68,7 @@ pub struct NavigationData {
     cycle: Option<AiracCycle>,
     partition_id: u64,
     partitions: HashMap<u64, NavigationData>,
+    errors: Vec<Error>,
 }
 
 impl NavigationData {
@@ -73,44 +76,9 @@ impl NavigationData {
         Self::default()
     }
 
-    /// Creates navigation data from an ARINC 424 string.
-    pub fn try_from_arinc424(s: &str) -> Result<Self, Error> {
-        let record: Arinc424Record = s.parse()?;
-
-        let mut hasher = DefaultHasher::new();
-        s.hash(&mut hasher);
-        let partition_id = hasher.finish();
-
-        Ok(Self {
-            airports: record.airports,
-            airspaces: Vec::new(),
-            waypoints: record.waypoints,
-            terminal_waypoints: record.terminal_waypoints,
-            locations: record.locations,
-            cycle: record.cycle,
-            partition_id,
-            partitions: HashMap::new(),
-        })
-    }
-
-    /// Creates navigation data from an OpenAir string.
-    pub fn try_from_openair(s: &str) -> Result<Self, Error> {
-        let record: OpenAirRecord = s.parse()?;
-
-        let mut hasher = DefaultHasher::new();
-        s.hash(&mut hasher);
-        let partition_id = hasher.finish();
-
-        Ok(Self {
-            airports: Vec::new(),
-            airspaces: record.airspaces,
-            waypoints: Vec::new(),
-            terminal_waypoints: HashMap::new(),
-            locations: Vec::new(),
-            cycle: None,
-            partition_id,
-            partitions: HashMap::new(),
-        })
+    /// Returns a factory to build navigation data.
+    pub(super) fn builder() -> NavigationDataBuilder {
+        NavigationDataBuilder::new()
     }
 
     pub fn locations(&self) -> &[LocationIndicator] {
@@ -178,8 +146,8 @@ impl NavigationData {
             .map(|wp| NavAid::Waypoint(Rc::clone(wp)))
             .or(self
                 .airports()
-                .find(|&aprt| aprt.ident() == ident)
-                .map(|aprt| NavAid::Airport(Rc::clone(aprt))))
+                .find(|&arpt| arpt.ident() == ident)
+                .map(|arpt| NavAid::Airport(Rc::clone(arpt))))
     }
 
     /// Searches for a waypoint within a terminal area.
@@ -227,6 +195,11 @@ impl NavigationData {
                     .map(|_| id)
             })
             .collect()
+    }
+
+    /// Returns all possible data errors.
+    pub fn errors(&self) -> &[Error] {
+        &self.errors
     }
 
     pub(crate) fn airports(&self) -> impl Iterator<Item = &Rc<Airport>> {
@@ -279,32 +252,25 @@ mod tests {
 
     #[test]
     fn airspace_at_point() {
+        let mut builder = NavigationData::builder();
         let inside = coord!(53.03759, 9.00533);
         let outside = coord!(53.04892, 8.90907);
 
-        let nd = NavigationData {
-            airspaces: vec![Airspace {
-                name: String::from("TMA BREMEN A"),
-                class: AirspaceClass::D,
-                ceiling: VerticalDistance::Fl(65),
-                floor: VerticalDistance::Msl(1500),
-                polygon: polygon![
-                    (53.10111, 8.974999),
-                    (53.102776, 9.079166),
-                    (52.97028, 9.084444),
-                    (52.96889, 8.982222),
-                    (53.10111, 8.974999)
-                ],
-            }],
-            airports: Vec::new(),
-            waypoints: Vec::new(),
-            terminal_waypoints: HashMap::new(),
-            locations: vec!["ED".try_into().expect("ED should be a valid location")],
-            cycle: None,
-            partition_id: u64::default(),
-            partitions: HashMap::new(),
-        };
+        builder.add_airspace(Airspace {
+            name: String::from("TMA BREMEN A"),
+            class: AirspaceClass::D,
+            ceiling: VerticalDistance::Fl(65),
+            floor: VerticalDistance::Msl(1500),
+            polygon: polygon![
+                (53.10111, 8.974999),
+                (53.102776, 9.079166),
+                (52.97028, 9.084444),
+                (52.96889, 8.982222),
+                (53.10111, 8.974999)
+            ],
+        });
 
+        let nd = builder.build();
         assert_eq!(nd.at(&inside), vec![&nd.airspaces[0]]);
         assert!(nd.at(&outside).is_empty());
     }

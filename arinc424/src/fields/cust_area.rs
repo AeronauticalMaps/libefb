@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,13 +13,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{Field, FieldError};
-use std::str::FromStr;
+use crate::{Alphanumeric, Error, FixedField};
 
-#[derive(Debug, PartialEq)]
-pub enum CustArea {
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+pub enum CustArea<'a> {
     Blank,
-    Custom,
+    Customer(Alphanumeric<'a, 3>),
     PreferredRoute,
     AFR,
     CAN,
@@ -33,26 +32,24 @@ pub enum CustArea {
     USA,
 }
 
-impl Field for CustArea {}
+impl<'a> FixedField<'a> for CustArea<'a> {
+    const LENGTH: usize = 3;
 
-impl FromStr for CustArea {
-    type Err = FieldError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match &s[1..4] {
-            "AFR" => Self::AFR,
-            "CAN" => Self::CAN,
-            "EEU" => Self::EEU,
-            "EUR" => Self::EUR,
-            "LAM" => Self::LAM,
-            "MES" => Self::MES,
-            "PAC" => Self::PAC,
-            "SAM" => Self::SAM,
-            "SPA" => Self::SPA,
-            "USA" => Self::USA,
-            "PDR" => Self::PreferredRoute,
-            "   " => Self::Blank,
-            _ => Self::Custom,
+    fn from_bytes(bytes: &'a [u8]) -> Result<Self, Error> {
+        Ok(match &bytes[0..3] {
+            b"AFR" => Self::AFR,
+            b"CAN" => Self::CAN,
+            b"EEU" => Self::EEU,
+            b"EUR" => Self::EUR,
+            b"LAM" => Self::LAM,
+            b"MES" => Self::MES,
+            b"PAC" => Self::PAC,
+            b"SAM" => Self::SAM,
+            b"SPA" => Self::SPA,
+            b"USA" => Self::USA,
+            b"PDR" => Self::PreferredRoute,
+            b"   " => Self::Blank,
+            code => Self::Customer(Alphanumeric::from_bytes(code)?),
         })
     }
 }

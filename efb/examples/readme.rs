@@ -1,4 +1,4 @@
-use std::fs::read_to_string;
+use std::fs::read;
 use std::path::Path;
 
 use efb::prelude::*;
@@ -7,7 +7,7 @@ fn main() -> Result<(), Error> {
     let mut fms = FMS::new();
 
     // Read a ARINC 424 file downloaded from https://www.openflightmaps.org
-    let records = read_to_string(Path::new("arinc_ed.pc")).unwrap_or_default();
+    let records = read(Path::new("arinc_ed.pc")).unwrap_or_default();
 
     // Read the German navigation data from the ARINC 424 record
     let ed = NavigationData::try_from_arinc424(&records)?;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,49 +13,53 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{Field, FieldError, Latitude, Longitude};
-use std::str::FromStr;
+use crate::{Error, FixedField};
 
-#[derive(Debug, PartialEq)]
-pub enum MagVar<const I: usize, const J: usize, const K: usize> {
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
+pub enum MagVar {
     /// The variation is east of true north.
-    East(u8, u8),
+    East(f32),
     /// The variation is west of true north.
-    West(u8, u8),
+    West(f32),
     /// The point is oriented to true north.
     OrientedToTrueNorth,
-    /// Use the world magnetic model (WMM) if no variation is provided.
-    WMM(Latitude<J>, Longitude<K>),
 }
 
-impl<const I: usize, const J: usize, const K: usize> Field for MagVar<I, J, K> {}
+impl FixedField<'_> for MagVar {
+    const LENGTH: usize = 5;
 
-impl<const I: usize, const J: usize, const K: usize> FromStr for MagVar<I, J, K> {
-    type Err = FieldError;
+    fn from_bytes(bytes: &'_ [u8]) -> Result<Self, Error> {
+        let code = bytes[0];
+        let deg = || -> Result<f32, Error> {
+            Ok(parse_numeric!(4, u32, &bytes[1..5])? as f32 / 100.0) // includes centidegree;
+        };
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let first_column = &s[I..I + 1];
-
-        match first_column {
-            "E" | "W" => {
-                let degree: u8 = s[I + 1..I + 4]
-                    .parse()
-                    .map_err(|_| FieldError::NotANumber)?;
-                let centidegree: u8 = s[I + 4..I + 5]
-                    .parse()
-                    .map_err(|_| FieldError::NotANumber)?;
-
-                if first_column == "E" {
-                    Ok(Self::East(degree, centidegree))
-                } else {
-                    Ok(Self::West(degree, centidegree))
-                }
-            }
-            "T" => Ok(Self::OrientedToTrueNorth),
-            " " => Ok(Self::WMM(s.parse()?, s.parse()?)), // TODO this is not valid ARINC 424
-            _ => Err(FieldError::UnexpectedChar(
-                "expected E, W or T as variation direction",
-            )),
+        match code {
+            b'E' => Ok(Self::East(deg()?)),
+            b'W' => Ok(Self::West(deg()?)),
+            b'T' => Ok(Self::OrientedToTrueNorth),
+            _ => Err(Error::InvalidCharacter {
+                field: "Magnetic Variation",
+                byte: code,
+                expected: "E, W or T as variation direction",
+            }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_mag_var() {
+        let mag_var = MagVar::from_bytes(b"E0140");
+        assert_eq!(mag_var, Ok(MagVar::East(1.4)));
+
+        let mag_var = MagVar::from_bytes(b"W0410");
+        assert_eq!(mag_var, Ok(MagVar::West(4.1)));
+
+        let mag_var = MagVar::from_bytes(b"T0000");
+        assert_eq!(mag_var, Ok(MagVar::OrientedToTrueNorth));
     }
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,86 +14,64 @@
 // limitations under the License.
 
 use crate::fields::*;
-use std::str::FromStr;
+use crate::Record;
 
-// TODO add missing fields
-pub struct Airport {
+// TODO: add missing fields
+#[derive(Record)]
+pub struct Airport<'a> {
     pub record_type: RecordType,
-    pub cust_area: CustArea,
+    pub cust_area: CustArea<'a>,
     pub sec_code: SecCode,
-    pub arpt_ident: ArptHeliIdent<6>,
-    pub icao_code: IcaoCode<10>,
-    pub sub_code: SubCode<12>,
-    pub iata: Iata<13>,
-    pub cont_nr: ContNr<21>,
-    pub latitude: Latitude<32>,
-    pub longitude: Longitude<41>,
-    pub mag_var: MagVar<51, 32, 41>,
-    pub mag_true_ind: MagTrueInd<85>,
-    pub datum: Datum<86>,
-    pub frn: FileRecordNumber,
-    pub cycle: Cycle,
-}
-
-impl FromStr for Airport {
-    type Err = FieldError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self {
-            record_type: s.parse()?,
-            cust_area: s.parse()?,
-            sec_code: s.parse()?,
-            arpt_ident: s.parse()?,
-            icao_code: s.parse()?,
-            sub_code: s.parse()?,
-            iata: s.parse()?,
-            cont_nr: s.parse()?,
-            latitude: s.parse()?,
-            longitude: s.parse()?,
-            mag_var: s.parse()?,
-            mag_true_ind: s.parse()?,
-            datum: s.parse()?,
-            frn: s.parse()?,
-            cycle: s.parse()?,
-        })
-    }
+    #[arinc424(skip(1))]
+    pub arpt_ident: ArptHeliIdent<'a>,
+    pub icao_code: IcaoCode<'a>,
+    pub sub_code: SubCode<'a>,
+    pub iata: Iata<'a>,
+    #[arinc424(skip(5))]
+    pub cont_nr: ContNr<'a>,
+    #[arinc424(skip(10))]
+    pub latitude: Latitude<'a>,
+    pub longitude: Longitude<'a>,
+    pub mag_var: Option<MagVar>,
+    #[arinc424(field = 86)]
+    pub mag_true_ind: MagTrueInd,
+    pub datum: Datum,
+    #[arinc424(field = 94)]
+    pub airport_name: NameField<'a>,
+    #[arinc424(field = 124)]
+    pub frn: FileRecordNumber<'a>,
+    pub cycle: Cycle<'a>,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const PA_AIRPORT: &'static str = "SEURP EDDHEDA        0        N N53374900E009591762E002000053                   P    MWGE    HAMBURG                       356512407";
+    const AIRPORT: &'static [u8] = b"SUSAP KJFKK6AJFK     0     145YHN40382374W073464329W013000013         1800018000C    MNAR    JOHN F KENNEDY INTL           300671912";
 
     #[test]
     fn airport_record() {
-        match Airport::from_str(PA_AIRPORT) {
-            Ok(wp) => {
-                assert_eq!(wp.record_type, RecordType::Standard);
-                assert_eq!(wp.cust_area, CustArea::EUR);
-                assert_eq!(wp.sec_code, SecCode::Airport);
-                assert_eq!(wp.arpt_ident, "EDDH");
-                assert_eq!(wp.icao_code, "ED");
-                assert_eq!(wp.sub_code, SubCode::ReferencePoint);
-                assert_eq!(wp.iata, "   ");
-                assert_eq!(wp.cont_nr, "0");
-                assert_eq!(wp.latitude.cardinal, CardinalDirection::North);
-                assert_eq!(wp.latitude.degree, 53);
-                assert_eq!(wp.latitude.minutes, 37);
-                assert_eq!(wp.latitude.seconds, 49);
-                assert_eq!(wp.latitude.centiseconds, 0);
-                assert_eq!(wp.longitude.cardinal, CardinalDirection::East);
-                assert_eq!(wp.longitude.degree, 9);
-                assert_eq!(wp.longitude.minutes, 59);
-                assert_eq!(wp.longitude.seconds, 17);
-                assert_eq!(wp.longitude.centiseconds, 62);
-                assert_eq!(wp.mag_var, MagVar::East(2, 0));
-                assert_eq!(wp.mag_true_ind, MagTrueInd::Magnetic);
-                assert_eq!(wp.datum, Datum::WGE);
-                assert_eq!(wp.frn, 35651);
-                assert_eq!(wp.cycle, Cycle { year: 24, cycle: 7 });
-            }
-            _ => panic!("Waypoint should be parsed."),
-        }
+        let arpt = Airport::try_from(AIRPORT).expect("airport should parse");
+
+        assert_eq!(arpt.record_type, RecordType::Standard);
+        assert_eq!(arpt.cust_area, CustArea::USA);
+        assert_eq!(arpt.sec_code, SecCode::Airport);
+        assert_eq!(arpt.arpt_ident.as_str(), "KJFK");
+        assert_eq!(arpt.icao_code.as_str(), "K6");
+        assert_eq!(
+            arpt.sub_code.kind(&arpt.sec_code),
+            Ok(SubCodeKind::ReferencePoint)
+        );
+        assert_eq!(arpt.iata.as_str(), "JFK");
+        assert_eq!(arpt.cont_nr.as_str(), "0");
+        assert_eq!(arpt.latitude.as_decimal(), Ok(40.63992777777778));
+        assert_eq!(arpt.longitude.as_decimal(), Ok(-73.77869166666666));
+        assert_eq!(arpt.mag_var, Some(MagVar::West(1.3)));
+        assert_eq!(arpt.mag_true_ind, MagTrueInd::Magnetic);
+        assert_eq!(arpt.datum, Datum::NAR);
+        assert_eq!(arpt.airport_name.as_str(), "JOHN F KENNEDY INTL");
+        assert_eq!(arpt.frn.as_u32(), Ok(30067));
+        assert_eq!(arpt.cycle.year(), Ok(19));
+        assert_eq!(arpt.cycle.cycle(), Ok(12));
     }
 }

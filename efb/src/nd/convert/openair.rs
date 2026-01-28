@@ -26,8 +26,55 @@ use std::str::FromStr;
 use crate::error::Error;
 use crate::fc;
 use crate::geom::{Coordinate, Polygon};
-use crate::nd::{Airspace, AirspaceClass};
+use crate::nd::{Airspace, AirspaceClass, NavigationData};
 use crate::VerticalDistance;
+
+impl NavigationData {
+    pub fn try_from_openair(s: &str) -> Result<Self, Error> {
+        // TODO: Move OpenAir parser into dedicated crate and optimize parsing.
+        let mut builder = NavigationData::builder();
+        let mut element = OpenAirElement::new();
+
+        s.lines().for_each(|command| {
+            if let Some(airspace) = Self::parse_command(command, &mut element) {
+                builder.add_airspace(airspace);
+            }
+        });
+
+        builder.add_airspace((&mut element).into());
+
+        Ok(builder.with_source(s.as_bytes()).build())
+    }
+
+    fn parse_command(command: &str, element: &mut OpenAirElement) -> Option<Airspace> {
+        let record_type = command.get(0..2);
+        let record = command.get(3..);
+        let mut airspace = None;
+
+        // TODO: Flag invalid airspaces!
+        match record_type {
+            Some("AC") => {
+                if element.ac.is_some() {
+                    airspace = Some(element.into());
+                    *element = OpenAirElement::new();
+                }
+
+                element.ac = record?.parse::<String>().ok();
+            }
+            Some("AN") => element.an = record?.parse::<String>().ok(),
+            Some("AH") => element.ah = record?.parse::<OpenAirVerticalDistance>().ok(),
+            Some("AL") => element.al = record?.parse::<OpenAirVerticalDistance>().ok(),
+            Some("DP") => {
+                if let Ok(coordinate) = record?.parse::<OpenAirCoordinate>() {
+                    element.dp.push(coordinate.into_inner());
+                }
+            }
+            _ => {}
+        }
+
+        airspace
+    }
+}
 
 /// An element representing an airspace.
 struct OpenAirElement {
@@ -207,60 +254,6 @@ impl FromStr for OpenAirVerticalDistance {
     }
 }
 
-pub struct OpenAirRecord {
-    pub airspaces: Vec<Airspace>,
-}
-
-impl OpenAirRecord {
-    fn parse_command(command: &str, element: &mut OpenAirElement) -> Option<Airspace> {
-        let record_type = command.get(0..2);
-        let record = command.get(3..);
-        let mut airspace = None;
-
-        // TODO: Flag invalid airspaces!
-        match record_type {
-            Some("AC") => {
-                if element.ac.is_some() {
-                    airspace = Some(element.into());
-                    *element = OpenAirElement::new();
-                }
-
-                element.ac = record?.parse::<String>().ok();
-            }
-            Some("AN") => element.an = record?.parse::<String>().ok(),
-            Some("AH") => element.ah = record?.parse::<OpenAirVerticalDistance>().ok(),
-            Some("AL") => element.al = record?.parse::<OpenAirVerticalDistance>().ok(),
-            Some("DP") => {
-                if let Ok(coordinate) = record?.parse::<OpenAirCoordinate>() {
-                    element.dp.push(coordinate.into_inner());
-                }
-            }
-            _ => {}
-        }
-
-        airspace
-    }
-}
-
-impl FromStr for OpenAirRecord {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut airspaces = Vec::new();
-        let mut element = OpenAirElement::new();
-
-        s.lines().for_each(|command| {
-            if let Some(airspace) = Self::parse_command(command, &mut element) {
-                airspaces.push(airspace);
-            }
-        });
-
-        airspaces.push((&mut element).into());
-
-        Ok(Self { airspaces })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,8 +270,9 @@ DP 53:06:10 N 9:04:45 E
 DP 52:58:13 N 9:05:04 E
 DP 52:58:08 N 8:58:56 E
 DP 53:06:04 N 8:58:30 E
-"#
-        .parse::<OpenAirRecord>();
+"#;
+
+        let nd = NavigationData::try_from_openair(record).expect("OpenAir should parse");
 
         let tma_bremen_a = Airspace {
             name: String::from("TMA BREMEN A"),
@@ -294,7 +288,7 @@ DP 53:06:04 N 8:58:30 E
             ],
         };
 
-        assert_eq!(record.unwrap().airspaces, vec!(tma_bremen_a));
+        assert_eq!(nd.airspaces, vec!(tma_bremen_a));
     }
 
     #[test]

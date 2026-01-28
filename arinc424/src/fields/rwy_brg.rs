@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,40 +13,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::str::FromStr;
+use crate::{Error, FixedField};
 
-use super::{Field, FieldError};
-
-#[derive(Debug, PartialEq)]
-pub enum RwyBrg<const I: usize> {
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
+pub enum RwyBrg {
     MagneticNorth(f32),
     TrueNorth(u32),
 }
 
-impl<const I: usize> Field for RwyBrg<I> {}
+impl FixedField<'_> for RwyBrg {
+    const LENGTH: usize = 4;
 
-impl<const I: usize> FromStr for RwyBrg<I> {
-    type Err = FieldError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match &s[I + 3..I + 4] {
-            "T" => {
-                let degree = s[I..I + 3]
-                    .parse::<u32>()
-                    .map_err(|_| FieldError::NotANumber)?;
-
-                Ok(Self::TrueNorth(degree))
+    fn from_bytes(bytes: &'_ [u8]) -> Result<Self, Error> {
+        match bytes[3] {
+            b'T' => {
+                let deg = parse_numeric!(3, u32, bytes[0..3])?;
+                Ok(Self::TrueNorth(deg))
             }
             _ => {
-                let degree = s[I..I + 3]
-                    .parse::<u32>()
-                    .map_err(|_| FieldError::NotANumber)?;
-
-                let decimal = s[I + 3..I + 4]
-                    .parse::<u32>()
-                    .map_err(|_| FieldError::NotANumber)?;
-
-                Ok(Self::MagneticNorth(degree as f32 + decimal as f32 / 10.0))
+                let deg = parse_numeric!(4, u32, bytes[0..4])? as f32 / 10.0;
+                Ok(Self::MagneticNorth(deg))
             }
         }
     }
@@ -58,13 +44,13 @@ mod tests {
 
     #[test]
     fn parse_true_north() {
-        assert_eq!("347T".parse::<RwyBrg<0>>(), Ok(RwyBrg::TrueNorth(347)));
+        assert_eq!(RwyBrg::from_bytes(b"347T"), Ok(RwyBrg::TrueNorth(347)));
     }
 
     #[test]
     fn parse_magnetic_north() {
         assert_eq!(
-            "2302".parse::<RwyBrg<0>>(),
+            RwyBrg::from_bytes(b"2302"),
             Ok(RwyBrg::MagneticNorth(230.2))
         );
     }

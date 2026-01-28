@@ -28,7 +28,7 @@ pub struct Airport {
     pub(crate) iata_designator: String,
     pub(crate) name: String,
     pub(crate) coordinate: Coordinate,
-    pub(crate) mag_var: MagneticVariation,
+    pub(crate) mag_var: Option<MagneticVariation>,
     pub(crate) elevation: VerticalDistance,
     pub(crate) runways: Vec<Runway>,
     pub(crate) location: Option<LocationIndicator>,

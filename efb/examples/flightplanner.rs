@@ -20,7 +20,8 @@ use efb::nd::{RunwayConditionCode, RunwaySurface};
 use efb::prelude::*;
 use efb::*;
 
-const ARINC_424_RECORDS: &'static str = r#"SEURP EDDHEDA        0        N N53374900E009591762E002000053                   P    MWGE    HAMBURG                       356462409
+const ARINC_424_RECORDS: &'static [u8] = br#"
+SEURP EDDHEDA        0        N N53374900E009591762E002000053                   P    MWGE    HAMBURG                       356462409
 SEURP EDDHEDGRW05    0106630500 N53371100E009580180                          151                                           124362502
 SEURP EDDHEDGRW23    0106632300 N53380900E009595876                          151                                           124362502
 SEURP EDDHEDGRW15    0120271530 N53391500E009583076                          151                                           124362502

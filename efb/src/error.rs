@@ -50,13 +50,15 @@ pub enum Error {
     /// airport.
     UnexpectedRunwayInRoute(String),
     /// The route includes a runway that is not found on the associated airport.
-    UnknownRunwayInRoute { aprt: String, rwy: String },
+    UnknownRunwayInRoute { arpt: String, rwy: String },
     /// A terminal waypoint needs to match to exactly one of the terminal areas
     /// in scope.
     AmbiguousTerminalArea { wp: String, a: String, b: String },
 
     // Errors that are related to parsing of input data:
     //
+    /// The ARINC 424 navigation data record is invalid.
+    InvalidA424 { record: Vec<u8>, error: String },
     /// The string that should be parsed to create some type is malformed.
     UnexpectedString,
     /// The value that should be returned is implausible.
@@ -106,13 +108,17 @@ impl fmt::Display for Error {
             Self::UnexpectedRunwayInRoute(rwy) => {
                 write!(f, "runway {rwy} should follow an airport")
             }
-            Self::UnknownRunwayInRoute { aprt, rwy } => {
-                write!(f, "unknown runway {rwy} found for {aprt}")
+            Self::UnknownRunwayInRoute { arpt, rwy } => {
+                write!(f, "unknown runway {rwy} found for {arpt}")
             }
             Self::AmbiguousTerminalArea { wp, a, b } => {
                 write!(f, "waypoint {wp} found in terminal area {a} and {b}")
             }
 
+            Self::InvalidA424 { record, error } => {
+                let s = String::from_utf8_lossy(record);
+                write!(f, "invalid ARINC 424: {error} ({s})")
+            }
             Self::UnexpectedString => write!(f, "unexpected string"),
             Self::ImplausibleValue => write!(f, "value seams implausuble"),
             Self::UnknownLocationIndicator(code) => write!(

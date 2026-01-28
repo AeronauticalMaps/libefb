@@ -16,6 +16,6 @@
 //! Flight Computer.
 
 /// Converts an angle from degree minutes and seconds to decimal.
-pub fn dms_to_decimal(degree: u8, minutes: u8, seconds: u8) -> f32 {
-    degree as f32 + minutes as f32 / 60.0 + seconds as f32 / 3600.0
+pub fn dms_to_decimal(degree: u8, minutes: u8, seconds: u8) -> f64 {
+    degree as f64 + minutes as f64 / 60.0 + seconds as f64 / 3600.0
 }

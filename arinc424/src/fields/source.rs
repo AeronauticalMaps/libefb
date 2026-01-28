@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,28 +13,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::str::FromStr;
+use crate::{Error, FixedField};
 
-use super::{Field, FieldError};
-
-#[derive(Debug, PartialEq)]
-pub enum Source<const I: usize> {
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+pub enum Source {
     GovernmentSources,
     OtherSources,
     BearingInTrue,
 }
 
-impl<const I: usize> Field for Source<I> {}
+impl FixedField<'_> for Source {
+    const LENGTH: usize = 1;
 
-impl<const I: usize> FromStr for Source<I> {
-    type Err = FieldError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match &s[I..I + 1] {
-            "Y" => Ok(Self::GovernmentSources),
-            "N" | " " => Ok(Self::OtherSources),
-            "T" => Ok(Self::BearingInTrue),
-            _ => Err(FieldError::UnexpectedChar("unexpected source identifier")),
+    fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        match bytes[0] {
+            b'Y' => Ok(Self::GovernmentSources),
+            b'N' | b' ' => Ok(Self::OtherSources),
+            b'T' => Ok(Self::BearingInTrue),
+            byte => Err(Error::InvalidCharacter {
+                field: "Source",
+                byte,
+                expected: "Y, N or T",
+            }),
         }
     }
 }

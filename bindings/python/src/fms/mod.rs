@@ -63,7 +63,7 @@ impl PyFMS {
     /// :param InputFormat fmt: The format of the string.
     pub fn nd_read(&mut self, s: &str, fmt: PyInputFormat) {
         let new_nd = match fmt {
-            PyInputFormat::Arinc424 => NavigationData::try_from_arinc424(s),
+            PyInputFormat::Arinc424 => NavigationData::try_from_arinc424(s.as_bytes()),
             PyInputFormat::OpenAir => NavigationData::try_from_openair(s),
         };
 

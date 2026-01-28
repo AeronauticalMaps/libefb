@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,152 +13,74 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cmp::PartialEq;
-use std::fmt;
-use std::str;
+use crate::{Alphanumeric, Numeric};
 
-mod arpt_heli_ident;
-mod cont_nr;
+mod arc_dist_brg;
+mod arsp_type;
+mod boundary_via;
 mod coordinate;
 mod cust_area;
 mod cycle;
 mod datum;
-mod fix_ident;
-mod frn;
-mod iata;
-mod icao_code;
+mod level;
+mod lower_upper_limit;
 mod mag_true_ind;
 mod mag_var;
-mod name_desc;
 mod name_ind;
+mod notam;
 mod record_type;
-mod regn_code;
 mod runway_id;
 mod rwy_brg;
 mod rwy_grad;
 mod sec_sub_code;
 mod source;
-mod waypoint_type;
+mod time_cd;
+mod uav;
+mod unit_ind;
 mod waypoint_usage;
 
-pub use arpt_heli_ident::ArptHeliIdent;
-pub use cont_nr::ContNr;
-pub use coordinate::{CardinalDirection, Latitude, Longitude};
+pub use arc_dist_brg::{ArcBearing, ArcDistance};
+pub use arsp_type::ArspType;
+pub use boundary_via::{BoundaryPath, BoundaryVia};
+pub use coordinate::{Latitude, Longitude};
 pub use cust_area::CustArea;
 pub use cycle::Cycle;
 pub use datum::Datum;
-pub use fix_ident::FixIdent;
-pub use frn::FileRecordNumber;
-pub use iata::Iata;
-pub use icao_code::IcaoCode;
+pub use level::Level;
+pub use lower_upper_limit::LowerUpperLimit;
 pub use mag_true_ind::MagTrueInd;
 pub use mag_var::MagVar;
-pub use name_desc::NameDesc;
 pub use name_ind::NameInd;
+pub use notam::NOTAM;
 pub use record_type::RecordType;
-pub use regn_code::RegnCode;
 pub use runway_id::RunwayId;
 pub use rwy_brg::RwyBrg;
 pub use rwy_grad::RwyGrad;
-pub use sec_sub_code::{SecCode, SubCode};
+pub use sec_sub_code::{SecCode, SubCode, SubCodeKind};
 pub use source::Source;
-pub use waypoint_type::WaypointType;
+pub use time_cd::TimeCode;
+pub use uav::UAV;
+pub use unit_ind::UnitIndicator;
 pub use waypoint_usage::WaypointUsage;
 
-#[derive(Debug, PartialEq)]
-pub enum FieldError {
-    InvalidLength,
-    InvalidValue(&'static str),
-    /// An error returned when a field contained an unexpected character.
-    UnexpectedChar(&'static str),
-    /// A numeric field is, unexpectedly, not a number.
-    NotANumber,
-    /// The value of a numeric field is, unexpectedly, out of an allowed range.
-    NumberOutOfRange,
-}
+pub type ArptHeliIdent<'a> = Alphanumeric<'a, 4>;
+pub type FileRecordNumber<'a> = Numeric<'a, 5>;
+pub type FixIdent<'a> = Alphanumeric<'a, 5>;
+pub type Iata<'a> = Alphanumeric<'a, 3>;
+pub type IcaoCode<'a> = Alphanumeric<'a, 2>;
+pub type NameDesc<'a> = Alphanumeric<'a, 25>;
+pub type NameField<'a> = Alphanumeric<'a, 30>;
+pub type RegnCode<'a> = Alphanumeric<'a, 4>;
+pub type WaypointType<'a> = Alphanumeric<'a, 3>;
 
-pub trait Field
-where
-    Self: Sized + str::FromStr,
-{
-}
+/// 5.12 Sequence Number
+pub type SequenceNumber<'a, const N: usize> = Numeric<'a, N>;
 
-#[derive(Debug)]
-pub struct AlphaNumericField<const I: usize, const N: usize>([u8; N]);
+/// 5.16 Continuation Record Number
+pub type ContNr<'a> = Alphanumeric<'a, 1>;
 
-impl<const I: usize, const N: usize> AlphaNumericField<I, N> {
-    pub fn as_str<'a>(&'a self) -> &'a str {
-        str::from_utf8(self.0.as_slice())
-            .expect("field should decode to UTF-8")
-            .trim_end()
-    }
+/// 5.211 Required Navigation Performance (RNP)
+pub type RequiredNavigationPerformance<'a> = Numeric<'a, 3>;
 
-    pub fn into_inner(self) -> [u8; N] {
-        self.0
-    }
-}
-
-impl<const I: usize, const N: usize> Field for AlphaNumericField<I, N> {}
-
-impl<const I: usize, const N: usize> str::FromStr for AlphaNumericField<I, N> {
-    type Err = FieldError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match <[u8; N]>::try_from(s[I..I + N].as_bytes()) {
-            Ok(b) => Ok(Self(b)),
-            _ => Err(FieldError::InvalidLength),
-        }
-    }
-}
-
-impl<const I: usize, const N: usize> PartialEq<&str> for AlphaNumericField<I, N> {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == other.as_bytes()
-    }
-}
-
-impl<const I: usize, const N: usize> fmt::Display for AlphaNumericField<I, N> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            str::from_utf8(self.0.as_slice())
-                .map_err(|_| fmt::Error)?
-                .trim_end()
-        )
-    }
-}
-
-#[derive(Debug)]
-pub struct NumericField<const I: usize, const N: usize>(u32);
-
-impl<const I: usize, const N: usize> Field for NumericField<I, N> {}
-
-impl<const I: usize, const N: usize> str::FromStr for NumericField<I, N> {
-    type Err = FieldError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s[I..I + N].parse::<u32>() {
-            Ok(b) => Ok(Self(b)),
-            _ => Err(FieldError::NotANumber),
-        }
-    }
-}
-
-impl<const I: usize, const N: usize> PartialEq<u32> for NumericField<I, N> {
-    fn eq(&self, other: &u32) -> bool {
-        self.0 == *other
-    }
-}
-
-impl<const I: usize, const N: usize> fmt::Display for NumericField<I, N> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl<const I: usize, const N: usize> From<NumericField<I, N>> for u32 {
-    fn from(value: NumericField<I, N>) -> Self {
-        value.0
-    }
-}
+/// 5.215 Controlled Airspace Classification (ARSP CLASS)
+pub type AirspaceClassification<'a> = Alphanumeric<'a, 1>;

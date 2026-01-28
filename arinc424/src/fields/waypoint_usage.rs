@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,31 +13,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{Field, FieldError};
-use std::str::FromStr;
+use crate::{Error, FixedField};
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum WaypointUsage {
     HiLoAltitude,
     HiAltitude,
     LoAltitude,
     TerminalOnly,
-    RNAV,
 }
 
-impl Field for WaypointUsage {}
+impl FixedField<'_> for WaypointUsage {
+    const LENGTH: usize = 1;
 
-impl FromStr for WaypointUsage {
-    type Err = FieldError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match &s[29..31] {
-            " B" => Ok(Self::HiLoAltitude),
-            " H" => Ok(Self::HiAltitude),
-            " L" => Ok(Self::LoAltitude),
-            "  " => Ok(Self::TerminalOnly),
-            "R " => Ok(Self::RNAV),
-            _ => Err(FieldError::InvalidValue("unknown waypoint usage")),
+    fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        match &bytes[0] {
+            b'B' => Ok(Self::HiLoAltitude),
+            b'H' => Ok(Self::HiAltitude),
+            b'L' => Ok(Self::LoAltitude),
+            b' ' => Ok(Self::TerminalOnly),
+            _ => Err(Error::InvalidVariant {
+                field: "Waypoint Usage",
+                bytes: Vec::from(bytes),
+                expected: "according to ARINC 424-17 5.82",
+            }),
         }
     }
 }
