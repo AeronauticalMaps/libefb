@@ -30,7 +30,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-arinc424 = { path = "../arinc424", version = "0.2.0" }
+arinc424 = { path = "../arinc424", version = "0.3.0" }
 chrono = "0.4.42"
 geo = "0.32.0"
 geojson = { version = "0.24.2", optional = true }

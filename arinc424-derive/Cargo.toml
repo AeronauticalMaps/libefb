@@ -15,12 +15,13 @@
 
 [package]
 name = "arinc424-derive"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "Apache-2.0"
-description = "Derive macros for arinc424"
+description = "Macros to derive an ARINC 424 record"
 homepage = "https://github.com/AeronauticalMaps/libefb"
 repository = "https://github.com/AeronauticalMaps/libefb"
+readme = "../arinc424/README.md"
 
 [lib]
 proc-macro = true
