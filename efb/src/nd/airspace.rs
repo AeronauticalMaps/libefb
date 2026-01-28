@@ -49,7 +49,12 @@ pub enum AirspaceClass {
     E,
     F,
     G,
+    CTA,
     CTR,
+    TMA,
+    RadarZone,
+    TMZ,
+    RMZ,
     Restricted,
     Danger,
     Prohibited,
@@ -69,6 +74,7 @@ impl Display for AirspaceClass {
             AirspaceClass::Restricted => write!(f, "Restricted"),
             AirspaceClass::Danger => write!(f, "Danger"),
             AirspaceClass::Prohibited => write!(f, "Prohibited"),
+            _ => todo!(),
         }
     }
 }

@@ -32,6 +32,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 arinc424 = { path = "../arinc424", version = "0.2.0" }
 chrono = "0.4.42"
+geo = "0.32.0"
 geojson = { version = "0.24.2", optional = true }
 serde = { version = "1.0.219", features = ["derive", "rc"], optional = true  }
 time = { version = "0.3.36", features = ["wasm-bindgen"] }

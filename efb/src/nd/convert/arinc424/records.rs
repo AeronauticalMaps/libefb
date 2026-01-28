@@ -15,6 +15,7 @@
 
 use arinc424::records;
 
+use crate::geom::Polygon;
 use crate::measurements::Length;
 use crate::nd::*;
 use crate::VerticalDistance;
@@ -34,6 +35,30 @@ impl<'a> TryFrom<records::Airport<'a>> for Airport {
             runways: Vec::new(),
             location: Some(arpt.icao_code.try_into()?),
             cycle: Some(arpt.cycle.try_into()?),
+        })
+    }
+}
+
+impl<'a> TryFrom<records::ControlledAirspace<'a>> for Airspace {
+    type Error = arinc424::Error;
+
+    fn try_from(arsp: records::ControlledAirspace) -> Result<Self, Self::Error> {
+        Ok(Airspace {
+            name: arsp
+                .arsp_name
+                .map(|name| name.to_string())
+                .unwrap_or_default(),
+            class: (arsp.arsp_type, arsp.arsp_class).try_into()?,
+            // TODO: This should be improved.
+            ceiling: arsp
+                .upper_limit
+                .expect("first record must have limits")
+                .into(),
+            floor: arsp
+                .lower_limit
+                .expect("first record must have limits")
+                .into(),
+            polygon: Polygon::new(),
         })
     }
 }

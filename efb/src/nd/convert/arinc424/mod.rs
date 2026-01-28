@@ -18,13 +18,17 @@ use arinc424;
 use crate::error::Error;
 use crate::nd::*;
 
+mod airspace;
 mod fields;
 mod records;
+
+use airspace::AirspaceBuilder;
 
 impl NavigationData {
     /// Creates navigation data from an ARINC 424 string.
     pub fn try_from_arinc424(data: &[u8]) -> Result<Self, Error> {
         let mut builder = NavigationData::builder();
+        let mut airspace: Option<AirspaceBuilder> = None;
 
         for (kind, bytes) in arinc424::records::Records::new(data) {
             if let Err(e) = || -> Result<(), arinc424::Error> {
@@ -46,6 +50,21 @@ impl NavigationData {
                         let ident = record.arpt_ident.to_string();
                         let rwy = Runway::try_from(record)?;
                         builder.add_runway(ident, rwy);
+                    }
+
+                    arinc424::records::RecordKind::ControlledAirspace => {
+                        let record = arinc424::records::ControlledAirspace::try_from(bytes)?;
+                        let return_to_origin = record.bdry_via.return_to_origin;
+                        airspace.get_or_insert_default().add_record(record)?;
+
+                        if return_to_origin {
+                            let arsp = airspace
+                                .take()
+                                .expect("there should be an airspace at this point")
+                                .build()?;
+
+                            builder.add_airspace(arsp);
+                        }
                     }
                 }
 

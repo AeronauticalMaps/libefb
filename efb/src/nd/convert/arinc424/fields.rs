@@ -14,17 +14,38 @@
 // limitations under the License.
 
 use arinc424::fields;
+use arinc424::fields::LowerUpperLimit;
 
 use crate::geom::Coordinate;
 use crate::measurements::Angle;
 use crate::nd::*;
 use crate::MagneticVariation;
+use crate::VerticalDistance;
 
 impl<'a> TryFrom<fields::Cycle<'a>> for AiracCycle {
     type Error = arinc424::Error;
 
     fn try_from(value: fields::Cycle) -> Result<Self, Self::Error> {
         Ok(AiracCycle::new(value.year()?, value.cycle()?))
+    }
+}
+
+impl<'a> TryFrom<(fields::ArspType, Option<fields::AirspaceClassification<'a>>)> for AirspaceClass {
+    type Error = arinc424::Error;
+
+    fn try_from(
+        value: (fields::ArspType, Option<fields::AirspaceClassification<'a>>),
+    ) -> Result<Self, Self::Error> {
+        match value {
+            (fields::ArspType::ClassC, _) => Ok(Self::C),
+            (fields::ArspType::ControlArea, _) => Ok(Self::CTA),
+            (fields::ArspType::TerminalControlArea, _) => Ok(Self::TMA),
+            (fields::ArspType::RadarZone, _) => Ok(Self::RadarZone),
+            (fields::ArspType::ClassB, _) => Ok(Self::B),
+            (fields::ArspType::RadioMandatoryZone, _) => Ok(Self::RMZ),
+            (fields::ArspType::TransponderMandatoryZone, _) => Ok(Self::TMZ),
+            (fields::ArspType::ControlZone, _) => Ok(Self::CTR),
+        }
     }
 }
 
@@ -80,6 +101,21 @@ impl From<fields::RwyBrg> for Angle {
         match rwy_brg {
             fields::RwyBrg::MagneticNorth(degree) => Self::m(degree),
             fields::RwyBrg::TrueNorth(degree) => Self::t(degree as f32),
+        }
+    }
+}
+
+impl From<fields::LowerUpperLimit> for VerticalDistance {
+    fn from(value: LowerUpperLimit) -> Self {
+        match value {
+            // TODO: Add proper limits to airspace
+            LowerUpperLimit::Altitude(alt) => VerticalDistance::Altitude(alt as u16),
+            LowerUpperLimit::FlightLevel(fl) => VerticalDistance::Fl(fl),
+            LowerUpperLimit::NotSpecified => VerticalDistance::Unlimited,
+            LowerUpperLimit::Unlimited => VerticalDistance::Unlimited,
+            LowerUpperLimit::Ground => VerticalDistance::Gnd,
+            LowerUpperLimit::MeanSeaLevel => VerticalDistance::Msl(0),
+            LowerUpperLimit::NOTAM => VerticalDistance::Unlimited,
         }
     }
 }

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Load airspaces from ARINC 424
 - Provided data errors of loaded navigation data
 - Track position of route token
 - Takeoff and landing runway in WASM route
