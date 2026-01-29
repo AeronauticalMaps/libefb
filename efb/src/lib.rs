@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -117,7 +117,6 @@ mod core;
 pub use core::*;
 
 pub mod aircraft;
-pub mod algorithm;
 pub mod error;
 pub mod fc;
 pub mod fms;

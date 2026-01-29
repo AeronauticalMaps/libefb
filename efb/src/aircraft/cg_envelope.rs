@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,8 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::algorithm;
+use geo::Contains;
+
 use crate::fp::MassAndBalance;
 use crate::measurements::{Length, Mass};
 
@@ -110,31 +111,25 @@ impl CGEnvelope {
         // We see the envelope as a polygon where the mass describes the y-axis
         // and the balance the x-axis. The M&B on ramp and after landing is
         // considered to be a point within this envelope (polygon).
-        let envelope: Vec<algorithm::Point> = self
+        let coords: Vec<geo::Coord<f64>> = self
             .limits
             .iter()
-            .map(|mb| algorithm::Point {
-                x: mb.distance.to_si() as f64,
-                y: mb.mass.to_si() as f64,
+            .map(|limit| geo::Coord {
+                x: limit.distance.to_si() as f64,
+                y: limit.mass.to_si() as f64,
             })
             .collect();
+        let envelope = geo::Polygon::new(geo::LineString::from(coords), vec![]);
 
-        let wn = |mass: &Mass, balance: &Length| -> i32 {
-            algorithm::winding_number(
-                &algorithm::Point {
-                    x: balance.to_si() as f64,
-                    y: mass.to_si() as f64,
-                },
-                &envelope,
-            )
+        let point_within = |mass: &Mass, balance: &Length| -> bool {
+            let point = geo::Point::new(balance.to_si() as f64, mass.to_si() as f64);
+            envelope.contains(&point)
         };
 
-        let wn_on_ramp = wn(mb.mass_on_ramp(), mb.balance_on_ramp());
-        let wn_after_landing = wn(mb.mass_after_landing(), mb.balance_after_landing());
+        let on_ramp = point_within(mb.mass_on_ramp(), mb.balance_on_ramp());
+        let after_landing = point_within(mb.mass_after_landing(), mb.balance_after_landing());
 
-        // The envelope's winding number around the point is 0 if the point is
-        // outside the envelope.
-        wn_on_ramp != 0 && wn_after_landing != 0
+        on_ramp && after_landing
     }
 
     /// The limits of the envelope.

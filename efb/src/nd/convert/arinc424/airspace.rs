@@ -17,7 +17,7 @@
 
 use arinc424::fields::BoundaryPath;
 use arinc424::records::ControlledAirspace;
-use geo::{Bearing, Destination, Geodesic, Point};
+use geo::{Bearing, Destination, Geodesic};
 
 use crate::geom::{Coordinate, Polygon};
 use crate::measurements::{Angle, Length};
@@ -169,17 +169,14 @@ impl AirspaceBuilder {
         let center = segment.end_point;
         let radius_m = segment.arc_radius.map(|r| r.to_si()).unwrap_or(0.0) as f64;
 
-        let center_geo = Point::new(center.longitude, center.latitude);
+        let center_geo: geo::Point<f64> = center.into();
         let num_points = ARC_POINTS_PER_QUADRANT * 4;
         let mut coords = Vec::with_capacity(num_points + 1);
 
         for i in 0..num_points {
             let bearing = Angle::t((i as f32) * 360.0 / (num_points as f32));
             let point = Geodesic.destination(center_geo, *bearing.value() as f64, radius_m);
-            coords.push(Coordinate {
-                latitude: point.y(),
-                longitude: point.x(),
-            });
+            coords.push(point.into());
         }
 
         // Close the circle
@@ -209,9 +206,9 @@ impl AirspaceBuilder {
 
         let radius_m = segment.arc_radius.map(|r| r.to_si()).unwrap_or(0.0) as f64;
 
-        let center_geo = Point::new(center.longitude, center.latitude);
-        let start_geo = Point::new(start.longitude, start.latitude);
-        let end_geo = Point::new(segment.end_point.longitude, segment.end_point.latitude);
+        let center_geo: geo::Point<f64> = center.into();
+        let start_geo: geo::Point<f64> = start.into();
+        let end_geo: geo::Point<f64> = segment.end_point.into();
 
         // Calculate bearings from center to start and end points
         let start_bearing = Angle::t(Geodesic.bearing(center_geo, start_geo) as f32);
@@ -230,10 +227,7 @@ impl AirspaceBuilder {
             let bearing = Angle::t(start_bearing.value() + sweep.value() * fraction);
 
             let point = Geodesic.destination(center_geo, *bearing.value() as f64, radius_m);
-            coords.push(Coordinate {
-                latitude: point.y(),
-                longitude: point.x(),
-            });
+            coords.push(point.into());
         }
 
         Ok(coords)

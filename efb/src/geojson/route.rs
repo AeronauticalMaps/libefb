@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,9 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use geo::BoundingRect;
 use geojson::{Feature, GeoJson, Geometry, Value};
 
-use crate::geom::{BBox, Coordinate};
+use super::geom::rect_to_bbox;
 use crate::nd::Fix;
 use crate::route::Route;
 
@@ -24,26 +25,21 @@ impl Route {
     #[cfg_attr(docsrs, doc(cfg(feature = "geojson")))]
     pub fn to_geojson(&self) -> GeoJson {
         let legs = self.legs();
-        let mut coords: Vec<Coordinate> = Vec::with_capacity(legs.len());
-        let mut line_string: Vec<Vec<f64>> = Vec::with_capacity(legs.len());
+        let mut coords: Vec<geo::Coord<f64>> = Vec::with_capacity(legs.len() + 1);
 
         if let Some(origin) = legs.first() {
-            let coord = origin.from().coordinate();
-            coords.push(coord);
-            line_string.push(vec![coord.longitude as f64, coord.latitude as f64])
+            coords.push(origin.from().coordinate().into());
         }
 
         for leg in legs {
-            let coord = leg.to().coordinate();
-            coords.push(coord);
-            line_string.push(vec![coord.longitude as f64, coord.latitude as f64])
+            coords.push(leg.to().coordinate().into());
         }
 
-        let geometry = Geometry::new(Value::LineString(line_string));
+        let line = geo::LineString::from(coords);
 
         GeoJson::Feature(Feature {
-            bbox: BBox::new(&coords).map(|bbox| bbox.into()),
-            geometry: Some(geometry),
+            bbox: line.bounding_rect().map(rect_to_bbox),
+            geometry: Some(Geometry::new(Value::from(&line))),
             id: None,
             properties: None,
             foreign_members: None,

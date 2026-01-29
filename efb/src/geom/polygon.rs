@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,9 @@ use std::ops::Index;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+use geo::Contains;
+
 use super::Coordinate;
-use crate::algorithm;
 
 /// A polygon spawned by coordinates.
 #[derive(Clone, PartialEq, PartialOrd, Debug, Default, Hash)]
@@ -41,20 +42,9 @@ impl Polygon {
 
     /// Returns `true` if the given point is within the polygon's area.
     pub fn contains(&self, point: &Coordinate) -> bool {
-        algorithm::winding_number(
-            &algorithm::Point {
-                x: point.longitude,
-                y: point.latitude,
-            },
-            &self
-                .coords
-                .iter()
-                .map(|coord| algorithm::Point {
-                    x: coord.longitude,
-                    y: coord.latitude,
-                })
-                .collect::<Vec<algorithm::Point>>(),
-        ) != 0
+        let geo_polygon: geo::Polygon<f64> = self.clone().into();
+        let geo_point: geo::Point<f64> = (*point).into();
+        geo_polygon.contains(&geo_point)
     }
 
     /// Consumes the Polygon, returning its inner vector of coordinates.
@@ -65,6 +55,24 @@ impl Polygon {
 
 impl From<Vec<Coordinate>> for Polygon {
     fn from(coords: Vec<Coordinate>) -> Self {
+        Polygon { coords }
+    }
+}
+
+impl From<Polygon> for geo::Polygon<f64> {
+    fn from(p: Polygon) -> Self {
+        let coords: Vec<geo::Coord<f64>> = p.coords.into_iter().map(Into::into).collect();
+        geo::Polygon::new(geo::LineString::from(coords), vec![])
+    }
+}
+
+impl From<geo::Polygon<f64>> for Polygon {
+    fn from(p: geo::Polygon<f64>) -> Self {
+        let coords: Vec<Coordinate> = p
+            .exterior()
+            .coords()
+            .map(|c| Coordinate::from(*c))
+            .collect();
         Polygon { coords }
     }
 }

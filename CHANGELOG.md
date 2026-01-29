@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Use `geo` types to improve compatibility
 - Prepend runway to airport identifier in route prompt (EDDH15)
 - Resolve ambiguous terminal waypoints in route
 

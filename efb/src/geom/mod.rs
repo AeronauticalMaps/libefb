@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,10 +14,9 @@
 // limitations under the License.
 
 //! Geometry.
-mod bbox;
 mod coordinate;
 mod polygon;
 
-pub(crate) use bbox::*;
 pub use coordinate::*;
+pub use geo;
 pub use polygon::*;

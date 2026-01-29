@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,15 +15,7 @@
 
 use geojson;
 
-use crate::geom::BBox;
-
-impl From<BBox> for geojson::Bbox {
-    fn from(value: BBox) -> Self {
-        vec![
-            value.sw().longitude as f64,
-            value.sw().latitude as f64,
-            value.ne().longitude as f64,
-            value.ne().latitude as f64,
-        ]
-    }
+/// Converts a geo::Rect to a GeoJSON bounding box.
+pub(crate) fn rect_to_bbox(rect: geo::Rect<f64>) -> geojson::Bbox {
+    vec![rect.min().x, rect.min().y, rect.max().x, rect.max().y]
 }

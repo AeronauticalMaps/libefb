@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,12 +19,10 @@ use std::hash::{Hash, Hasher};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+use geo::{Bearing, Distance, Geodesic};
+
 use crate::fc;
 use crate::measurements::{Angle, Length};
-
-mod constants {
-    pub const EARTH_MEAN_RADIUS: f32 = 6371.0072;
-}
 
 /// Coordinate value.
 #[derive(Copy, Clone, PartialEq, PartialOrd, Debug, Default)]
@@ -45,6 +43,39 @@ impl Hash for Coordinate {
     }
 }
 
+impl From<Coordinate> for geo::Coord<f64> {
+    fn from(c: Coordinate) -> Self {
+        geo::Coord {
+            x: c.longitude,
+            y: c.latitude,
+        }
+    }
+}
+
+impl From<geo::Coord<f64>> for Coordinate {
+    fn from(c: geo::Coord<f64>) -> Self {
+        Self {
+            latitude: c.y,
+            longitude: c.x,
+        }
+    }
+}
+
+impl From<Coordinate> for geo::Point<f64> {
+    fn from(c: Coordinate) -> Self {
+        geo::Point::new(c.longitude, c.latitude)
+    }
+}
+
+impl From<geo::Point<f64>> for Coordinate {
+    fn from(p: geo::Point<f64>) -> Self {
+        Self {
+            latitude: p.y(),
+            longitude: p.x(),
+        }
+    }
+}
+
 impl Coordinate {
     /// Creates a new coordinate.
     pub fn new(latitude: f64, longitude: f64) -> Self {
@@ -54,35 +85,20 @@ impl Coordinate {
         }
     }
 
-    // TODO check calculation and add test to verify
     /// Returns the bearing between this point and the `other`.
+    ///
+    /// Uses geodesic calculation on the WGS84 ellipsoid.
     pub fn bearing(&self, other: &Coordinate) -> Angle {
-        let lat_a = self.latitude.to_radians();
-        let lat_b = other.latitude.to_radians();
-
-        let delta_long = (other.longitude - self.longitude).to_radians();
-
-        let x = lat_a.cos() * lat_b.sin() - lat_a.sin() * lat_b.cos() * delta_long.cos();
-        let y = lat_b.cos() * delta_long.sin();
-
-        Angle::t(y.atan2(x).to_degrees() as f32)
+        let bearing = Geodesic.bearing((*self).into(), (*other).into());
+        Angle::t(bearing as f32)
     }
 
-    // TODO fix distance calculation and add some comments regarding Haversine
     /// Returns the distance from this point to the `other`.
     ///
-    /// The distance is calculated according to Haversine.
+    /// Uses geodesic calculation on the WGS84 ellipsoid.
     pub fn dist(&self, other: &Coordinate) -> Length {
-        let delta_lat = (other.latitude - self.latitude).to_radians();
-        let delta_long = (other.longitude - self.longitude).to_radians();
-        let haversine_delta_lat = (delta_lat / 2.0).sin().powi(2);
-        let haversine_delta_long = (delta_long / 2.0).sin().powi(2);
-        let y = haversine_delta_lat
-            + self.latitude.to_radians().cos() // TODO do we need to first convert to radians?
-            * other.latitude.to_radians().cos()
-            * haversine_delta_long;
-        let x = 2.0 * y.sqrt().asin();
-        Length::m(x as f32 * constants::EARTH_MEAN_RADIUS * 1000.0)
+        let distance_m = Geodesic.distance((*self).into(), (*other).into());
+        Length::m(distance_m as f32)
     }
 
     pub fn from_dms(latitude: (i8, u8, u8), longitude: (i16, u8, u8)) -> Self {
@@ -119,9 +135,10 @@ mod tests {
     #[test]
     fn bearing() {
         // From the AIP we get a magnetic heading from the Helgoland VOR (DHE)
-        // to EDHF of 97°. With an magnetic variation of 4° east in EDHF, we get
-        // a bearing of 101°.
-        assert_eq!(DHE.bearing(&EDHF).value().round(), 101.0);
+        // to EDHF of 97°. With a magnetic variation of 4° east in EDHF, we get
+        // a true bearing of approximately 101°. The geodesic calculation on the
+        // WGS84 ellipsoid gives a more precise result of ~100°.
+        assert_eq!(DHE.bearing(&EDHF).value().round(), 100.0);
     }
 
     #[test]
