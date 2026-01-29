@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2024 Joe Pearson
+# Copyright 2024, 2026 Joe Pearson
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ edition = "2021"
 authors = ["Joe Pearson"]
 license = "Apache-2.0"
 keywords = ["aviation", "EFB"]
+categories = ["aerospace", "science::geo"]
 description = "Electronic Flight Bag library to plan and conduct a flight."
 homepage = "https://github.com/AeronauticalMaps/libefb"
 repository = "https://github.com/AeronauticalMaps/libefb"

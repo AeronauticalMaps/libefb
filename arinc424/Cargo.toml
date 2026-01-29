@@ -20,6 +20,7 @@ edition = "2021"
 license = "Apache-2.0"
 description = "ARINC 424 parser"
 keywords = ["ARINC", "ARINC-424"]
+categories = ["aerospace", "aerospace::protocols", "encoding"]
 homepage = "https://github.com/AeronauticalMaps/libefb"
 repository = "https://github.com/AeronauticalMaps/libefb"
 readme = "README.md"
