@@ -1,4 +1,4 @@
-# LibEFB -- A bag of flight utilities
+# LibEFB - A bag of flight utilities
 
 This library provides utilities to support the flight planning and air
 navigation. The lib is written in Rust and intended to be integrated
@@ -70,7 +70,19 @@ The library can be used from other languages through the different
 bindings. For more on a specific binding and its usage, refer to the
 READMEs of the bindings.
 
-## Roadmap
+## 📝 Git Hooks
+
+There is a pre-commit hook in `.githooks`. Either copy it to
+`.git/hooks` or configure git to use hooks from this directory:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook requires Ruby (pre-installed on macOS and most Linux
+distributions). Verify Ruby is installed `ruby --version`.
+
+## 🚀 Roadmap
 
 In a first stage, the library should be extended to allow proper
 flight planning by adding the following feature:

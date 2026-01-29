@@ -1,0 +1,141 @@
+#!/usr/bin/env ruby
+# Pre-commit hook to update copyright headers
+
+require 'time'
+
+CURRENT_YEAR = Time.now.year
+CURRENT_DATE = Time.now.strftime('%Y-%m-%d')
+
+def parse_years(year_string)
+  years = []
+  parts = year_string.split(',').map(&:strip)
+
+  parts.each do |part|
+    if part.include?('-')
+      range_parts = part.split('-').map(&:to_i)
+      years.concat((range_parts[0]..range_parts[1]).to_a)
+    else
+      years << part.to_i
+    end
+  end
+
+  years.uniq.sort
+end
+
+def format_years(years)
+  return years.first.to_s if years.length == 1
+
+  # Group consecutive years into ranges
+  ranges = []
+  current_range = [years.first]
+
+  years[1..-1].each do |year|
+    if year == current_range.last + 1
+      current_range << year
+    else
+      ranges << current_range
+      current_range = [year]
+    end
+  end
+  ranges << current_range
+
+  # Format each range
+  formatted = ranges.map do |range|
+    if range.length == 1
+      range.first.to_s
+    elsif range.length == 2
+      "#{range.first}, #{range.last}"
+    else
+      "#{range.first}-#{range.last}"
+    end
+  end
+
+  formatted.join(', ')
+end
+
+def update_copyright(content)
+  modified = false
+
+  # Match copyright line
+  # Patterns: Copyright YEARS Name
+  content.gsub!(/^(.*)Copyright\s+([0-9,\s-]+)(.*)$/i) do |match|
+    prefix = $1
+    years_str = $2
+    suffix = $3
+
+    years = parse_years(years_str)
+
+    unless years.include?(CURRENT_YEAR)
+      years << CURRENT_YEAR
+      modified = true
+    end
+
+    new_years = format_years(years)
+    "#{prefix}Copyright #{new_years} #{suffix}"
+  end
+
+  # Update Last Modified date if present
+  content.gsub!(/^(.*)Last\s+Modified:\s+\d{4}-\d{2}-\d{2}(.*)$/i) do |match|
+    prefix = $1
+    suffix = $2
+    modified = true
+    "#{prefix}Last Modified: #{CURRENT_DATE}#{suffix}"
+  end
+
+  [content, modified]
+end
+
+# Get list of staged files
+staged_files = `git diff --cached --name-only --diff-filter=ACM`.split("\n")
+
+files_updated = []
+
+staged_files.each do |file|
+  begin
+    # Get the staged content
+    staged_content = `git show :#{file} 2>/dev/null`
+    next if $?.exitstatus != 0
+    next if staged_content.encoding == Encoding::ASCII_8BIT && staged_content.match?(/\x00/)
+
+    # Update copyright in staged content
+    new_staged_content, staged_modified = update_copyright(staged_content.dup)
+
+    # Update copyright in working tree content (if file exists)
+    wt_modified = false
+    if File.exist?(file)
+      wt_content = File.read(file)
+      new_wt_content, wt_modified = update_copyright(wt_content.dup)
+    end
+
+    # Only proceed if either version was modified
+    if staged_modified || wt_modified
+      # Update the staging area if staged content was modified
+      if staged_modified
+        mode = `git ls-files -s #{file}`.split(' ')[0]
+        blob_hash = nil
+        IO.popen(['git', 'hash-object', '-w', '--stdin'], 'r+') do |io|
+          io.write(new_staged_content)
+          io.close_write
+          blob_hash = io.read.strip
+        end
+        `git update-index --cacheinfo #{mode},#{blob_hash},#{file}`
+      end
+
+      # Update the working tree if it was modified
+      if wt_modified && File.exist?(file)
+        File.write(file, new_wt_content)
+      end
+
+      files_updated << file
+    end
+  rescue => e
+    STDERR.puts "Warning: Could not process #{file}: #{e.message}"
+  end
+end
+
+if files_updated.any?
+  puts "Updated copyright headers in:"
+  files_updated.each { |f| puts "  - #{f}" }
+end
+
+exit 0
