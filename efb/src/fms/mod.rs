@@ -40,7 +40,7 @@ struct Context {
 /// `FMS` is the type that manages all flight systems.
 ///
 /// See the [module documentation](self) for details.
-#[derive(PartialEq, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct FMS {
     nd: NavigationData,
     context: Context,

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ use std::fmt::{Display, Formatter, Result};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::geom::Polygon;
 use crate::VerticalDistance;
 
 pub type Airspaces = Vec<Airspace>;
@@ -27,15 +26,14 @@ pub type Airspaces = Vec<Airspace>;
 ///
 /// The airspace is classified by the `class` and enclosed by the `polygon`.
 /// It ranges from the `floor` to `ceiling` in vertical direction.
-#[repr(C)]
-#[derive(Clone, PartialEq, Debug, Hash)]
+#[derive(Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Airspace {
     pub name: String,
     pub class: AirspaceClass,
     pub ceiling: VerticalDistance,
     pub floor: VerticalDistance,
-    pub polygon: Polygon,
+    pub polygon: geo::Polygon<f64>,
 }
 
 #[repr(C)]

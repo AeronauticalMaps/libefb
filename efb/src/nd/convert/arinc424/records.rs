@@ -15,7 +15,7 @@
 
 use arinc424::records;
 
-use crate::geom::Polygon;
+use super::fields::lat_lon_to_point;
 use crate::measurements::Length;
 use crate::nd::*;
 use crate::VerticalDistance;
@@ -28,37 +28,13 @@ impl<'a> TryFrom<records::Airport<'a>> for Airport {
             icao_ident: arpt.arpt_ident.to_string(),
             iata_designator: arpt.iata.to_string(),
             name: arpt.airport_name.to_string(),
-            coordinate: (arpt.latitude, arpt.longitude).try_into()?,
+            coordinate: lat_lon_to_point(arpt.latitude, arpt.longitude)?,
             mag_var: arpt.mag_var.map(Into::into),
             // TODO: Parse elevation and runways.
             elevation: VerticalDistance::Gnd,
             runways: Vec::new(),
             location: Some(arpt.icao_code.try_into()?),
             cycle: Some(arpt.cycle.try_into()?),
-        })
-    }
-}
-
-impl<'a> TryFrom<records::ControlledAirspace<'a>> for Airspace {
-    type Error = arinc424::Error;
-
-    fn try_from(arsp: records::ControlledAirspace) -> Result<Self, Self::Error> {
-        Ok(Airspace {
-            name: arsp
-                .arsp_name
-                .map(|name| name.to_string())
-                .unwrap_or_default(),
-            class: (arsp.arsp_type, arsp.arsp_class).try_into()?,
-            // TODO: This should be improved.
-            ceiling: arsp
-                .upper_limit
-                .expect("first record must have limits")
-                .into(),
-            floor: arsp
-                .lower_limit
-                .expect("first record must have limits")
-                .into(),
-            polygon: Polygon::new(),
         })
     }
 }
@@ -102,7 +78,7 @@ impl<'a> TryFrom<records::Waypoint<'a>> for Waypoint {
             } else {
                 WaypointUsage::Unknown
             },
-            coordinate: (wp.latitude, wp.longitude).try_into()?,
+            coordinate: lat_lon_to_point(wp.latitude, wp.longitude)?,
             region: wp.regn_code.into(),
             mag_var: wp.mag_var.map(Into::into),
             location: wp.icao_code().try_into().ok(),

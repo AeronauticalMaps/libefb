@@ -16,11 +16,11 @@
 use arinc424::fields;
 use arinc424::fields::LowerUpperLimit;
 
-use crate::geom::Coordinate;
 use crate::measurements::Angle;
 use crate::nd::*;
 use crate::MagneticVariation;
 use crate::VerticalDistance;
+use geo::Point;
 
 impl<'a> TryFrom<fields::Cycle<'a>> for AiracCycle {
     type Error = arinc424::Error;
@@ -61,15 +61,13 @@ impl<'a> TryFrom<fields::IcaoCode<'a>> for LocationIndicator {
     }
 }
 
-impl<'a> TryFrom<(fields::Latitude<'a>, fields::Longitude<'a>)> for Coordinate {
-    type Error = arinc424::Error;
-
-    fn try_from(value: (fields::Latitude<'a>, fields::Longitude<'a>)) -> Result<Self, Self::Error> {
-        Ok(Coordinate {
-            latitude: value.0.as_decimal()?,
-            longitude: value.1.as_decimal()?,
-        })
-    }
+/// Convert ARINC 424 latitude/longitude fields to a geo::Point.
+/// geo uses (x, y) = (longitude, latitude).
+pub fn lat_lon_to_point<'a>(
+    lat: fields::Latitude<'a>,
+    lon: fields::Longitude<'a>,
+) -> Result<Point<f64>, arinc424::Error> {
+    Ok(Point::new(lon.as_decimal()?, lat.as_decimal()?))
 }
 
 impl From<fields::MagVar> for MagneticVariation {

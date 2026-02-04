@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,9 +25,9 @@ use std::str::FromStr;
 
 use crate::error::Error;
 use crate::fc;
-use crate::geom::{Coordinate, Polygon};
 use crate::nd::{Airspace, AirspaceClass, NavigationData};
 use crate::VerticalDistance;
+use geo::Point;
 
 impl NavigationData {
     pub fn try_from_openair(s: &str) -> Result<Self, Error> {
@@ -90,8 +90,8 @@ struct OpenAirElement {
     /// Airspace floor.
     al: Option<OpenAirVerticalDistance>,
 
-    /// Polygon point.
-    dp: Polygon,
+    /// Polygon points as geo::Coord (x=lon, y=lat).
+    dp: Vec<geo::Coord<f64>>,
 }
 
 // TODO: Change to FromStr!
@@ -121,17 +121,17 @@ impl OpenAirElement {
             an: None,
             ah: None,
             al: None,
-            dp: Polygon::new(),
+            dp: Vec::new(),
         }
     }
 }
 
 impl From<&mut OpenAirElement> for Airspace {
     fn from(element: &mut OpenAirElement) -> Self {
-        let mut coords = element.dp.clone().into_inner();
+        let mut coords = std::mem::take(&mut element.dp);
 
         if let Some(first) = coords.first() {
-            if first != coords.last().unwrap() {
+            if coords.last() != Some(first) {
                 coords.push(*first);
             }
         }
@@ -141,7 +141,7 @@ impl From<&mut OpenAirElement> for Airspace {
             class: element.ac.take().unwrap_or_default().into(),
             ceiling: element.ah.take().unwrap_or_default().into_inner(),
             floor: element.al.take().unwrap_or_default().into_inner(),
-            polygon: Polygon::from(coords),
+            polygon: geo::Polygon::new(geo::LineString::from(coords), vec![]),
         }
     }
 }
@@ -150,11 +150,14 @@ impl From<&mut OpenAirElement> for Airspace {
 pub struct ParseOpenAirCoordinateError;
 
 #[derive(Debug, PartialEq)]
-struct OpenAirCoordinate(Coordinate);
+struct OpenAirCoordinate(Point<f64>);
 
 impl OpenAirCoordinate {
-    pub fn into_inner(self) -> Coordinate {
-        self.0
+    pub fn into_inner(self) -> geo::Coord<f64> {
+        geo::Coord {
+            x: self.0.x(),
+            y: self.0.y(),
+        }
     }
 }
 
@@ -196,10 +199,8 @@ impl FromStr for OpenAirCoordinate {
         };
 
         match (latitude, longitude) {
-            (Some(latitude), Some(longitude)) => Ok(Self(Coordinate {
-                latitude,
-                longitude,
-            })),
+            // geo uses (x, y) = (longitude, latitude)
+            (Some(latitude), Some(longitude)) => Ok(Self(Point::new(longitude, latitude))),
             _ => Err(ParseOpenAirCoordinateError),
         }
     }
@@ -256,6 +257,8 @@ impl FromStr for OpenAirVerticalDistance {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
+
     use super::*;
     use crate::fc;
 
@@ -274,7 +277,7 @@ DP 53:06:04 N 8:58:30 E
 
         let nd = NavigationData::try_from_openair(record).expect("OpenAir should parse");
 
-        let tma_bremen_a = Airspace {
+        let tma_bremen_a = Rc::new(Airspace {
             name: String::from("TMA BREMEN A"),
             class: AirspaceClass::D,
             ceiling: VerticalDistance::Fl(65),
@@ -286,7 +289,7 @@ DP 53:06:04 N 8:58:30 E
                 (fc::dms_to_decimal(52, 58, 8), fc::dms_to_decimal(8, 58, 56)),
                 (fc::dms_to_decimal(53, 6, 4), fc::dms_to_decimal(8, 58, 30))
             ],
-        };
+        });
 
         assert_eq!(nd.airspaces, vec!(tma_bremen_a));
     }
@@ -294,22 +297,14 @@ DP 53:06:04 N 8:58:30 E
     #[test]
     fn parses_coordinate() {
         let north_west = "37:53:00 N 116:55:30 W".parse::<OpenAirCoordinate>();
-        assert_eq!(
-            north_west.unwrap().into_inner(),
-            Coordinate {
-                latitude: fc::dms_to_decimal(37, 53, 0),
-                longitude: -fc::dms_to_decimal(116, 55, 30),
-            }
-        );
+        let coord = north_west.unwrap().into_inner();
+        assert!((coord.y - fc::dms_to_decimal(37, 53, 0)).abs() < 0.0001);
+        assert!((coord.x - (-fc::dms_to_decimal(116, 55, 30))).abs() < 0.0001);
 
         let south_east = "50:34:00 S 16:55:30 E".parse::<OpenAirCoordinate>();
-        assert_eq!(
-            south_east.unwrap().into_inner(),
-            Coordinate {
-                latitude: -fc::dms_to_decimal(50, 34, 0),
-                longitude: fc::dms_to_decimal(16, 55, 30),
-            }
-        );
+        let coord = south_east.unwrap().into_inner();
+        assert!((coord.y - (-fc::dms_to_decimal(50, 34, 0))).abs() < 0.0001);
+        assert!((coord.x - fc::dms_to_decimal(16, 55, 30)).abs() < 0.0001);
 
         let invalid = "50.1202 X 16.214 Y".parse::<OpenAirCoordinate>();
         assert_eq!(invalid, Err(ParseOpenAirCoordinateError),);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,13 +14,13 @@
 // limitations under the License.
 
 use crate::MagneticVariation;
-use crate::geom::Coordinate;
+use geo::Point;
 
 /// A fix location with coordinates.
 pub trait Fix: Sized {
     fn ident(&self) -> String;
 
-    fn coordinate(&self) -> Coordinate;
+    fn coordinate(&self) -> Point<f64>;
 
     fn mag_var(&self) -> MagneticVariation {
         self.coordinate().into()

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,11 +25,11 @@ use world_magnetic_model::uom::si::{
 };
 use world_magnetic_model::GeomagneticField;
 
-use crate::geom::Coordinate;
+use geo::Point;
 
 /// The magnetic variation (declination) of a point.
 ///
-/// Any [Coordinate] can be converted into a declination.
+/// Any [`Point<f64>`] can be converted into a declination.
 #[derive(Copy, Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(C)]
@@ -60,12 +60,16 @@ impl Hash for MagneticVariation {
     }
 }
 
-impl From<Coordinate> for MagneticVariation {
-    fn from(value: Coordinate) -> Self {
+impl From<Point<f64>> for MagneticVariation {
+    fn from(value: Point<f64>) -> Self {
+        // geo uses (x, y) = (longitude, latitude)
+        let latitude = value.y();
+        let longitude = value.x();
+
         let mag_var = match GeomagneticField::new(
             Length::new::<meter>(0.0),
-            Angle::new::<radian>(value.latitude.to_radians() as f32),
-            Angle::new::<radian>(value.longitude.to_radians() as f32),
+            Angle::new::<radian>(latitude.to_radians() as f32),
+            Angle::new::<radian>(longitude.to_radians() as f32),
             OffsetDateTime::now_utc().date(),
         ) {
             Ok(field) => field.declination().get::<degree>(),

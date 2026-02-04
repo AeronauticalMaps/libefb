@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,8 +22,11 @@ use std::rc::Rc;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+use geo::{Contains, Point};
+use rstar::AABB;
+
 use crate::error::Error;
-use crate::geom::Coordinate;
+use crate::measurements::Length;
 use crate::MagneticVariation;
 
 mod airac_cycle;
@@ -32,6 +35,7 @@ mod airspace;
 mod builder;
 mod convert;
 mod fix;
+mod index;
 mod location;
 mod navaid;
 mod runway;
@@ -46,7 +50,8 @@ pub use navaid::NavAid;
 pub use runway::*;
 pub use waypoint::*;
 
-use builder::NavigationDataBuilder;
+pub(crate) use builder::NavigationDataBuilder;
+pub(crate) use index::{AirspaceIndex, NavAidIndex};
 
 #[repr(C)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -57,11 +62,39 @@ pub enum InputFormat {
 
 type TerminalWaypoints = HashMap<String, Vec<Rc<Waypoint>>>;
 
-#[derive(Clone, PartialEq, Debug, Default)]
+/// Results from a spatial query at a given point.
+///
+/// Contains airspaces that contain the point and navaids (airports and
+/// waypoints) within the specified search radius.
+#[derive(Clone, Debug, Default)]
+pub struct Nearby {
+    /// Airspaces that contain the query point.
+    pub airspaces: Vec<Rc<Airspace>>,
+    /// Navaids within the search radius.
+    pub navaids: Vec<NavAid>,
+}
+
+impl Nearby {
+    /// Returns true if no results were found.
+    pub fn is_empty(&self) -> bool {
+        self.airspaces.is_empty() && self.navaids.is_empty()
+    }
+
+    /// Returns the total number of results.
+    pub fn len(&self) -> usize {
+        self.airspaces.len() + self.navaids.len()
+    }
+}
+
+#[derive(Clone, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct NavigationData {
     airports: Vec<Rc<Airport>>,
-    airspaces: Airspaces,
+    airspaces: Vec<Rc<Airspace>>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    airspace_index: AirspaceIndex,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    navaid_index: NavAidIndex,
     waypoints: Vec<Rc<Waypoint>>,
     terminal_waypoints: TerminalWaypoints,
     locations: Vec<LocationIndicator>,
@@ -94,31 +127,56 @@ impl NavigationData {
         self.partition_id
     }
 
-    /// Returns all airspaces that contain the given point.
+    /// Returns all airspaces containing the point and navaids within the radius.
     ///
-    /// This performs a 2D spatial query using only the airspace polygons.
-    /// Vertical bounds (floor and ceiling) are not checked. Returns an empty
-    /// vector if the point is not within any airspace.
+    /// Performs a spatial query that:
+    /// - Finds airspaces whose polygons contain the point (2D containment)
+    /// - Finds airports and waypoints within the specified radius
+    ///
+    /// Vertical bounds (floor and ceiling) of airspaces are not checked.
     ///
     /// # Examples
     ///
     /// ```
     /// # use efb::nd::NavigationData;
-    /// # use efb::geom::Coordinate;
-    /// # fn check_airspace(nd: &NavigationData) {
-    /// let position = Coordinate::new(53.03759, 9.00533);
-    /// let airspaces = nd.at(&position);
+    /// # use efb::measurements::Length;
+    /// # use geo::Point;
+    /// # fn nearby(nd: &NavigationData) {
+    /// let position = Point::new(9.99, 53.63); // (lon, lat)
+    /// let nearby = nd.at(&position, Length::nm(10.0));
     ///
-    /// if airspaces.is_empty() {
-    ///     println!("Outside controlled airspace");
-    /// } else {
-    ///     println!("Inside {} airspace(s)", airspaces.len());
-    /// }
+    /// println!("Airspaces: {}", nearby.airspaces.len());
+    /// println!("Navaids: {}", nearby.navaids.len());
     /// # }
     /// ```
-    pub fn at(&self, point: &Coordinate) -> Vec<&Airspace> {
-        self.airspaces()
+    pub fn at(&self, point: &Point<f64>, radius: Length) -> Nearby {
+        // Find airspaces containing the point
+        let airspaces: Vec<_> = self
+            .airspace_index
+            .candidates_at(point.x(), point.y())
             .filter(|airspace| airspace.polygon.contains(point))
+            .cloned()
+            .collect();
+
+        // Find navaids within radius
+        let navaids: Vec<_> = self
+            .navaid_index
+            .within_radius(point, radius)
+            .cloned()
+            .collect();
+
+        Nearby { airspaces, navaids }
+    }
+
+    /// Returns candidate airspaces whose bounding boxes intersect the given
+    /// envelope.
+    pub(crate) fn candidate_airspaces_for_envelope(
+        &self,
+        envelope: &AABB<Point<f64>>,
+    ) -> Vec<Rc<Airspace>> {
+        self.airspace_index
+            .candidates_intersecting(envelope)
+            .cloned()
             .collect()
     }
 
@@ -177,11 +235,19 @@ impl NavigationData {
     /// [partition ID]: Self::partition_id
     pub fn append(&mut self, other: NavigationData) {
         self.partitions.insert(other.partition_id(), other);
+        self.reindex();
     }
 
     /// Removes the navigation data partition.
     pub fn remove(&mut self, partition_id: &u64) {
         self.partitions.remove(partition_id);
+        self.reindex();
+    }
+
+    /// Indexes the navigation data partitions.
+    fn reindex(&mut self) {
+        self.airspace_index = AirspaceIndex::new(self.airspaces());
+        self.navaid_index = NavAidIndex::new(self.airports(), self.waypoints());
     }
 
     /// Returns the IDs of the expired navigation data partitions.
@@ -210,6 +276,14 @@ impl NavigationData {
         )
     }
 
+    pub(crate) fn airspaces(&self) -> impl Iterator<Item = &Rc<Airspace>> {
+        self.airspaces.iter().chain(
+            self.partitions
+                .values()
+                .flat_map(|partition| partition.airspaces.iter()),
+        )
+    }
+
     pub(crate) fn waypoints(&self) -> impl Iterator<Item = &Rc<Waypoint>> {
         self.waypoints.iter().chain(
             self.partitions
@@ -233,19 +307,10 @@ impl NavigationData {
                     .flatten(),
             )
     }
-
-    pub(crate) fn airspaces(&self) -> impl Iterator<Item = &Airspace> {
-        self.airspaces.iter().chain(
-            self.partitions
-                .values()
-                .flat_map(|partition| partition.airspaces.iter()),
-        )
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::geom::Polygon;
     use crate::VerticalDistance;
 
     use super::*;
@@ -271,7 +336,63 @@ mod tests {
         });
 
         let nd = builder.build();
-        assert_eq!(nd.at(&inside), vec![&nd.airspaces[0]]);
-        assert!(nd.at(&outside).is_empty());
+        let nearby_inside = nd.at(&inside, Length::nm(1.0));
+        let nearby_outside = nd.at(&outside, Length::nm(1.0));
+
+        assert_eq!(nearby_inside.airspaces, vec![Rc::clone(&nd.airspaces[0])]);
+        assert!(nearby_outside.airspaces.is_empty());
+    }
+
+    #[test]
+    fn navaids_within_radius() {
+        let mut builder = NavigationData::builder();
+
+        // Add an airport
+        builder.add_airport(Airport {
+            icao_ident: "EDDH".to_string(),
+            iata_designator: "HAM".to_string(),
+            name: "Hamburg".to_string(),
+            coordinate: Point::new(9.99, 53.63), // (lon, lat)
+            mag_var: None,
+            elevation: VerticalDistance::Gnd,
+            runways: vec![],
+            location: None,
+            cycle: None,
+        });
+
+        // Add a waypoint nearby
+        builder.add_waypoint(Waypoint {
+            fix_ident: "DHN1".to_string(),
+            desc: "Delta November 1".to_string(),
+            usage: WaypointUsage::VFROnly,
+            coordinate: Point::new(9.95, 53.60), // (lon, lat)
+            mag_var: None,
+            region: Region::Enroute,
+            location: None,
+            cycle: None,
+        });
+
+        // Add a waypoint far away
+        builder.add_waypoint(Waypoint {
+            fix_ident: "FAR1".to_string(),
+            desc: "Far Away".to_string(),
+            usage: WaypointUsage::Unknown,
+            coordinate: Point::new(10.5, 54.5), // (lon, lat)
+            mag_var: None,
+            region: Region::Enroute,
+            location: None,
+            cycle: None,
+        });
+
+        let nd = builder.build();
+        let center = Point::new(9.97, 53.62); // (lon, lat)
+
+        // Small radius - should find airport and nearby waypoint
+        let nearby = nd.at(&center, Length::nm(5.0));
+        assert_eq!(nearby.navaids.len(), 2);
+
+        // Large radius - should find everything
+        let nearby = nd.at(&center, Length::nm(100.0));
+        assert_eq!(nearby.navaids.len(), 3);
     }
 }

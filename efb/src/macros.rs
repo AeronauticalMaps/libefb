@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,45 +46,33 @@ macro_rules! jet_a {
     };
 }
 
-/// Creates a [`Coordinate`].
+/// Creates a [`geo::Point<f64>`] from latitude and longitude.
 ///
-/// [`Coordinate`]: crate::geom::Coordinate
+/// Note: This macro accepts (latitude, longitude) but internally creates
+/// the geo::Point with (longitude, latitude) to match geo's coordinate order.
 #[macro_export]
 macro_rules! coord {
     ($latitude:expr, $longitude:expr) => {
-        Coordinate {
-            latitude: $latitude,
-            longitude: $longitude,
-        }
+        geo::Point::new($longitude, $latitude)
     };
 }
 
-/// Creates a [`Polygon`] containing the coordinates.
+/// Creates a [`geo::Polygon<f64>`] containing the coordinates.
 ///
 /// ```
-/// use efb::geom::{Coordinate, Polygon};
 /// use efb::polygon;
 ///
-/// let p = polygon![(0.0, 0.0), (10.0, 10.0)];
-/// assert_eq!(p[0], Coordinate { latitude: 0.0, longitude: 0.0 });
-/// assert_eq!(p[1], Coordinate { latitude: 10.0, longitude: 10.0 });
+/// let p = polygon![(0.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)];
 /// ```
 ///
-/// [`Polygon`]: crate::geom::Polygon
+/// Note: Coordinates are specified as (latitude, longitude) but internally
+/// converted to geo's (longitude, latitude) coordinate order.
 #[macro_export]
 macro_rules! polygon {
-    ( $( $p:expr ),* ) => {
-        {
-            let mut coordinates = Polygon::new();
-            $(
-                coordinates.push(
-                    Coordinate {
-                        latitude: $p.0,
-                        longitude: $p.1,
-                    }
-                );
-            )*
-            coordinates
-        }
-    };
+    ( $( ($lat:expr, $lon:expr) ),* $(,)? ) => {{
+        geo::Polygon::new(
+            geo::LineString::from(vec![ $( geo::Coord { x: $lon, y: $lat }, )* ]),
+            vec![]
+        )
+    }};
 }

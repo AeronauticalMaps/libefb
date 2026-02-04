@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::*;
-use crate::geom::Coordinate;
+use geo::Point;
 
 pub type Waypoints = Vec<Waypoint>;
 
@@ -40,14 +40,14 @@ pub enum Region {
     TerminalArea([u8; 4]),
 }
 
-#[derive(Clone, PartialEq, Debug, Hash)]
+#[derive(Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Waypoint {
     // TODO: Make all fields private and add getter methods.
     pub(crate) fix_ident: String,
     pub(crate) desc: String,
     pub(crate) usage: WaypointUsage,
-    pub(crate) coordinate: Coordinate,
+    pub(crate) coordinate: Point<f64>,
     pub(crate) mag_var: Option<MagneticVariation>,
     pub(crate) region: Region,
     pub(crate) location: Option<LocationIndicator>,
@@ -73,7 +73,7 @@ impl Fix for Waypoint {
         self.fix_ident.clone()
     }
 
-    fn coordinate(&self) -> Coordinate {
+    fn coordinate(&self) -> Point<f64> {
         self.coordinate
     }
 }

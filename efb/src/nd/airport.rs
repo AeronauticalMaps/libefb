@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,18 +16,18 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::geom::Coordinate;
 use crate::VerticalDistance;
+use geo::Point;
 
 use super::*;
 
-#[derive(Clone, PartialEq, Debug, Hash)]
+#[derive(Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Airport {
     pub(crate) icao_ident: String,
     pub(crate) iata_designator: String,
     pub(crate) name: String,
-    pub(crate) coordinate: Coordinate,
+    pub(crate) coordinate: Point<f64>,
     pub(crate) mag_var: Option<MagneticVariation>,
     pub(crate) elevation: VerticalDistance,
     pub(crate) runways: Vec<Runway>,
@@ -40,7 +40,7 @@ impl Fix for Airport {
         self.icao_ident.clone()
     }
 
-    fn coordinate(&self) -> Coordinate {
+    fn coordinate(&self) -> Point<f64> {
         self.coordinate
     }
 }

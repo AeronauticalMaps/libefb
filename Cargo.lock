@@ -400,6 +400,7 @@ dependencies = [
  "chrono",
  "geo",
  "geojson",
+ "rstar 0.12.2",
  "serde",
  "time",
  "world_magnetic_model",
@@ -523,6 +524,7 @@ dependencies = [
  "rand",
  "robust",
  "rstar 0.12.2",
+ "serde",
  "sif-itree",
  "spade",
 ]

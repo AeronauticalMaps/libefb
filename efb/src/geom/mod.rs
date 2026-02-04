@@ -13,10 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Geometry.
-mod coordinate;
-mod polygon;
+//! Geometry - re-exports from geo crate.
 
-pub use coordinate::*;
-pub use geo;
-pub use polygon::*;
+pub use geo::{Coord, LineString, Point, Polygon};
