@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,10 +24,12 @@ use crate::{VerticalDistance, Wind};
 
 mod accumulator;
 mod leg;
+mod profile;
 mod token;
 
 pub use accumulator::TotalsToLeg;
 pub use leg::Leg;
+pub use profile::{AirspaceIntersection, VerticalPoint, VerticalProfile};
 use token::Tokens;
 pub use token::{Token, TokenKind};
 
@@ -292,6 +294,32 @@ impl Route {
     /// Returns the totals of the entire route.
     pub fn totals(&self, perf: Option<&Performance>) -> Option<TotalsToLeg> {
         self.accumulate_legs(perf).last()
+    }
+
+    /// Returns the vertical profile showing all airspace intersections along
+    /// this route.
+    ///
+    /// The profile contains entry and exit points for each airspace the route
+    /// passes through, sorted by distance from the route start.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use efb::route::Route;
+    /// # use efb::nd::NavigationData;
+    /// # fn show_profile(route: &Route, nd: &NavigationData) {
+    /// let profile = route.vertical_profile(nd);
+    ///
+    /// for intersection in profile.intersections() {
+    ///     println!("{}: {:.1} NM to {:.1} NM",
+    ///         intersection.airspace().name,
+    ///         intersection.entry_distance().value(),
+    ///         intersection.exit_distance().value());
+    /// }
+    /// # }
+    /// ```
+    pub fn vertical_profile(&self, nd: &NavigationData) -> VerticalProfile {
+        VerticalProfile::new(self, nd)
     }
 }
 

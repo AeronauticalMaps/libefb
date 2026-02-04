@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::iter::Sum;
 use std::ops::{Add, Div, Mul, Sub};
 
 #[cfg(feature = "serde")]
@@ -97,6 +98,25 @@ where
         }
     }
 }
+
+macro_rules! abs_impl {
+    ($($t:ty)*) => ($(
+        impl<U> Measurement<$t, U>
+        where
+            U: UnitOfMeasure<$t> + Copy,
+        {
+            /// Returns the absolute value of the measurement.
+            pub fn abs(&self) -> Self {
+                Self {
+                    value: self.value.abs(),
+                    unit: self.unit,
+                }
+            }
+        }
+    )*)
+}
+
+abs_impl! { f32 f64 i8 i16 i32 i64 }
 
 impl<T, U> Default for Measurement<T, U>
 where
@@ -231,6 +251,19 @@ where
 
     fn div(self, rhs: T) -> Self::Output {
         Self::from_si(self.to_si() / rhs, self.unit)
+    }
+}
+
+impl<T, U> Sum for Measurement<T, U>
+where
+    T: Default + Add<Output = T>,
+    U: UnitOfMeasure<T>,
+{
+    fn sum<I: Iterator<Item = Self>>(mut iter: I) -> Self {
+        match iter.next() {
+            Some(first) => iter.fold(first, |acc, x| acc + x),
+            None => Self::default(),
+        }
     }
 }
 

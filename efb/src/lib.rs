@@ -100,6 +100,11 @@
 //! - **RWY** Runway
 //! - **RWYCC** Runway Condition Code
 //!
+//! ## T
+//!
+//! - **TOC** Top of Climb
+//! - **TOD** Top of Descent
+//!
 //! ## V
 //!
 //! - **VRP** Visual Reporting Point

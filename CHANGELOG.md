@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Vertical profile with airspace intersections along a route
 - Spatial index for efficient airspace containment and navaid proximity queries
 - Load airspaces from ARINC 424
 - Provided data errors of loaded navigation data
