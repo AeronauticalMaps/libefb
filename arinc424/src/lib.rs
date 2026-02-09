@@ -48,10 +48,12 @@
 //! ```
 //! # use arinc424::records::{Airport, RecordKind, Records};
 //! # use arinc424::Error;
-//! # fn main() -> Result<(), Error> {
+//! # fn read_file() {
 //! // read the navigation database from file
 //! let data = std::fs::read("FAACIFP18").expect("file should be readable");
+//! # }
 //!
+//! # fn print_airports(data: Vec<u8>) -> Result<(), Error> {
 //! // iterate over all records but print only airports
 //! for (kind, bytes) in Records::new(&data) {
 //!     match kind {
