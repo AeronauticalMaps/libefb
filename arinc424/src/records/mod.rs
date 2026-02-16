@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,11 +15,13 @@
 
 mod airport;
 mod controlled_airspace;
+mod restrictive_airspace;
 mod runway;
 mod waypoint;
 
 pub use airport::Airport;
 pub use controlled_airspace::ControlledAirspace;
+pub use restrictive_airspace::RestrictiveAirspace;
 pub use runway::Runway;
 pub use waypoint::Waypoint;
 
@@ -29,6 +31,7 @@ use crate::record::RECORD_LENGTH;
 pub enum RecordKind {
     Airport,
     ControlledAirspace,
+    RestrictiveAirspace,
     Waypoint,
     Runway,
 }
@@ -102,6 +105,7 @@ impl<'a> Iterator for Records<'a> {
                             _ => {}
                         },
                         (b'U', b'C') => record!(RecordKind::ControlledAirspace),
+                        (b'U', b'R') => record!(RecordKind::RestrictiveAirspace),
                         _ => {}
                     }
                 }
