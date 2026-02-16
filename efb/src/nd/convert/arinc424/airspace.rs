@@ -47,7 +47,8 @@ struct BoundarySegment {
 #[derive(Debug, Default)]
 pub struct AirspaceBuilder {
     name: Option<String>,
-    class: Option<AirspaceClass>,
+    airspace_type: Option<AirspaceType>,
+    classification: Option<AirspaceClassification>,
     ceiling: Option<VerticalDistance>,
     floor: Option<VerticalDistance>,
     segments: Vec<BoundarySegment>,
@@ -69,7 +70,9 @@ impl AirspaceBuilder {
         if self.start_point.is_none() {
             self.start_point = coord;
             self.name = record.arsp_name.map(|n| n.to_string());
-            self.class = Some((record.arsp_type, record.arsp_class).try_into()?);
+            self.airspace_type = Some(record.arsp_type.into());
+            self.classification =
+                parse_classification(record.arsp_type, record.arsp_class.as_ref());
             self.ceiling = record.upper_limit.map(Into::into);
             self.floor = record.lower_limit.map(Into::into);
         }

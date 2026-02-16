@@ -25,7 +25,7 @@ use std::str::FromStr;
 
 use crate::error::Error;
 use crate::fc;
-use crate::nd::{Airspace, AirspaceClass, NavigationData};
+use crate::nd::{Airspace, AirspaceClassification, AirspaceType, NavigationData};
 use crate::VerticalDistance;
 use geo::Point;
 
@@ -94,23 +94,28 @@ struct OpenAirElement {
     dp: Vec<geo::Coord<f64>>,
 }
 
-// TODO: Change to FromStr!
-impl From<String> for AirspaceClass {
-    fn from(ac: String) -> Self {
-        match ac.as_str() {
-            "A" => AirspaceClass::A,
-            "B" => AirspaceClass::B,
-            "C" => AirspaceClass::C,
-            "D" => AirspaceClass::D,
-            "E" => AirspaceClass::E,
-            "F" => AirspaceClass::F,
-            "G" => AirspaceClass::G,
-            "CTR" => AirspaceClass::CTR,
-            "R" => AirspaceClass::Restricted,
-            "Q" => AirspaceClass::Danger,
-            "P" => AirspaceClass::Prohibited,
-            &_ => todo!("Unknown airspace class: {ac}"),
-        }
+/// Parses an OpenAir `AC` (airspace class) value into an airspace type and
+/// optional classification.
+///
+/// For bare class letters (A-G), the type defaults to [`AirspaceType::CTA`]
+/// since OpenAir doesn't distinguish structural types.
+fn parse_openair_class(ac: &str) -> (AirspaceType, Option<AirspaceClassification>) {
+    match ac {
+        "A" => (AirspaceType::CTA, Some(AirspaceClassification::A)),
+        "B" => (AirspaceType::CTA, Some(AirspaceClassification::B)),
+        "C" => (AirspaceType::CTA, Some(AirspaceClassification::C)),
+        "D" => (AirspaceType::CTA, Some(AirspaceClassification::D)),
+        "E" => (AirspaceType::CTA, Some(AirspaceClassification::E)),
+        "F" => (AirspaceType::CTA, Some(AirspaceClassification::F)),
+        "G" => (AirspaceType::CTA, Some(AirspaceClassification::G)),
+        "CTR" => (AirspaceType::CTR, None),
+        "TMA" => (AirspaceType::TMA, None),
+        "R" => (AirspaceType::Restricted, None),
+        "Q" => (AirspaceType::Danger, None),
+        "P" => (AirspaceType::Prohibited, None),
+        "TMZ" => (AirspaceType::TMZ, None),
+        "RMZ" => (AirspaceType::RMZ, None),
+        _ => (AirspaceType::CTA, None),
     }
 }
 
@@ -136,9 +141,13 @@ impl From<&mut OpenAirElement> for Airspace {
             }
         }
 
+        let (airspace_type, classification) =
+            parse_openair_class(&element.ac.take().unwrap_or_default());
+
         Self {
             name: element.an.take().unwrap_or_default(),
-            class: element.ac.take().unwrap_or_default().into(),
+            airspace_type,
+            classification,
             ceiling: element.ah.take().unwrap_or_default().into_inner(),
             floor: element.al.take().unwrap_or_default().into_inner(),
             polygon: geo::Polygon::new(geo::LineString::from(coords), vec![]),
@@ -279,7 +288,8 @@ DP 53:06:04 N 8:58:30 E
 
         let tma_bremen_a = Rc::new(Airspace {
             name: String::from("TMA BREMEN A"),
-            class: AirspaceClass::D,
+            airspace_type: AirspaceType::CTA,
+            classification: Some(AirspaceClassification::D),
             ceiling: VerticalDistance::Fl(65),
             floor: VerticalDistance::Msl(1500),
             polygon: polygon![

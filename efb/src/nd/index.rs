@@ -151,7 +151,7 @@ impl NavAidIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nd::AirspaceClass;
+    use crate::nd::{AirspaceClassification, AirspaceType};
     use crate::VerticalDistance;
 
     fn test_airspace(name: &str, coords: &[(f64, f64)]) -> Rc<Airspace> {
@@ -162,7 +162,8 @@ mod tests {
 
         Rc::new(Airspace {
             name: name.to_string(),
-            class: AirspaceClass::D,
+            airspace_type: AirspaceType::CTA,
+            classification: Some(AirspaceClassification::D),
             ceiling: VerticalDistance::Fl(65),
             floor: VerticalDistance::Msl(1500),
             polygon: geo::Polygon::new(geo::LineString::from(exterior), vec![]),

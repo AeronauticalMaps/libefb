@@ -440,7 +440,7 @@ fn geodesic_distance_to_intersection(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nd::AirspaceClass;
+    use crate::nd::{AirspaceClassification, AirspaceType};
 
     fn test_airspace(name: &str, coords: &[(f64, f64)]) -> Rc<Airspace> {
         let exterior: Vec<geo::Coord<f64>> = coords
@@ -450,7 +450,8 @@ mod tests {
 
         Rc::new(Airspace {
             name: name.to_string(),
-            class: AirspaceClass::D,
+            airspace_type: AirspaceType::CTA,
+            classification: Some(AirspaceClassification::D),
             ceiling: VerticalDistance::Fl(65),
             floor: VerticalDistance::Msl(1500),
             polygon: geo::Polygon::new(geo::LineString::from(exterior), vec![]),
@@ -484,7 +485,8 @@ mod tests {
         // Create an airspace from lat 53-54, lon 9-10
         let airspace = Airspace {
             name: "Test TMA".to_string(),
-            class: AirspaceClass::D,
+            airspace_type: AirspaceType::CTA,
+            classification: Some(AirspaceClassification::D),
             ceiling: VerticalDistance::Fl(65),
             floor: VerticalDistance::Msl(1500),
             polygon: {

@@ -43,7 +43,7 @@ mod waypoint;
 
 pub use airac_cycle::{AiracCycle, CycleValidity};
 pub use airport::Airport;
-pub use airspace::{Airspace, AirspaceClass, Airspaces};
+pub use airspace::{Airspace, AirspaceClassification, AirspaceType};
 pub use fix::Fix;
 pub use location::LocationIndicator;
 pub use navaid::NavAid;
@@ -323,7 +323,8 @@ mod tests {
 
         builder.add_airspace(Airspace {
             name: String::from("TMA BREMEN A"),
-            class: AirspaceClass::D,
+            airspace_type: AirspaceType::CTA,
+            classification: Some(AirspaceClassification::D),
             ceiling: VerticalDistance::Fl(65),
             floor: VerticalDistance::Msl(1500),
             polygon: polygon![
