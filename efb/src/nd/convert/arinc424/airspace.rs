@@ -16,11 +16,12 @@
 //! Builder for constructing airspace polygons from ARINC 424 boundary records.
 
 use arinc424::fields::BoundaryPath;
-use arinc424::records::ControlledAirspace;
+use arinc424::records::{ControlledAirspace, RestrictiveAirspace};
 use geo::{Bearing, Destination, Geodesic, Point};
 
+use super::fields::parse_classification;
 use crate::measurements::{Angle, Length};
-use crate::nd::{Airspace, AirspaceClass};
+use crate::nd::{Airspace, AirspaceClassification, AirspaceType};
 use crate::VerticalDistance;
 
 /// Number of points to interpolate per 90 degrees of arc.
@@ -39,7 +40,7 @@ struct BoundarySegment {
     arc_radius: Option<Length>,
 }
 
-/// Builder for constructing an [Airspace] from ARINC 424 controlled airspace records.
+/// Builder for constructing an [Airspace] from ARINC 424 airspace records.
 ///
 /// ARINC 424 airspaces are defined as a sequence of records, each describing a
 /// boundary segment. This builder accumulates segments and converts them into
@@ -56,8 +57,11 @@ pub struct AirspaceBuilder {
 }
 
 impl AirspaceBuilder {
-    /// Adds a boundary record to the builder.
-    pub fn add_record(&mut self, record: ControlledAirspace) -> Result<(), arinc424::Error> {
+    /// Adds a controlled airspace boundary record to the builder.
+    pub fn add_controlled_record(
+        &mut self,
+        record: ControlledAirspace,
+    ) -> Result<(), arinc424::Error> {
         let coord = match (record.latitude, record.longitude) {
             (Some(lat), Some(lon)) => {
                 // geo uses (x, y) = (longitude, latitude)
@@ -77,24 +81,61 @@ impl AirspaceBuilder {
             self.floor = record.lower_limit.map(Into::into);
         }
 
-        // Parse arc parameters if present
-        let arc_center = match (record.arc_origin_latitude, record.arc_origin_longitude) {
-            (Some(lat), Some(lon)) => {
-                // geo uses (x, y) = (longitude, latitude)
-                Some(Point::new(lon.as_decimal()?, lat.as_decimal()?))
-            }
+        self.add_segment(
+            coord,
+            record.bdry_via.path,
+            record.arc_origin_latitude,
+            record.arc_origin_longitude,
+            record.arc_dist,
+        )
+    }
+
+    /// Adds a restrictive airspace boundary record to the builder.
+    pub fn add_restrictive_record(
+        &mut self,
+        record: RestrictiveAirspace,
+    ) -> Result<(), arinc424::Error> {
+        let coord = match (record.latitude, record.longitude) {
+            (Some(lat), Some(lon)) => Some(Point::new(lon.as_decimal()?, lat.as_decimal()?)),
             _ => None,
         };
 
-        let arc_radius = record
-            .arc_dist
-            .map(|d| d.dist())
-            .transpose()?
-            .map(Length::nm);
+        // First record initializes metadata and starting point
+        if self.start_point.is_none() {
+            self.start_point = coord;
+            self.name = record.arsp_name.map(|n| n.to_string());
+            self.airspace_type = Some(record.restrictive_type.into());
+            self.classification = None;
+            self.ceiling = record.upper_limit.map(Into::into);
+            self.floor = record.lower_limit.map(Into::into);
+        }
 
-        // Add segment
+        self.add_segment(
+            coord,
+            record.bdry_via.path,
+            record.arc_origin_latitude,
+            record.arc_origin_longitude,
+            record.arc_dist,
+        )
+    }
+
+    fn add_segment(
+        &mut self,
+        coord: Option<Point<f64>>,
+        path: BoundaryPath,
+        arc_origin_lat: Option<arinc424::fields::Latitude<'_>>,
+        arc_origin_lon: Option<arinc424::fields::Longitude<'_>>,
+        arc_dist: Option<arinc424::fields::ArcDistance<'_>>,
+    ) -> Result<(), arinc424::Error> {
+        let arc_center = match (arc_origin_lat, arc_origin_lon) {
+            (Some(lat), Some(lon)) => Some(Point::new(lon.as_decimal()?, lat.as_decimal()?)),
+            _ => None,
+        };
+
+        let arc_radius = arc_dist.map(|d| d.dist()).transpose()?.map(Length::nm);
+
         self.segments.push(BoundarySegment {
-            path: record.bdry_via.path,
+            path,
             end_point: coord
                 .or(arc_center)
                 .expect("record should either have coordinates or arc center"),
@@ -111,7 +152,8 @@ impl AirspaceBuilder {
 
         Ok(Airspace {
             name: self.name.unwrap_or_default(),
-            class: self.class.unwrap_or(AirspaceClass::G),
+            airspace_type: self.airspace_type.unwrap_or(AirspaceType::CTA),
+            classification: self.classification,
             ceiling: self.ceiling.unwrap_or(VerticalDistance::Unlimited),
             floor: self.floor.unwrap_or(VerticalDistance::Gnd),
             polygon,
@@ -173,7 +215,10 @@ impl AirspaceBuilder {
     }
 
     /// Builds a circle polygon from a circle segment.
-    fn build_circle(&self, segment: &BoundarySegment) -> Result<geo::Polygon<f64>, arinc424::Error> {
+    fn build_circle(
+        &self,
+        segment: &BoundarySegment,
+    ) -> Result<geo::Polygon<f64>, arinc424::Error> {
         let center = segment.end_point;
         let radius_m = segment.arc_radius.map(|r| r.to_si()).unwrap_or(0.0) as f64;
 

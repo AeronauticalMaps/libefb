@@ -30,21 +30,65 @@ impl<'a> TryFrom<fields::Cycle<'a>> for AiracCycle {
     }
 }
 
-impl<'a> TryFrom<(fields::ArspType, Option<fields::AirspaceClassification<'a>>)> for AirspaceClass {
-    type Error = arinc424::Error;
-
-    fn try_from(
-        value: (fields::ArspType, Option<fields::AirspaceClassification<'a>>),
-    ) -> Result<Self, Self::Error> {
+impl From<fields::ArspType> for AirspaceType {
+    fn from(value: fields::ArspType) -> Self {
         match value {
-            (fields::ArspType::ClassC, _) => Ok(Self::C),
-            (fields::ArspType::ControlArea, _) => Ok(Self::CTA),
-            (fields::ArspType::TerminalControlArea, _) => Ok(Self::TMA),
-            (fields::ArspType::RadarZone, _) => Ok(Self::RadarZone),
-            (fields::ArspType::ClassB, _) => Ok(Self::B),
-            (fields::ArspType::RadioMandatoryZone, _) => Ok(Self::RMZ),
-            (fields::ArspType::TransponderMandatoryZone, _) => Ok(Self::TMZ),
-            (fields::ArspType::ControlZone, _) => Ok(Self::CTR),
+            fields::ArspType::ClassC => Self::TMA,
+            fields::ArspType::ControlArea => Self::CTA,
+            fields::ArspType::TerminalControlArea => Self::TMA,
+            fields::ArspType::RadarZone => Self::RadarZone,
+            fields::ArspType::ClassB => Self::TMA,
+            fields::ArspType::RadioMandatoryZone => Self::RMZ,
+            fields::ArspType::TransponderMandatoryZone => Self::TMZ,
+            fields::ArspType::ControlZone => Self::CTR,
+        }
+    }
+}
+
+/// Parses the ICAO classification from the ARINC 424 `arsp_class` field.
+///
+/// Falls back to inferring the classification from the `ArspType` when the
+/// explicit field is absent (e.g. `ClassB` → `B`, `ClassC` → `C`).
+pub fn parse_classification(
+    arsp_type: fields::ArspType,
+    arsp_class: Option<&fields::AirspaceClassification<'_>>,
+) -> Option<AirspaceClassification> {
+    // Try the explicit arsp_class field first
+    if let Some(class) = arsp_class {
+        match class.as_bytes()[0] {
+            b'A' => return Some(AirspaceClassification::A),
+            b'B' => return Some(AirspaceClassification::B),
+            b'C' => return Some(AirspaceClassification::C),
+            b'D' => return Some(AirspaceClassification::D),
+            b'E' => return Some(AirspaceClassification::E),
+            b'F' => return Some(AirspaceClassification::F),
+            b'G' => return Some(AirspaceClassification::G),
+            _ => {}
+        }
+    }
+
+    // Infer from ArspType for hybrid variants
+    match arsp_type {
+        fields::ArspType::ClassB => Some(AirspaceClassification::B),
+        fields::ArspType::ClassC => Some(AirspaceClassification::C),
+        _ => None,
+    }
+}
+
+impl From<fields::RestrictiveType> for AirspaceType {
+    fn from(value: fields::RestrictiveType) -> Self {
+        match value {
+            fields::RestrictiveType::Danger => Self::Danger,
+            fields::RestrictiveType::Prohibited => Self::Prohibited,
+            fields::RestrictiveType::Restricted
+            | fields::RestrictiveType::Alert
+            | fields::RestrictiveType::Caution
+            | fields::RestrictiveType::LongTermTFR
+            | fields::RestrictiveType::MOA
+            | fields::RestrictiveType::NationalSecurityArea
+            | fields::RestrictiveType::Training
+            | fields::RestrictiveType::Warning
+            | fields::RestrictiveType::UnspecifiedOrUnknown => Self::Restricted,
         }
     }
 }
