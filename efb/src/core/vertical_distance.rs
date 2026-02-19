@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,13 +23,10 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
-use crate::measurements::Pressure;
+use crate::measurements::{Altitude, Length, LengthUnit, Pressure};
 
 mod constants {
-    use crate::measurements::Pressure;
-
     pub const METER_IN_FEET: f32 = 3.28084;
-    pub const STD_PRESSURE: Pressure = Pressure::h_pa(1013.23); // 29.92 inHg
 }
 
 /// A vertical distance.
@@ -60,6 +57,47 @@ pub enum VerticalDistance {
 }
 
 impl VerticalDistance {
+    /// Resolves this vertical distance to an altitude above mean sea level.
+    ///
+    /// Returns `None` for [`VerticalDistance::Unlimited`] which has no finite
+    /// altitude representation.
+    ///
+    /// # Conversion rules
+    ///
+    /// | Variant               | Resolved as                           |
+    /// |-----------------------|---------------------------------------|
+    /// | `Gnd`                 | `elevation`                           |
+    /// | `Agl(n)`              | `elevation + n ft`                    |
+    /// | `Msl(n)`              | `n ft`                                |
+    /// | `Altitude(n)`         | `n ft` (QNH-referenced, equal to MSL) |
+    /// | `Fl(n)`               | `n × 100 ft`, corrected for QNH       |
+    /// | `PressureAltitude(n)` | `n ft`, corrected for QNH             |
+    /// | `Unlimited`           | `None`                                |
+    ///
+    /// The QNH correction for flight level and pressure altitude uses the standard
+    /// lapse rate approximation of 27 ft/hPa, valid for normal QNH ranges.
+    pub fn to_msl(&self, qnh: Pressure, elevation: Length) -> Option<Altitude> {
+        // Correction in feet: positive when QNH is above standard (denser air
+        // means the same FL is at a higher true altitude).
+        //
+        // The 27 ft/hPa factor is derived from the hydrostatic equation at ISA
+        // sea-level conditions (ρ = 1.225 kg/m³, g = 9.80665 m/s²), giving
+        // dP/dh ≈ −1 hPa per 8.3 m ≈ −1 hPa per 27 ft.
+        // See: https://www.weather.gov/media/epz/wxcalc/pressureAltitude.pdf
+        let qnh_correction_ft = (qnh - Pressure::STD).to_si() / 100.0 * 27.0;
+        let ground_ft = *elevation.convert_to(LengthUnit::Feet).value();
+
+        Some(Altitude::ft(match self {
+            Self::Gnd => ground_ft,
+            Self::Agl(n) => ground_ft + *n as f32,
+            Self::Msl(n) => *n as f32,
+            Self::Altitude(n) => *n as f32,
+            Self::Fl(n) => *n as f32 * 100.0 + qnh_correction_ft,
+            Self::PressureAltitude(n) => *n as f32 + qnh_correction_ft,
+            Self::Unlimited => return None,
+        }))
+    }
+
     /// Returns the pressure altitude based on the elevation and the QNH.
     ///
     /// # Errors
@@ -68,10 +106,11 @@ impl VerticalDistance {
     /// pressure altitude to overflow.
     ///
     /// [`ImplausibleValue`]: Error::ImplausibleValue
+    // TODO: Change elevation to be a length measurement.
     pub fn pa(elevation: i16, qnh: Pressure) -> Result<Self, Error> {
         // https://www.weather.gov/media/epz/wxcalc/pressureAltitude.pdf
         let (pa, overflowed) = elevation.overflowing_add(
-            (145366.45 * (1.0 - (qnh / constants::STD_PRESSURE).powf(0.190284))).round() as i16,
+            (145366.45 * (1.0 - (qnh / Pressure::STD).powf(0.190284))).round() as i16,
         );
 
         if overflowed {
@@ -265,5 +304,56 @@ mod tests {
         assert!(VerticalDistance::Agl(1000) < VerticalDistance::Agl(2000));
         assert!(VerticalDistance::Altitude(1000) < VerticalDistance::Altitude(2000));
         assert!(VerticalDistance::Msl(1000) < VerticalDistance::Fl(100));
+    }
+
+    #[test]
+    fn to_msl_at_standard_pressure() {
+        let std_qnh = Pressure::STD;
+        let zero_elev = Length::m(0.0);
+
+        // FL100 at standard QNH = 10 000 ft MSL
+        let alt = VerticalDistance::Fl(100)
+            .to_msl(std_qnh, zero_elev)
+            .unwrap();
+        assert!((alt.to_si() - Length::ft(10_000.0).to_si()).abs() < 1.0);
+
+        // MSL 5 000 ft is always 5 000 ft
+        let alt = VerticalDistance::Msl(5_000)
+            .to_msl(std_qnh, zero_elev)
+            .unwrap();
+        assert!((alt.to_si() - Length::ft(5_000.0).to_si()).abs() < 1.0);
+
+        // Unlimited has no MSL representation
+        assert!(VerticalDistance::Unlimited
+            .to_msl(std_qnh, zero_elev)
+            .is_none());
+    }
+
+    #[test]
+    fn to_msl_qnh_correction() {
+        // High QNH (1033 hPa, +20 hPa above std): FL100 should read ~540 ft higher
+        let high_qnh = Pressure::STD + Pressure::h_pa(20.0);
+        let expected_correction = 20.0 * 27.0; // +540 ft
+        let alt = VerticalDistance::Fl(100)
+            .to_msl(high_qnh, Length::m(0.0))
+            .unwrap();
+        let expected_ft = 10_000.0 + expected_correction;
+        assert!((alt.to_si() - Length::ft(expected_ft).to_si()).abs() < 2.0);
+    }
+
+    #[test]
+    fn to_msl_agl_adds_ground_elevation() {
+        let std_qnh = Pressure::STD;
+        let ground = Length::ft(500.0);
+
+        // 1 000 ft AGL above 500 ft ground = 1 500 ft MSL
+        let alt = VerticalDistance::Agl(1_000)
+            .to_msl(std_qnh, ground)
+            .unwrap();
+        assert!((alt.to_si() - Length::ft(1_500.0).to_si()).abs() < 1.0);
+
+        // Gnd at a 500 ft airfield = 500 ft MSL
+        let alt = VerticalDistance::Gnd.to_msl(std_qnh, ground).unwrap();
+        assert!((alt.to_si() - Length::ft(500.0).to_si()).abs() < 1.0);
     }
 }
