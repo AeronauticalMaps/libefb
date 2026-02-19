@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- EuroNav 7 compatibility for controlled and restrictive airspace types
 - Restrictive airspace record
 
 ## [0.3.0] - 2026-01-28

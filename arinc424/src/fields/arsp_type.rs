@@ -41,6 +41,11 @@ impl FixedField<'_> for ArspType {
             b'U' => Ok(Self::RadioMandatoryZone),
             b'V' => Ok(Self::TransponderMandatoryZone),
             b'Z' => Ok(Self::ControlZone),
+
+            // NOTE: The following type is only for EuroNav 7 compatibility and
+            //       is NOT defined by ARINC 424!
+            b'K' => Ok(Self::ControlArea),
+
             byte => Err(Error::InvalidCharacter {
                 field: "Controlled Airspace Type",
                 byte,

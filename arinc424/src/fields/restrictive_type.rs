@@ -47,6 +47,11 @@ impl FixedField<'_> for RestrictiveType {
             b'T' => Ok(Self::Training),
             b'W' => Ok(Self::Warning),
             b'U' => Ok(Self::UnspecifiedOrUnknown),
+
+            // NOTE: The following type is only for EuroNav 7 compatibility and
+            //       is NOT defined by ARINC 424!
+            b'G' => Ok(Self::Restricted),
+
             byte => Err(Error::InvalidCharacter {
                 field: "Restrictive Airspace Type",
                 byte,
