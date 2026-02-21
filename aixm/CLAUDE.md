@@ -1,10 +1,19 @@
-# AIXM from XSD generator
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when
+working with code in this repository.
+
+## Project Overview
 
 Navigation data are provided by authorities in the AIXM format. It is
 specified by following XSD files:
 
 - https://www.aixm.aero/schema/5.2/5.2.0/AIXM_Features.xsd
 - https://www.aixm.aero/schema/5.2/5.2.0/message/AIXM_BasicMessage.xsd
+
+## Code Generation
+
+### XSD Parser
 
 The Rust crate `xsd-parser` is capable of parsing XSD files and
 generate Rust types from it. It has a `web-resolver` feature that
@@ -20,14 +29,20 @@ named `+` or `-` which needs to be translated to e.g. `Plus` or `Minus`.
 The author of the `xsd-parser` crate has a feature branch
 `https://github.com/Bergmann89/xsd-parser/tree/feature/aixm` where he
 writes a builder to parse AIXM files
-`https://github.com/Bergmann89/xsd-parser/blob/feature/aixm/examples/simple.rs`. The
-code uses local files opposed to the approach we want to implement and
-writes all code into one file. However, it gives an idea on how to add
-stages to the parser to fix the types that would result in invalid
+`https://github.com/Bergmann89/xsd-parser/blob/feature/aixm/examples/simple.rs`.
+The code uses local files opposed to the approach we want to implement
+and writes all code into one file. However, it gives an idea on how to
+add stages to the parser to fix the types that would result in invalid
 Rust code. The issue is, that the feature branch is based on an
 earlier version and there were breaking API changes compared to the
 latest version. You need to find the difference to implement this
-custom name parsing for the latest version of the crate.
+custom name parsing for the latest version of the crate.  The code
+returned by the `generate` function is a `TokenStream`. This code
+SHOULDN'T be written into on file. It MUST be split into modules.
 
-The code returned by the `generate` function is a `TokenStream`. This
-code SHOULDN'T be written into on file. It MUST be split into modules.
+### Structure of Generated Code
+
+Since the AIXM specification with it dependencies generates a huge
+amount of code, it MUST be structured well. Each namespace is a module
+with its own directory. Within this module, all types are written to
+dedicated file to avoid huge single source files.

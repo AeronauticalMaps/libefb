@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2024 Joe Pearson
+# Copyright 2024, 2026 Joe Pearson
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,15 +23,28 @@ keywords = ["AIXM", "aviation", "GML", "XML"]
 homepage = "https://github.com/pearjo/libefb"
 repository = "https://github.com/pearjo/libefb"
 
+[features]
+default = []
+codegen = [
+    "dep:xsd-parser",
+    "dep:syn",
+    "dep:quote",
+    "dep:proc-macro2",
+    "dep:prettyplease",
+    "dep:heck",
+]
+
 [dependencies]
-# XML parsing - optional, enabled by aixm feature
 quick-xml = { version = "0.37", features = ["serialize"], optional = true }
 serde = { version = "1.0", features = ["derive"] }
 xsd-parser-types = "0.1.2"
+xsd-parser = { version = "1.4.0", features = ["web-resolver"], optional = true }
+syn = { version = "2.0", features = ["full"], optional = true }
+quote = { version = "1.0", optional = true }
+proc-macro2 = { version = "1.0", optional = true }
+prettyplease = { version = "0.2", optional = true }
+heck = { version = "0.5", optional = true }
 
-[build-dependencies]
-xsd-parser = { version = "1.4.0", features = ["web-resolver"] }
-syn = { version = "2.0", features = ["full"] }
-quote = "1.0"
-proc-macro2 = "1.0"
-prettyplease = "0.2"
+[[bin]]
+name = "aixm-codegen"
+required-features = ["codegen"]
