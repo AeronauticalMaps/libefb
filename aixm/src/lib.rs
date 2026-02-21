@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,12 +20,7 @@
 //!
 //! The types in this crate are automatically generated from the official AIXM XSD schemas.
 
-// Re-export xsd_parser_types that are used by generated code
 pub use xsd_parser_types;
 
-// Include the generated modules
-#[cfg(not(feature = "no-codegen"))]
 mod generated;
-
-#[cfg(not(feature = "no-codegen"))]
 pub use generated::*;
