@@ -31,6 +31,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+aixm = { path = "../aixm", version = "0.1.0" }
 arinc424 = { path = "../arinc424", version = "0.4.0" }
 chrono = "0.4.42"
 geo = "0.32.0"
@@ -40,6 +41,9 @@ log = "0.4"
 serde = { version = "1.0.219", features = ["derive", "rc"], optional = true  }
 time = { version = "0.3.36", features = ["wasm-bindgen"] }
 world_magnetic_model = "0.2.0"
+
+[dev-dependencies]
+geo = "0.32.0"
 
 [features]
 geojson = ["dep:geojson"]
