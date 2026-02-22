@@ -41,6 +41,8 @@ use std::fmt;
 use std::ops::Range;
 use std::rc::Rc;
 
+use log::{debug, trace, warn};
+
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -111,8 +113,11 @@ pub struct Tokens {
 
 impl Tokens {
     pub fn new(s: &str, nd: &NavigationData) -> Self {
+        debug!("tokenizing route string: {:?}", s);
         let words = Lexer::lex(s, nd);
+        debug!("lexer produced {} word(s)", words.len());
         let tokens = Self::tokenize(words, nd);
+        debug!("tokenizer produced {} token(s)", tokens.len());
         Self { tokens }
     }
 
@@ -180,19 +185,34 @@ impl Tokens {
                     // them includes this point. If we find two different
                     // terminal areas and both have a matching waypoint, the
                     // prompt is ambiguous and can't be resolved!
+                    trace!(
+                        "resolving VFR waypoint {:?} (terminal={:?})",
+                        ident,
+                        terminal.as_ref().map(|a| a.ident())
+                    );
                     match Self::resolve_in_terminal_areas(
                         terminal.as_ref(),
                         Self::lookahead_terminal_area(&words[i + 1..]).as_ref(),
                         ident,
                         nd,
                     ) {
-                        (Some(wp), None) | (None, Some(wp)) => TokenKind::NavAid(wp),
+                        (Some(wp), None) | (None, Some(wp)) => {
+                            trace!("VFR waypoint {:?} resolved to {}", ident, wp.ident());
+                            TokenKind::NavAid(wp)
+                        }
 
                         (Some(NavAid::Waypoint(a)), Some(NavAid::Waypoint(b))) => {
                             // we are in the same terminal area
                             if a == b {
+                                trace!("VFR waypoint {:?} resolved (same terminal area)", ident);
                                 TokenKind::NavAid(NavAid::Waypoint(a))
                             } else {
+                                warn!(
+                                    "ambiguous terminal area for waypoint {:?}: {} vs {}",
+                                    ident,
+                                    a.terminal_area().unwrap_or("ZZZZ"),
+                                    b.terminal_area().unwrap_or("ZZZZ"),
+                                );
                                 TokenKind::Err(Error::AmbiguousTerminalArea {
                                     wp: ident.to_string(),
                                     a: a.terminal_area().unwrap_or("ZZZZ").to_string(),
@@ -210,8 +230,13 @@ impl Tokens {
                                 //       first name matching point, but for the
                                 //       future we should resolve the point in
                                 //       relation to neighboring waypoints.
+                                trace!(
+                                    "VFR waypoint {:?} resolved as enroute waypoint (no terminal area match)",
+                                    ident
+                                );
                                 TokenKind::NavAid(NavAid::Waypoint(wp.clone()))
                             } else {
+                                warn!("unresolved route token {:?}", ident);
                                 TokenKind::Err(Error::UnexpectedRouteToken(ident.clone()))
                             }
                         }
@@ -354,6 +379,7 @@ impl Lexer {
     fn classify(s: &str, nd: &NavigationData) -> WordKind {
         // Check for special keywords first
         if s == "DCT" {
+            trace!("lexed {:?} as DCT (direct)", s);
             return WordKind::Via(Via::Direct);
         }
 
@@ -361,26 +387,36 @@ impl Lexer {
         if let Some(navaid) = nd.find(s) {
             return match navaid {
                 NavAid::Waypoint(wp) if wp.usage == WaypointUsage::VFROnly => {
+                    trace!("lexed {:?} as VFR waypoint", s);
                     WordKind::VFRWaypoint {
                         ident: wp.fix_ident.clone(),
                         wp: Some(wp),
                     }
                 }
-                NavAid::Waypoint(_) => WordKind::NavAid(navaid),
-                NavAid::Airport(arpt) => WordKind::Airport { arpt, rwy: None },
+                NavAid::Waypoint(_) => {
+                    trace!("lexed {:?} as navaid", s);
+                    WordKind::NavAid(navaid)
+                }
+                NavAid::Airport(arpt) => {
+                    trace!("lexed {:?} as airport", s);
+                    WordKind::Airport { arpt, rwy: None }
+                }
             };
         }
 
         // Try parsing as performance elements
         if let Ok(speed) = s.parse::<Speed>() {
+            trace!("lexed {:?} as speed: {:?}", s, speed);
             return WordKind::Speed(speed);
         }
 
         if let Ok(level) = s.parse::<VerticalDistance>() {
+            trace!("lexed {:?} as level: {:?}", s, level);
             return WordKind::Level(level);
         }
 
         if let Ok(wind) = s.parse::<Wind>() {
+            trace!("lexed {:?} as wind: {:?}", s, wind);
             return WordKind::Wind(wind);
         }
 
@@ -394,16 +430,23 @@ impl Lexer {
                     .cloned();
 
                 return match rwy {
-                    Some(_) => WordKind::Airport { arpt, rwy },
-                    None => WordKind::Err(Error::UnknownRunwayInRoute {
-                        arpt: arpt.ident(),
-                        rwy: rwy_designator.to_string(),
-                    }),
+                    Some(_) => {
+                        trace!("lexed {:?} as airport {} with runway {}", s, ident, rwy_designator);
+                        WordKind::Airport { arpt, rwy }
+                    }
+                    None => {
+                        warn!("unknown runway {:?} for airport {}", rwy_designator, arpt.ident());
+                        WordKind::Err(Error::UnknownRunwayInRoute {
+                            arpt: arpt.ident(),
+                            rwy: rwy_designator.to_string(),
+                        })
+                    }
                 };
             }
         }
 
         // Fallback: treat as potential VFR waypoint
+        trace!("lexed {:?} as unresolved VFR waypoint", s);
         WordKind::VFRWaypoint {
             ident: s.to_string(),
             wp: None,

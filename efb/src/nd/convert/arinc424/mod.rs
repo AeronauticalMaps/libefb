@@ -13,6 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use log::{debug, info, trace, warn};
+
 use arinc424;
 
 use crate::error::Error;
@@ -27,8 +29,11 @@ use airspace::AirspaceBuilder;
 impl NavigationData {
     /// Creates navigation data from an ARINC 424 string.
     pub fn try_from_arinc424(data: &[u8]) -> Result<Self, Error> {
+        info!("loading navigation data from ARINC 424 ({} bytes)", data.len());
+
         let mut builder = NavigationData::builder();
         let mut airspace: Option<AirspaceBuilder> = None;
+        let mut counts = (0u32, 0u32, 0u32, 0u32);
 
         for (kind, bytes) in arinc424::records::Records::new(data) {
             if let Err(e) = || -> Result<(), arinc424::Error> {
@@ -36,20 +41,26 @@ impl NavigationData {
                     arinc424::records::RecordKind::Waypoint => {
                         let record = arinc424::records::Waypoint::try_from(bytes)?;
                         let wp = Waypoint::try_from(record)?;
+                        trace!("loaded waypoint {}", wp.fix_ident);
                         builder.add_waypoint(wp);
+                        counts.0 += 1;
                     }
 
                     arinc424::records::RecordKind::Airport => {
                         let record = arinc424::records::Airport::try_from(bytes)?;
                         let arpt = Airport::try_from(record)?;
+                        trace!("loaded airport {}", arpt.icao_ident);
                         builder.add_airport(arpt);
+                        counts.1 += 1;
                     }
 
                     arinc424::records::RecordKind::Runway => {
                         let record = arinc424::records::Runway::try_from(bytes)?;
                         let ident = record.arpt_ident.to_string();
                         let rwy = Runway::try_from(record)?;
+                        trace!("loaded runway {} at {}", rwy.designator, ident);
                         builder.add_runway(ident, rwy);
+                        counts.2 += 1;
                     }
 
                     arinc424::records::RecordKind::ControlledAirspace => {
@@ -63,13 +74,16 @@ impl NavigationData {
                                 .expect("there should be an airspace at this point")
                                 .build()?;
 
+                            trace!("loaded airspace {}", arsp.name);
                             builder.add_airspace(arsp);
+                            counts.3 += 1;
                         }
                     }
                 }
 
                 Ok(())
             }() {
+                warn!("invalid ARINC 424 record: {}", e);
                 builder.add_error(Error::InvalidA424 {
                     record: bytes.to_vec(),
                     error: e.to_string(),
@@ -77,6 +91,24 @@ impl NavigationData {
             }
         }
 
-        Ok(builder.with_source(data).build())
+        let nd = builder.with_source(data).build();
+
+        info!(
+            "ARINC 424 loading complete: {} waypoints, {} airports, {} runways, {} airspaces",
+            counts.0, counts.1, counts.2, counts.3
+        );
+
+        if !nd.errors().is_empty() {
+            warn!(
+                "ARINC 424 loading produced {} error(s)",
+                nd.errors().len()
+            );
+        }
+
+        if let Some(cycle) = nd.cycle() {
+            debug!("AIRAC cycle: {:?}", cycle);
+        }
+
+        Ok(nd)
     }
 }

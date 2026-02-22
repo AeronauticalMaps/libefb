@@ -27,6 +27,7 @@ readme = "README.md"
 
 [dependencies]
 arinc424-derive = { path = "../arinc424-derive", version = "0.3.0" }
+log = "0.4"
 
 [dev-dependencies]
 criterion = "0.8.1"

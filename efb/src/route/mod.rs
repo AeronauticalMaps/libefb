@@ -16,6 +16,8 @@
 use std::fmt;
 use std::rc::Rc;
 
+use log::{debug, trace, warn};
+
 use crate::error::Error;
 use crate::fp::Performance;
 use crate::measurements::Speed;
@@ -83,6 +85,7 @@ impl Route {
     /// Decodes a `route` that is composed of a space separated list of fix
     /// idents read from the navigation data `nd`.
     pub fn decode(&mut self, route: &str, nd: &NavigationData) -> Result<(), Error> {
+        debug!("route decode: {:?}", route);
         self.tokens = Tokens::new(route, nd);
         self.legs.clear();
 
@@ -105,6 +108,7 @@ impl Route {
                     // first speed is cruise speed
                     if self.speed.is_none() {
                         self.speed = Some(*value);
+                        debug!("cruise speed set to {:?}", value);
                     }
                 }
 
@@ -113,6 +117,7 @@ impl Route {
                     // first level is cruise level
                     if self.level.is_none() {
                         self.level = Some(*value);
+                        debug!("cruise level set to {:?}", value);
                     }
                 }
 
@@ -130,11 +135,21 @@ impl Route {
                     match &self.origin {
                         None => {
                             // First airport = origin with optional takeoff runway
+                            debug!(
+                                "origin set to {} (rwy {:?})",
+                                arpt.ident(),
+                                rwy.as_ref().map(|r| &r.designator)
+                            );
                             self.origin = Some(Rc::clone(arpt));
                             self.takeoff_rwy = rwy.clone();
                         }
                         Some(_) => {
                             // Any subsequent airport = destination with optional landing runway
+                            debug!(
+                                "destination set to {} (rwy {:?})",
+                                arpt.ident(),
+                                rwy.as_ref().map(|r| &r.designator)
+                            );
                             self.destination = Some(Rc::clone(arpt));
                             self.landing_rwy = rwy.clone();
                         }
@@ -151,6 +166,7 @@ impl Route {
                 }
 
                 TokenKind::Err(err) => {
+                    warn!("error token encountered during route decode: {}", err);
                     return Err(err.clone());
                 }
 
@@ -159,6 +175,11 @@ impl Route {
 
             match (&from, &to) {
                 (Some(from), Some(to)) => {
+                    trace!(
+                        "creating leg: {} -> {}",
+                        from.ident(),
+                        to.ident()
+                    );
                     self.legs
                         .push(Leg::new(from.clone(), to.clone(), level, tas, wind));
                 }
@@ -167,6 +188,8 @@ impl Route {
 
             (from, to) = (to, None);
         }
+
+        debug!("route decoded: {} leg(s)", self.legs.len());
 
         Ok(())
     }

@@ -23,6 +23,8 @@
 
 use std::str::FromStr;
 
+use log::{debug, info, trace};
+
 use crate::error::Error;
 use crate::fc;
 use crate::geom::{Coordinate, Polygon};
@@ -31,19 +33,29 @@ use crate::VerticalDistance;
 
 impl NavigationData {
     pub fn try_from_openair(s: &str) -> Result<Self, Error> {
+        info!("loading navigation data from OpenAir ({} bytes)", s.len());
+
         // TODO: Move OpenAir parser into dedicated crate and optimize parsing.
         let mut builder = NavigationData::builder();
         let mut element = OpenAirElement::new();
+        let mut count = 0u32;
 
         s.lines().for_each(|command| {
             if let Some(airspace) = Self::parse_command(command, &mut element) {
+                trace!("loaded airspace {}", airspace.name);
                 builder.add_airspace(airspace);
+                count += 1;
             }
         });
 
         builder.add_airspace((&mut element).into());
+        count += 1;
 
-        Ok(builder.with_source(s.as_bytes()).build())
+        let nd = builder.with_source(s.as_bytes()).build();
+        info!("OpenAir loading complete: {} airspaces", count);
+        debug!("OpenAir data partition ID: {}", nd.partition_id());
+
+        Ok(nd)
     }
 
     fn parse_command(command: &str, element: &mut OpenAirElement) -> Option<Airspace> {
