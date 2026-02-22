@@ -19,6 +19,8 @@ use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
 
+use log::{debug, trace, warn};
+
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -199,13 +201,21 @@ impl NavigationData {
     /// # }
     /// ```
     pub fn find(&self, ident: &str) -> Option<NavAid> {
-        self.waypoints()
+        let result = self
+            .waypoints()
             .find(|&wp| wp.ident() == ident)
             .map(|wp| NavAid::Waypoint(Rc::clone(wp)))
             .or(self
                 .airports()
                 .find(|&arpt| arpt.ident() == ident)
-                .map(|arpt| NavAid::Airport(Rc::clone(arpt))))
+                .map(|arpt| NavAid::Airport(Rc::clone(arpt))));
+
+        match &result {
+            Some(navaid) => trace!("found navaid for ident {:?}: {}", ident, navaid.ident()),
+            None => trace!("no navaid found for ident {:?}", ident),
+        }
+
+        result
     }
 
     /// Searches for a waypoint within a terminal area.
@@ -222,9 +232,21 @@ impl NavigationData {
     /// # }
     /// ```
     pub fn find_terminal_waypoint(&self, airport_ident: &str, fix_ident: &str) -> Option<NavAid> {
-        self.terminal_waypoints(airport_ident)
+        let result = self
+            .terminal_waypoints(airport_ident)
             .find(|&wp| wp.fix_ident == fix_ident)
-            .map(|wp| NavAid::Waypoint(Rc::clone(wp)))
+            .map(|wp| NavAid::Waypoint(Rc::clone(wp)));
+
+        match &result {
+            Some(_) => trace!("found terminal waypoint {} at {}", fix_ident, airport_ident),
+            None => trace!(
+                "no terminal waypoint {} found at {}",
+                fix_ident,
+                airport_ident
+            ),
+        }
+
+        result
     }
 
     /// Appends other navigation data.
@@ -234,14 +256,24 @@ impl NavigationData {
     /// [removed]: Self::remove
     /// [partition ID]: Self::partition_id
     pub fn append(&mut self, other: NavigationData) {
-        self.partitions.insert(other.partition_id(), other);
+        let id = other.partition_id();
+        debug!("appending navigation data partition {}", id);
+        self.partitions.insert(id, other);
+        debug!(
+            "navigation data now has {} partition(s)",
+            self.partitions.len()
+        );
         self.reindex();
     }
 
     /// Removes the navigation data partition.
     pub fn remove(&mut self, partition_id: &u64) {
-        self.partitions.remove(partition_id);
-        self.reindex();
+        if self.partitions.remove(partition_id).is_some() {
+            debug!("removed navigation data partition {}", partition_id);
+            self.reindex();
+        } else {
+            warn!("attempted to remove unknown partition {}", partition_id);
+        }
     }
 
     /// Indexes the navigation data partitions.
@@ -252,7 +284,8 @@ impl NavigationData {
 
     /// Returns the IDs of the expired navigation data partitions.
     pub fn expired_partitions(&self) -> Vec<u64> {
-        self.partitions
+        let expired: Vec<u64> = self
+            .partitions
             .iter()
             .filter_map(|(&id, nd)| {
                 nd.cycle
@@ -260,7 +293,17 @@ impl NavigationData {
                     .filter(|&validity| validity == CycleValidity::Expired)
                     .map(|_| id)
             })
-            .collect()
+            .collect();
+
+        if !expired.is_empty() {
+            warn!(
+                "{} navigation data partition(s) expired: {:?}",
+                expired.len(),
+                expired
+            );
+        }
+
+        expired
     }
 
     /// Returns all possible data errors.

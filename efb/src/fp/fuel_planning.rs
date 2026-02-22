@@ -13,6 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use log::{debug, trace};
+
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -91,6 +93,8 @@ impl FuelPlanning {
         let alternate = route.alternate().and_then(|alternate| alternate.fuel(perf));
         let reserve = reserve.fuel(perf, &route.level()?);
 
+        trace!("fuel planning: trip={:?}, alternate={:?}, reserve={:?}", trip, alternate, reserve);
+
         let min = {
             let mut min = taxi + trip + reserve;
 
@@ -125,6 +129,11 @@ impl FuelPlanning {
         };
 
         let after_landing = total - taxi - trip;
+
+        debug!(
+            "fuel planning: min={:?}, total={:?}, extra={:?}, after_landing={:?}",
+            min, total, extra, after_landing
+        );
 
         Some(Self {
             taxi,

@@ -13,6 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use log::{debug, info, trace, warn};
+
 use super::*;
 
 use crate::aircraft::Aircraft;
@@ -52,6 +54,8 @@ impl FlightPlanningBuilder {
     /// Builds a flight planning for the specified route.
     // TODO: Describe the possible errors.
     pub fn build(&self, route: &Route) -> Result<FlightPlanning, Error> {
+        info!("building flight planning");
+
         let fuel_planning = match (
             &self.aircraft,
             &self.policy,
@@ -60,24 +64,44 @@ impl FlightPlanningBuilder {
             &self.perf,
         ) {
             (Some(aircraft), Some(policy), Some(taxi), Some(reserve), Some(perf)) => {
-                FuelPlanning::new(aircraft, policy, taxi, route, reserve, perf)
+                debug!("computing fuel planning (policy={:?})", policy);
+                let fp = FuelPlanning::new(aircraft, policy, taxi, route, reserve, perf);
+                if fp.is_none() {
+                    warn!("fuel planning could not be computed (missing route totals)");
+                }
+                fp
             }
-            _ => None,
+            _ => {
+                trace!("fuel planning skipped: missing aircraft, policy, taxi, reserve, or performance data");
+                None
+            }
         };
 
         let mb = match (&self.aircraft, &self.mass, &fuel_planning) {
             (Some(aircraft), Some(mass), Some(fuel_planning)) => {
+                debug!("computing mass & balance");
                 Some(aircraft.mb_from_const_mass_and_equally_distributed_fuel(
                     mass,
                     fuel_planning.on_ramp(),
                     fuel_planning.after_landing(),
                 )?)
             }
-            _ => None,
+            _ => {
+                trace!("mass & balance skipped: missing aircraft, mass, or fuel planning");
+                None
+            }
         };
 
         let is_balanced = match (&self.aircraft, mb.as_ref()) {
-            (Some(aircraft), Some(mb)) => Some(aircraft.is_balanced(mb)),
+            (Some(aircraft), Some(mb)) => {
+                let balanced = aircraft.is_balanced(mb);
+                if !balanced {
+                    warn!("aircraft is NOT within balance limits");
+                } else {
+                    debug!("aircraft is within balance limits");
+                }
+                Some(balanced)
+            }
             _ => None,
         };
 
@@ -92,6 +116,7 @@ impl FlightPlanningBuilder {
             &self.takeoff_perf,
         ) {
             (Some(rwy), Some(rwycc), Some(wind), Some(temperature), Some(mb), Some(perf)) => {
+                debug!("computing takeoff runway analysis (rwy {})", rwy.designator);
                 Some(RunwayAnalysis::takeoff(
                     rwy,
                     rwycc,
@@ -102,7 +127,10 @@ impl FlightPlanningBuilder {
                     self.takeoff_factors.as_ref(),
                 ))
             }
-            _ => None,
+            _ => {
+                trace!("takeoff runway analysis skipped: missing required parameters");
+                None
+            }
         };
 
         let landing_rwy_analysis: Option<RunwayAnalysis> = match (
@@ -116,6 +144,7 @@ impl FlightPlanningBuilder {
             &self.landing_perf,
         ) {
             (Some(rwy), Some(rwycc), Some(wind), Some(temperature), Some(mb), Some(perf)) => {
+                debug!("computing landing runway analysis (rwy {})", rwy.designator);
                 Some(RunwayAnalysis::landing(
                     rwy,
                     rwycc,
@@ -126,8 +155,19 @@ impl FlightPlanningBuilder {
                     self.landing_factors.as_ref(),
                 ))
             }
-            _ => None,
+            _ => {
+                trace!("landing runway analysis skipped: missing required parameters");
+                None
+            }
         };
+
+        info!(
+            "flight planning built: fuel={}, mb={}, takeoff_rwy={}, landing_rwy={}",
+            fuel_planning.is_some(),
+            mb.is_some(),
+            takeoff_rwy_analysis.is_some(),
+            landing_rwy_analysis.is_some(),
+        );
 
         Ok(FlightPlanning {
             aircraft: self.aircraft.clone(),
