@@ -15,6 +15,8 @@
 
 use std::cmp::{Ordering, PartialOrd};
 
+use log::{debug, warn};
+
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -66,6 +68,18 @@ impl RunwayAnalysis {
         let margin = rwy.tora - ground_roll;
         let pct_margin = margin / rwy.tora;
 
+        debug!(
+            "takeoff analysis rwy {}: ground_roll={:?}, margin={:?} ({:.0}%)",
+            rwy.designator, ground_roll, margin, pct_margin * 100.0
+        );
+
+        if pct_margin < 0.0 {
+            warn!(
+                "takeoff ground roll exceeds available runway length on rwy {}",
+                rwy.designator
+            );
+        }
+
         Self {
             headwind: wind.headwind(&rwy.bearing),
             crosswind: wind.crosswind(&rwy.bearing),
@@ -97,6 +111,18 @@ impl RunwayAnalysis {
 
         let margin = rwy.lda - ground_roll;
         let pct_margin = margin / rwy.lda;
+
+        debug!(
+            "landing analysis rwy {}: ground_roll={:?}, margin={:?} ({:.0}%)",
+            rwy.designator, ground_roll, margin, pct_margin * 100.0
+        );
+
+        if pct_margin < 0.0 {
+            warn!(
+                "landing ground roll exceeds available runway length on rwy {}",
+                rwy.designator
+            );
+        }
 
         Self {
             headwind: wind.headwind(&rwy.bearing),

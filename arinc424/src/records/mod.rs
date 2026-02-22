@@ -23,6 +23,8 @@ pub use controlled_airspace::ControlledAirspace;
 pub use runway::Runway;
 pub use waypoint::Waypoint;
 
+use log::{debug, trace, warn};
+
 use crate::record::RECORD_LENGTH;
 
 #[derive(Debug)]
@@ -62,6 +64,7 @@ impl<'a> Records<'a> {
     /// # }
     /// ```
     pub fn new(data: &'a [u8]) -> Self {
+        debug!("parsing ARINC 424 data ({} bytes)", data.len());
         Self { data, pos: 0 }
     }
 }
@@ -89,24 +92,45 @@ impl<'a> Iterator for Records<'a> {
 
                     match (sec_code, sub_code) {
                         (b'E', b'A') | (b'P', b'C') => {
+                            trace!("parsed waypoint record at byte offset {}", self.pos - RECORD_LENGTH);
                             record!(RecordKind::Waypoint);
                         }
                         (b'P', b' ') => match record[12] {
-                            b'A' => record!(RecordKind::Airport),
+                            b'A' => {
+                                trace!("parsed airport record at byte offset {}", self.pos - RECORD_LENGTH);
+                                record!(RecordKind::Airport);
+                            }
                             b'G' => {
                                 if record[21] == b'0' {
+                                    trace!("parsed runway record at byte offset {}", self.pos - RECORD_LENGTH);
                                     // primary record
                                     record!(RecordKind::Runway)
                                 }
                             }
                             _ => {}
                         },
-                        (b'U', b'C') => record!(RecordKind::ControlledAirspace),
-                        _ => {}
+                        (b'U', b'C') => {
+                            trace!("parsed controlled airspace record at byte offset {}", self.pos - RECORD_LENGTH);
+                            record!(RecordKind::ControlledAirspace);
+                        }
+                        _ => {
+                            trace!(
+                                "skipping unhandled record (sec={}, sub={}) at byte offset {}",
+                                sec_code as char,
+                                sub_code as char,
+                                self.pos - RECORD_LENGTH
+                            );
+                        }
                     }
                 }
-                _ => {
-                    // Skip byte (likely newline or invalid data)
+                b'\n' | b'\r' => {
+                    self.pos += 1;
+                }
+                byte => {
+                    warn!(
+                        "skipping unexpected byte 0x{:02X} at offset {}",
+                        byte, self.pos
+                    );
                     self.pos += 1;
                 }
             }

@@ -23,9 +23,11 @@
 
 use std::collections::HashMap;
 
+use log::{debug, error, info, trace, warn};
+
 use crate::error::{Error, Result};
 use crate::fp::{FlightPlanning, FlightPlanningBuilder};
-use crate::nd::NavigationData;
+use crate::nd::{Fix, NavigationData};
 use crate::route::Route;
 
 mod printer;
@@ -77,6 +79,7 @@ impl FMS {
     where
         F: FnOnce(&mut NavigationData),
     {
+        info!("modifying navigation data");
         f(&mut self.nd);
         EvalPipeline::default()
             .inspect_err(EvalStage::Route, |_, fms| fms.route.clear())
@@ -92,12 +95,14 @@ impl FMS {
     where
         F: FnOnce(&mut Route),
     {
+        debug!("modifying route");
         f(&mut self.route);
         self.context.route = self.route.to_string();
         EvalPipeline::default().eval(self)
     }
 
     pub fn decode(&mut self, route: String) -> Result<()> {
+        info!("decoding route: {:?}", route);
         self.context.route = route;
         EvalPipeline::default().eval(self)
     }
@@ -110,16 +115,22 @@ impl FMS {
     /// [UnknownIdent]: Error::UnknownIdent
     /// [NavAid]: crate::nd::NavAid
     pub fn set_alternate(&mut self, ident: &str) -> Result<()> {
+        info!("setting alternate to {:?}", ident);
         match self.nd.find(ident) {
             Some(alternate) => {
+                debug!("alternate resolved to {}", alternate.ident());
                 self.route.set_alternate(Some(alternate));
                 EvalPipeline::default().eval(self)
             }
-            None => Err(Error::UnknownIdent(ident.to_string())),
+            None => {
+                warn!("alternate ident {:?} not found in navigation data", ident);
+                Err(Error::UnknownIdent(ident.to_string()))
+            }
         }
     }
 
     pub fn set_flight_planning(&mut self, builder: FlightPlanningBuilder) -> Result<()> {
+        info!("setting flight planning");
         self.context.flight_planning_builder = Some(builder);
         EvalPipeline::default()
             .skip_until(EvalStage::FlightPlanning)
@@ -182,11 +193,14 @@ impl EvalPipeline {
 
     /// Executes the evaluation pipeline.
     fn eval(mut self, fms: &mut FMS) -> Result<()> {
+        debug!("running evaluation pipeline");
         // TODO: Return stage errors and continue evaluation even if one stage fails.
         for stage in &self.stages[self.stage_range] {
+            trace!("evaluating stage {:?}", stage);
             let result = stage.eval(fms);
 
             if let Err(ref e) = result {
+                error!("evaluation stage {:?} failed: {}", stage, e);
                 if let Some(inspector) = self.inspectors.remove(stage) {
                     inspector(e, fms);
                 }
@@ -195,6 +209,7 @@ impl EvalPipeline {
             result?;
         }
 
+        debug!("evaluation pipeline completed");
         Ok(())
     }
 }
@@ -219,12 +234,28 @@ impl EvalStage {
     fn eval(&self, fms: &mut FMS) -> Result<()> {
         match self {
             EvalStage::Route => {
+                debug!("decoding route from context: {:?}", fms.context.route);
                 fms.route.decode(&fms.context.route, &fms.nd)?;
+                debug!(
+                    "route decoded: {} leg(s), origin={:?}, destination={:?}",
+                    fms.route.legs().len(),
+                    fms.route.origin().as_ref().map(|a| a.ident()),
+                    fms.route.destination().as_ref().map(|a| a.ident()),
+                );
             }
             EvalStage::FlightPlanning => {
                 if let Some(builder) = &fms.context.flight_planning_builder.clone() {
+                    debug!("building flight planning");
                     let flight_planning = builder.build(&fms.route)?;
+                    debug!(
+                        "flight planning built: fuel_planning={}, mb={}, balanced={:?}",
+                        flight_planning.fuel_planning().is_some(),
+                        flight_planning.mb().is_some(),
+                        flight_planning.is_balanced(),
+                    );
                     fms.flight_planning = Some(flight_planning);
+                } else {
+                    trace!("no flight planning builder configured, skipping");
                 }
             }
         }

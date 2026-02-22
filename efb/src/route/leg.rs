@@ -13,6 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use log::trace;
+
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -70,6 +72,16 @@ impl Leg {
         let heading = wca.map(|wca| bearing + wca);
         let mh = heading.map(|heading| heading + from.mag_var());
         let ete = gs.map(|gs| dist / gs);
+
+        trace!(
+            "leg {} -> {}: dist={:?}, bearing={:?}, gs={:?}, ete={:?}",
+            from.ident(),
+            to.ident(),
+            dist,
+            bearing,
+            gs,
+            ete
+        );
 
         Self {
             from,

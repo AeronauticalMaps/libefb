@@ -106,6 +106,7 @@ version = "0.3.0"
 dependencies = [
  "arinc424-derive",
  "criterion",
+ "log",
 ]
 
 [[package]]
@@ -400,6 +401,7 @@ dependencies = [
  "chrono",
  "geo",
  "geojson",
+ "log",
  "serde",
  "time",
  "world_magnetic_model",
