@@ -149,4 +149,6 @@ pub mod prelude {
 pub mod geojson;
 
 #[cfg(feature = "handbook")]
-pub mod handbook;
+pub mod handbook {
+    include!(concat!(env!("OUT_DIR"), "/handbook.rs"));
+}

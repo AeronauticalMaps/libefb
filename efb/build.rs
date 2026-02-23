@@ -13,13 +13,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::env;
 use std::fs;
 use std::path::Path;
 
 fn main() {
-    // Always generate handbook.rs, but only expose it via feature flag
-    // This keeps the generated file out of git while ensuring it exists for compilation
-    let handbook = Path::new("src/handbook.rs");
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let handbook = Path::new(&out_dir).join("handbook.rs");
 
     let handbook_sections = vec![
         ("ROUTE", "../handbook/src/Route.md"),
@@ -32,9 +32,9 @@ fn main() {
         // Tell Cargo to rerun if the file changes
         println!("cargo:rerun-if-changed={}", file_path);
 
-        // Read the markdown file
-        let section = fs::read_to_string(file_path)
-            .unwrap_or_else(|_| panic!("Unable to read file: {}", file_path));
+        // Read the markdown file, defaulting to an empty string when the handbook
+        // sources are not available (e.g. when building from a published crate).
+        let section = fs::read_to_string(file_path).unwrap_or_default();
 
         // Generate a const string for this section
         content.push_str(&format!(

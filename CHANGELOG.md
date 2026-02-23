@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Provided data errors of loaded navigation data
 - Track position of route token
 - Takeoff and landing runway in WASM route
+- Provide handbook as feature
 
 ### Changed
 
