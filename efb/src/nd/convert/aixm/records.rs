@@ -13,6 +13,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Conversions from AIXM feature types to [`NavigationData`](crate::nd::NavigationData)
+//! record types.
+//!
+//! Each [`TryFrom`] implementation maps a single AIXM feature into the
+//! corresponding efb navigation type. Runways are handled separately in the
+//! parent module because they require cross-reference resolution.
+
 use crate::geom::{Coordinate, Polygon};
 use crate::nd::*;
 

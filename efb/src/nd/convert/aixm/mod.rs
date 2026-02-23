@@ -13,6 +13,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Converts AIXM 5.1 features into [`NavigationData`] entries.
+//!
+//! Airports, waypoints, navaids, and airspaces are converted directly as they
+//! stream in. Runways require a deferred resolution step because each AIXM
+//! `RunwayDirection` references its parent `Runway` and `AirportHeliport`
+//! through UUIDs that may appear in any order.
+
 use std::collections::HashMap;
 
 use crate::error::Error;
@@ -21,14 +28,13 @@ use crate::nd::*;
 mod fields;
 mod records;
 
-/// A deferred runway direction that needs to be resolved against a Runway UUID.
+/// Tracks a runway direction whose parent runway and airport are not yet known.
 struct DeferredRunwayDirection {
     rdn: aixm::RunwayDirection,
-    /// UUID of the Runway this direction belongs to.
     runway_uuid: String,
 }
 
-/// Info about a parsed Runway needed for cross-reference resolution.
+/// Runway properties needed when resolving deferred runway directions.
 struct RunwayInfo {
     airport_uuid: Option<String>,
     length: crate::measurements::Length,
@@ -36,16 +42,34 @@ struct RunwayInfo {
 }
 
 impl NavigationData {
-    /// Creates navigation data from an AIXM 5.1 XML byte slice.
+    /// Builds navigation data from an AIXM 5.1 XML byte slice.
+    ///
+    /// Streams through the document, converts each supported feature into the
+    /// corresponding [`NavigationData`] entry, and resolves cross-references
+    /// between runways and airports at the end.
+    ///
+    /// Parse errors for individual features are collected as non-fatal errors
+    /// accessible via [`NavigationData::errors`]. The returned data contains
+    /// all features that parsed successfully.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use efb::nd::NavigationData;
+    ///
+    /// let data = std::fs::read("aixm_data.xml").unwrap();
+    /// let nd = NavigationData::try_from_aixm(&data).unwrap();
+    ///
+    /// for arpt in nd.airports() {
+    ///     println!("{}", arpt.ident());
+    /// }
+    /// ```
     pub fn try_from_aixm(data: &[u8]) -> Result<Self, Error> {
         let mut builder = NavigationData::builder();
 
         // Cross-reference lookup maps
-        // airport UUID -> airport ICAO ident
         let mut airport_uuids: HashMap<String, String> = HashMap::new();
-        // runway UUID -> RunwayInfo
         let mut runway_infos: HashMap<String, RunwayInfo> = HashMap::new();
-        // Deferred items waiting for cross-reference resolution
         let mut deferred_rwys: Vec<aixm::Runway> = Vec::new();
         let mut deferred_rdns: Vec<DeferredRunwayDirection> = Vec::new();
 
@@ -61,8 +85,6 @@ impl NavigationData {
                     }
 
                     aixm::Feature::Runway(rwy) => {
-                        // Defer runway processing since we need the airport UUID
-                        // mapping and it might not be available yet.
                         deferred_rwys.push(rwy);
                     }
 
@@ -98,7 +120,7 @@ impl NavigationData {
             }
         }
 
-        // Resolve deferred runways: build the runway UUID -> info map
+        // Build the runway UUID → info lookup from deferred runways.
         for rwy in &deferred_rwys {
             let length = fields::runway_length(rwy.nominal_length, rwy.length_uom.as_deref());
             let surface = fields::runway_surface(rwy.surface_composition.as_deref());
@@ -113,7 +135,8 @@ impl NavigationData {
             );
         }
 
-        // Resolve deferred runway directions: create Runway entries
+        // Resolve each RunwayDirection → Runway → Airport chain and add the
+        // final Runway entries to their airports.
         for deferred in deferred_rdns {
             if let Some(rwy_info) = runway_infos.get(&deferred.runway_uuid) {
                 let airport_ident = rwy_info
