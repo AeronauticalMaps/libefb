@@ -15,7 +15,7 @@
 
 [package]
 name = "efb"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 authors = ["Joe Pearson"]
 license = "Apache-2.0"
@@ -31,7 +31,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-arinc424 = { path = "../arinc424", version = "0.3.0" }
+arinc424 = { path = "../arinc424", version = "0.4.0" }
 chrono = "0.4.42"
 geo = "0.32.0"
 rstar = "0.12.2"
