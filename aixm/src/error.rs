@@ -56,3 +56,9 @@ impl From<quick_xml::events::attributes::AttrError> for Error {
         Self::Xml(e.to_string())
     }
 }
+
+impl From<quick_xml::DeError> for Error {
+    fn from(e: quick_xml::DeError) -> Self {
+        Self::Xml(e.to_string())
+    }
+}
