@@ -47,6 +47,7 @@
 mod error;
 mod features;
 mod parser;
+mod xml;
 
 pub use error::Error;
 pub use features::*;

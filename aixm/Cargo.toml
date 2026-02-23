@@ -25,4 +25,5 @@ homepage = "https://github.com/AeronauticalMaps/libefb"
 repository = "https://github.com/AeronauticalMaps/libefb"
 
 [dependencies]
-quick-xml = "0.37"
+quick-xml = { version = "0.37", features = ["serialize"] }
+serde = { version = "1", features = ["derive"] }

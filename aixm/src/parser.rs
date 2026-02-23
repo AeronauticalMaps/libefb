@@ -13,13 +13,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io::BufRead;
-
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
 use crate::error::Error;
 use crate::features::*;
+use crate::xml;
 
 /// Streaming iterator over AIXM features in an XML document.
 ///
@@ -62,36 +61,26 @@ use crate::features::*;
 ///
 /// assert_eq!(features.len(), 1);
 /// ```
-pub struct Features<R: BufRead> {
-    reader: Reader<R>,
+pub struct Features<'a> {
+    reader: Reader<&'a [u8]>,
+    data: &'a [u8],
     buf: Vec<u8>,
 }
 
-impl<'a> Features<&'a [u8]> {
+impl<'a> Features<'a> {
     /// Creates a new `Features` iterator from a byte slice.
     pub fn new(data: &'a [u8]) -> Self {
         let mut reader = Reader::from_reader(data);
         reader.config_mut().trim_text(true);
         Self {
             reader,
+            data,
             buf: Vec::new(),
         }
     }
 }
 
-impl<R: BufRead> Features<R> {
-    /// Creates a new `Features` iterator from any buffered reader.
-    pub fn from_reader(reader: R) -> Self {
-        let mut xml_reader = Reader::from_reader(reader);
-        xml_reader.config_mut().trim_text(true);
-        Self {
-            reader: xml_reader,
-            buf: Vec::new(),
-        }
-    }
-}
-
-impl<R: BufRead> Iterator for Features<R> {
+impl<'a> Iterator for Features<'a> {
     type Item = Result<Feature, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -101,42 +90,80 @@ impl<R: BufRead> Iterator for Features<R> {
                 Ok(Event::Start(ref e)) => {
                     let name = e.name();
                     let local = local_name(name.as_ref());
-                    let result = match local {
-                        b"AirportHeliport" => {
-                            let uuid = extract_gml_id(e);
-                            parse_airport_heliport(&mut self.reader, uuid)
-                                .map(Feature::AirportHeliport)
-                        }
-                        b"Runway" => {
-                            let uuid = extract_gml_id(e);
-                            parse_runway(&mut self.reader, uuid).map(Feature::Runway)
-                        }
-                        b"RunwayDirection" => {
-                            let uuid = extract_gml_id(e);
-                            parse_runway_direction(&mut self.reader, uuid)
-                                .map(Feature::RunwayDirection)
-                        }
-                        b"DesignatedPoint" => {
-                            let uuid = extract_gml_id(e);
-                            parse_designated_point(&mut self.reader, uuid)
-                                .map(Feature::DesignatedPoint)
-                        }
-                        b"Navaid" => {
-                            let uuid = extract_gml_id(e);
-                            parse_navaid(&mut self.reader, uuid).map(Feature::Navaid)
-                        }
-                        b"Airspace" => {
-                            let uuid = extract_gml_id(e);
-                            parse_airspace(&mut self.reader, uuid).map(Feature::Airspace)
-                        }
+
+                    let kind = match local {
+                        b"AirportHeliport" => FeatureKind::AirportHeliport,
+                        b"Runway" => FeatureKind::Runway,
+                        b"RunwayDirection" => FeatureKind::RunwayDirection,
+                        b"DesignatedPoint" => FeatureKind::DesignatedPoint,
+                        b"Navaid" => FeatureKind::Navaid,
+                        b"Airspace" => FeatureKind::Airspace,
                         _ => continue,
                     };
+
+                    // Capture the start tag text and read the subtree content.
+                    let tag = String::from_utf8_lossy(e.as_ref()).to_string();
+                    let end = e.to_end().into_owned();
+                    let result = self
+                        .reader
+                        .read_to_end(end.name())
+                        .map_err(Error::from)
+                        .and_then(|span| {
+                            let content = std::str::from_utf8(
+                                &self.data[span.start as usize..span.end as usize],
+                            )?;
+                            let end_name = end.name();
+                            let end_tag = std::str::from_utf8(end_name.as_ref())?;
+                            let xml = format!("<{tag}>{content}</{end_tag}>");
+                            deserialize_feature(kind, &xml)
+                        });
+
                     return Some(result);
                 }
                 Ok(Event::Eof) => return None,
                 Err(e) => return Some(Err(e.into())),
                 _ => continue,
             }
+        }
+    }
+}
+
+/// Which kind of feature we're deserializing.
+enum FeatureKind {
+    AirportHeliport,
+    Runway,
+    RunwayDirection,
+    DesignatedPoint,
+    Navaid,
+    Airspace,
+}
+
+/// Deserializes a feature XML fragment into the public [`Feature`] type.
+fn deserialize_feature(kind: FeatureKind, xml: &str) -> Result<Feature, Error> {
+    match kind {
+        FeatureKind::AirportHeliport => {
+            let x: xml::AirportHeliportXml = quick_xml::de::from_str(xml)?;
+            Ok(Feature::AirportHeliport(x.into()))
+        }
+        FeatureKind::Runway => {
+            let x: xml::RunwayXml = quick_xml::de::from_str(xml)?;
+            Ok(Feature::Runway(x.into()))
+        }
+        FeatureKind::RunwayDirection => {
+            let x: xml::RunwayDirectionXml = quick_xml::de::from_str(xml)?;
+            Ok(Feature::RunwayDirection(x.into()))
+        }
+        FeatureKind::DesignatedPoint => {
+            let x: xml::DesignatedPointXml = quick_xml::de::from_str(xml)?;
+            Ok(Feature::DesignatedPoint(x.into()))
+        }
+        FeatureKind::Navaid => {
+            let x: xml::NavaidXml = quick_xml::de::from_str(xml)?;
+            Ok(Feature::Navaid(x.into()))
+        }
+        FeatureKind::Airspace => {
+            let x: xml::AirspaceXml = quick_xml::de::from_str(xml)?;
+            Ok(Feature::Airspace(x.into()))
         }
     }
 }
@@ -148,606 +175,223 @@ fn local_name(name: &[u8]) -> &[u8] {
         .map_or(name, |pos| &name[pos + 1..])
 }
 
-/// Extracts the `gml:id` attribute and strips the `uuid.` prefix if present.
-fn extract_gml_id(e: &quick_xml::events::BytesStart<'_>) -> String {
-    for attr in e.attributes().flatten() {
-        let key = local_name(attr.key.as_ref());
-        if key == b"id" {
-            let val = String::from_utf8_lossy(&attr.value);
-            return val.strip_prefix("uuid.").unwrap_or(&val).to_string();
-        }
-    }
-    String::new()
+/// Strips the `uuid.` prefix from a `gml:id` attribute value.
+fn strip_uuid_prefix(id: &str) -> &str {
+    id.strip_prefix("uuid.").unwrap_or(id)
 }
 
-/// Extracts an `xlink:href` attribute value, stripping `urn:uuid:` prefix.
-fn extract_xlink_href(e: &quick_xml::events::BytesStart<'_>) -> Option<String> {
-    for attr in e.attributes().flatten() {
-        let key = local_name(attr.key.as_ref());
-        if key == b"href" {
-            let val = String::from_utf8_lossy(&attr.value);
-            return Some(val.strip_prefix("urn:uuid:").unwrap_or(&val).to_string());
-        }
-    }
-    None
-}
-
-/// Extracts the `uom` attribute value from an element.
-fn extract_uom(e: &quick_xml::events::BytesStart<'_>) -> Option<String> {
-    for attr in e.attributes().flatten() {
-        if local_name(attr.key.as_ref()) == b"uom" {
-            return Some(String::from_utf8_lossy(&attr.value).to_string());
-        }
-    }
-    None
-}
-
-/// Reads text content until the end of the current element at the given depth.
-fn read_element_text<R: BufRead>(reader: &mut Reader<R>) -> Result<String, Error> {
-    let mut buf = Vec::new();
-    let mut text = String::new();
-    loop {
-        buf.clear();
-        match reader.read_event_into(&mut buf)? {
-            Event::Text(e) => {
-                text.push_str(&e.unescape()?);
-            }
-            Event::End(_) => return Ok(text),
-            Event::Eof => return Err(Error::Xml("unexpected EOF".to_string())),
-            _ => {}
-        }
-    }
-}
-
-/// Skips the current element and all its children.
-fn skip_element<R: BufRead>(reader: &mut Reader<R>) -> Result<(), Error> {
-    let mut buf = Vec::new();
-    let mut depth: u32 = 1;
-    loop {
-        buf.clear();
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(_) => depth += 1,
-            Event::End(_) => {
-                depth -= 1;
-                if depth == 0 {
-                    return Ok(());
-                }
-            }
-            Event::Eof => return Err(Error::Xml("unexpected EOF while skipping".to_string())),
-            _ => {}
-        }
-    }
+/// Strips the `urn:uuid:` prefix from an `xlink:href` attribute value.
+fn strip_xlink_prefix(href: &str) -> &str {
+    href.strip_prefix("urn:uuid:").unwrap_or(href)
 }
 
 /// Parses a `gml:pos` text content into (latitude, longitude).
-fn parse_pos(text: &str) -> Result<(f64, f64), Error> {
-    let parts: Vec<&str> = text.split_whitespace().collect();
-    if parts.len() < 2 {
-        return Err(Error::InvalidValue {
-            field: "gml:pos",
-            value: text.to_string(),
-        });
-    }
-    let lat = parts[0].parse::<f64>().map_err(|_| Error::InvalidValue {
-        field: "gml:pos latitude",
-        value: parts[0].to_string(),
-    })?;
-    let lon = parts[1].parse::<f64>().map_err(|_| Error::InvalidValue {
-        field: "gml:pos longitude",
-        value: parts[1].to_string(),
-    })?;
-    Ok((lat, lon))
+fn parse_pos(text: &str) -> Option<(f64, f64)> {
+    let mut parts = text.split_whitespace();
+    let lat = parts.next()?.parse().ok()?;
+    let lon = parts.next()?.parse().ok()?;
+    Some((lat, lon))
 }
 
 /// Parses a `gml:posList` text content into a list of (latitude, longitude) pairs.
-fn parse_pos_list(text: &str) -> Result<Vec<(f64, f64)>, Error> {
+fn parse_pos_list(text: &str) -> Vec<(f64, f64)> {
     let values: Vec<f64> = text
         .split_whitespace()
-        .map(|s| {
-            s.parse::<f64>().map_err(|_| Error::InvalidValue {
-                field: "gml:posList",
-                value: s.to_string(),
-            })
-        })
-        .collect::<Result<_, _>>()?;
+        .filter_map(|s| s.parse().ok())
+        .collect();
 
-    if !values.len().is_multiple_of(2) {
-        return Err(Error::InvalidValue {
-            field: "gml:posList",
-            value: "odd number of coordinates".to_string(),
-        });
-    }
-
-    Ok(values.chunks(2).map(|c| (c[0], c[1])).collect())
+    values.chunks_exact(2).map(|c| (c[0], c[1])).collect()
 }
 
 // ---------------------------------------------------------------------------
-// Feature parsers
+// Conversions from XML structs to public feature types
 // ---------------------------------------------------------------------------
 
-fn parse_airport_heliport<R: BufRead>(
-    reader: &mut Reader<R>,
-    uuid: String,
-) -> Result<AirportHeliport, Error> {
-    let mut arpt = AirportHeliport {
-        uuid,
-        designator: String::new(),
-        name: String::new(),
-        location_indicator_icao: None,
-        iata_designator: None,
-        field_elevation: None,
-        field_elevation_uom: None,
-        latitude: None,
-        longitude: None,
-    };
+impl From<xml::AirportHeliportXml> for AirportHeliport {
+    fn from(x: xml::AirportHeliportXml) -> Self {
+        let ts = x.time_slice.inner;
+        let (latitude, longitude) = ts
+            .arp
+            .and_then(|arp| arp.elevated_point)
+            .and_then(|ep| ep.pos.as_deref().and_then(parse_pos))
+            .map_or((None, None), |(lat, lon)| (Some(lat), Some(lon)));
 
-    let mut buf = Vec::new();
-    let mut depth: u32 = 1;
-    let mut in_baseline = false;
-
-    loop {
-        buf.clear();
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(ref e) => {
-                depth += 1;
-                let name = e.name();
-                let local = local_name(name.as_ref());
-                match local {
-                    b"AirportHeliportTimeSlice" => {}
-                    b"interpretation" => {
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        in_baseline = text == "BASELINE";
-                    }
-                    b"designator" if in_baseline => {
-                        arpt.designator = read_element_text(reader)?;
-                        depth -= 1;
-                    }
-                    b"name" if in_baseline => {
-                        arpt.name = read_element_text(reader)?;
-                        depth -= 1;
-                    }
-                    b"locationIndicatorICAO" if in_baseline => {
-                        arpt.location_indicator_icao = Some(read_element_text(reader)?);
-                        depth -= 1;
-                    }
-                    b"designatorIATA" if in_baseline => {
-                        arpt.iata_designator = Some(read_element_text(reader)?);
-                        depth -= 1;
-                    }
-                    b"fieldElevation" if in_baseline => {
-                        arpt.field_elevation_uom = extract_uom(e);
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        arpt.field_elevation = text.parse().ok();
-                    }
-                    b"ElevatedPoint" if in_baseline => {
-                        // ARP point — look for gml:pos inside
-                    }
-                    b"pos" if in_baseline => {
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        if let Ok((lat, lon)) = parse_pos(&text) {
-                            arpt.latitude = Some(lat);
-                            arpt.longitude = Some(lon);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            Event::End(_) => {
-                depth -= 1;
-                if depth == 0 {
-                    return Ok(arpt);
-                }
-            }
-            Event::Eof => return Err(Error::Xml("unexpected EOF".to_string())),
-            _ => {}
+        AirportHeliport {
+            uuid: x
+                .id
+                .as_deref()
+                .map(strip_uuid_prefix)
+                .unwrap_or_default()
+                .to_string(),
+            designator: ts.designator.unwrap_or_default(),
+            name: ts.name.unwrap_or_default(),
+            location_indicator_icao: ts.location_indicator_icao,
+            iata_designator: ts.iata_designator,
+            field_elevation: ts
+                .field_elevation
+                .as_ref()
+                .and_then(|v| v.value.as_deref()?.parse().ok()),
+            field_elevation_uom: ts.field_elevation.and_then(|v| v.uom),
+            latitude,
+            longitude,
         }
     }
 }
 
-fn parse_runway<R: BufRead>(reader: &mut Reader<R>, uuid: String) -> Result<Runway, Error> {
-    let mut rwy = Runway {
-        uuid,
-        designator: String::new(),
-        nominal_length: None,
-        length_uom: None,
-        surface_composition: None,
-        associated_airport_uuid: None,
-    };
-
-    let mut buf = Vec::new();
-    let mut depth: u32 = 1;
-    let mut in_baseline = false;
-
-    loop {
-        buf.clear();
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(ref e) => {
-                depth += 1;
-                let name = e.name();
-                let local = local_name(name.as_ref());
-                match local {
-                    b"RunwayTimeSlice" => {}
-                    b"interpretation" => {
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        in_baseline = text == "BASELINE";
-                    }
-                    b"designator" if in_baseline => {
-                        rwy.designator = read_element_text(reader)?;
-                        depth -= 1;
-                    }
-                    b"nominalLength" if in_baseline => {
-                        rwy.length_uom = extract_uom(e);
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        rwy.nominal_length = text.parse().ok();
-                    }
-                    b"composition" if in_baseline => {
-                        rwy.surface_composition = Some(read_element_text(reader)?);
-                        depth -= 1;
-                    }
-                    b"associatedAirportHeliport" if in_baseline => {
-                        rwy.associated_airport_uuid = extract_xlink_href(e);
-                        skip_element(reader)?;
-                        depth -= 1;
-                    }
-                    _ => {}
-                }
-            }
-            Event::Empty(ref e) => {
-                let name = e.name();
-                let local = local_name(name.as_ref());
-                if local == b"associatedAirportHeliport" && in_baseline {
-                    rwy.associated_airport_uuid = extract_xlink_href(e);
-                }
-            }
-            Event::End(_) => {
-                depth -= 1;
-                if depth == 0 {
-                    return Ok(rwy);
-                }
-            }
-            Event::Eof => return Err(Error::Xml("unexpected EOF".to_string())),
-            _ => {}
+impl From<xml::RunwayXml> for Runway {
+    fn from(x: xml::RunwayXml) -> Self {
+        let ts = x.time_slice.inner;
+        Runway {
+            uuid: x
+                .id
+                .as_deref()
+                .map(strip_uuid_prefix)
+                .unwrap_or_default()
+                .to_string(),
+            designator: ts.designator.unwrap_or_default(),
+            nominal_length: ts
+                .nominal_length
+                .as_ref()
+                .and_then(|v| v.value.as_deref()?.parse().ok()),
+            length_uom: ts.nominal_length.and_then(|v| v.uom),
+            surface_composition: ts
+                .surface_properties
+                .and_then(|sp| sp.characteristics)
+                .and_then(|sc| sc.composition),
+            associated_airport_uuid: ts
+                .associated_airport_heliport
+                .and_then(|r| r.href)
+                .map(|h| strip_xlink_prefix(&h).to_string()),
         }
     }
 }
 
-fn parse_runway_direction<R: BufRead>(
-    reader: &mut Reader<R>,
-    uuid: String,
-) -> Result<RunwayDirection, Error> {
-    let mut rdn = RunwayDirection {
-        uuid,
-        designator: String::new(),
-        true_bearing: None,
-        magnetic_bearing: None,
-        used_runway_uuid: None,
-    };
-
-    let mut buf = Vec::new();
-    let mut depth: u32 = 1;
-    let mut in_baseline = false;
-
-    loop {
-        buf.clear();
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(ref e) => {
-                depth += 1;
-                let name = e.name();
-                let local = local_name(name.as_ref());
-                match local {
-                    b"RunwayDirectionTimeSlice" => {}
-                    b"interpretation" => {
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        in_baseline = text == "BASELINE";
-                    }
-                    b"designator" if in_baseline => {
-                        rdn.designator = read_element_text(reader)?;
-                        depth -= 1;
-                    }
-                    b"trueBearing" if in_baseline => {
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        rdn.true_bearing = text.parse().ok();
-                    }
-                    b"magneticBearing" if in_baseline => {
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        rdn.magnetic_bearing = text.parse().ok();
-                    }
-                    b"usedRunway" if in_baseline => {
-                        rdn.used_runway_uuid = extract_xlink_href(e);
-                        skip_element(reader)?;
-                        depth -= 1;
-                    }
-                    _ => {}
-                }
-            }
-            Event::Empty(ref e) => {
-                let name = e.name();
-                let local = local_name(name.as_ref());
-                if local == b"usedRunway" && in_baseline {
-                    rdn.used_runway_uuid = extract_xlink_href(e);
-                }
-            }
-            Event::End(_) => {
-                depth -= 1;
-                if depth == 0 {
-                    return Ok(rdn);
-                }
-            }
-            Event::Eof => return Err(Error::Xml("unexpected EOF".to_string())),
-            _ => {}
+impl From<xml::RunwayDirectionXml> for RunwayDirection {
+    fn from(x: xml::RunwayDirectionXml) -> Self {
+        let ts = x.time_slice.inner;
+        RunwayDirection {
+            uuid: x
+                .id
+                .as_deref()
+                .map(strip_uuid_prefix)
+                .unwrap_or_default()
+                .to_string(),
+            designator: ts.designator.unwrap_or_default(),
+            true_bearing: ts.true_bearing.as_deref().and_then(|s| s.parse().ok()),
+            magnetic_bearing: ts.magnetic_bearing.as_deref().and_then(|s| s.parse().ok()),
+            used_runway_uuid: ts
+                .used_runway
+                .and_then(|r| r.href)
+                .map(|h| strip_xlink_prefix(&h).to_string()),
         }
     }
 }
 
-fn parse_designated_point<R: BufRead>(
-    reader: &mut Reader<R>,
-    uuid: String,
-) -> Result<DesignatedPoint, Error> {
-    let mut dp = DesignatedPoint {
-        uuid,
-        designator: String::new(),
-        name: None,
-        point_type: None,
-        latitude: None,
-        longitude: None,
-    };
+impl From<xml::DesignatedPointXml> for DesignatedPoint {
+    fn from(x: xml::DesignatedPointXml) -> Self {
+        let ts = x.time_slice.inner;
+        let (latitude, longitude) = ts
+            .location
+            .and_then(|loc| loc.elevated_point)
+            .and_then(|ep| ep.pos.as_deref().and_then(parse_pos))
+            .map_or((None, None), |(lat, lon)| (Some(lat), Some(lon)));
 
-    let mut buf = Vec::new();
-    let mut depth: u32 = 1;
-    let mut in_baseline = false;
-
-    loop {
-        buf.clear();
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(ref e) => {
-                depth += 1;
-                let name = e.name();
-                let local = local_name(name.as_ref());
-                match local {
-                    b"DesignatedPointTimeSlice" => {}
-                    b"interpretation" => {
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        in_baseline = text == "BASELINE";
-                    }
-                    b"designator" if in_baseline => {
-                        dp.designator = read_element_text(reader)?;
-                        depth -= 1;
-                    }
-                    b"name" if in_baseline => {
-                        dp.name = Some(read_element_text(reader)?);
-                        depth -= 1;
-                    }
-                    b"type" if in_baseline => {
-                        dp.point_type = Some(read_element_text(reader)?);
-                        depth -= 1;
-                    }
-                    b"pos" if in_baseline => {
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        if let Ok((lat, lon)) = parse_pos(&text) {
-                            dp.latitude = Some(lat);
-                            dp.longitude = Some(lon);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            Event::End(_) => {
-                depth -= 1;
-                if depth == 0 {
-                    return Ok(dp);
-                }
-            }
-            Event::Eof => return Err(Error::Xml("unexpected EOF".to_string())),
-            _ => {}
+        DesignatedPoint {
+            uuid: x
+                .id
+                .as_deref()
+                .map(strip_uuid_prefix)
+                .unwrap_or_default()
+                .to_string(),
+            designator: ts.designator.unwrap_or_default(),
+            name: ts.name,
+            point_type: ts.point_type,
+            latitude,
+            longitude,
         }
     }
 }
 
-fn parse_navaid<R: BufRead>(reader: &mut Reader<R>, uuid: String) -> Result<Navaid, Error> {
-    let mut nav = Navaid {
-        uuid,
-        designator: String::new(),
-        name: None,
-        navaid_type: None,
-        latitude: None,
-        longitude: None,
-        elevation: None,
-    };
+impl From<xml::NavaidXml> for Navaid {
+    fn from(x: xml::NavaidXml) -> Self {
+        let ts = x.time_slice.inner;
+        let loc = ts.location.and_then(|l| l.elevated_point);
+        let (latitude, longitude) = loc
+            .as_ref()
+            .and_then(|ep| ep.pos.as_deref().and_then(parse_pos))
+            .map_or((None, None), |(lat, lon)| (Some(lat), Some(lon)));
+        let elevation = loc
+            .and_then(|ep| ep.elevation)
+            .and_then(|v| v.value.as_deref()?.parse().ok());
 
-    let mut buf = Vec::new();
-    let mut depth: u32 = 1;
-    let mut in_baseline = false;
-
-    loop {
-        buf.clear();
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(ref e) => {
-                depth += 1;
-                let name = e.name();
-                let local = local_name(name.as_ref());
-                match local {
-                    b"NavaidTimeSlice" => {}
-                    b"interpretation" => {
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        in_baseline = text == "BASELINE";
-                    }
-                    b"type" if in_baseline => {
-                        nav.navaid_type = Some(read_element_text(reader)?);
-                        depth -= 1;
-                    }
-                    b"designator" if in_baseline => {
-                        nav.designator = read_element_text(reader)?;
-                        depth -= 1;
-                    }
-                    b"name" if in_baseline => {
-                        nav.name = Some(read_element_text(reader)?);
-                        depth -= 1;
-                    }
-                    b"elevation" if in_baseline => {
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        nav.elevation = text.parse().ok();
-                    }
-                    b"pos" if in_baseline => {
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        if let Ok((lat, lon)) = parse_pos(&text) {
-                            nav.latitude = Some(lat);
-                            nav.longitude = Some(lon);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            Event::End(_) => {
-                depth -= 1;
-                if depth == 0 {
-                    return Ok(nav);
-                }
-            }
-            Event::Eof => return Err(Error::Xml("unexpected EOF".to_string())),
-            _ => {}
+        Navaid {
+            uuid: x
+                .id
+                .as_deref()
+                .map(strip_uuid_prefix)
+                .unwrap_or_default()
+                .to_string(),
+            designator: ts.designator.unwrap_or_default(),
+            name: ts.name,
+            navaid_type: ts.navaid_type,
+            latitude,
+            longitude,
+            elevation,
         }
     }
 }
 
-fn parse_airspace<R: BufRead>(reader: &mut Reader<R>, uuid: String) -> Result<Airspace, Error> {
-    let mut arsp = Airspace {
-        uuid,
-        airspace_type: None,
-        designator: None,
-        name: None,
-        volumes: Vec::new(),
-    };
+impl From<xml::AirspaceXml> for Airspace {
+    fn from(x: xml::AirspaceXml) -> Self {
+        let ts = x.time_slice.inner;
 
-    let mut buf = Vec::new();
-    let mut depth: u32 = 1;
-    let mut in_baseline = false;
+        let volume = ts
+            .geometry_component
+            .and_then(|gc| gc.inner)
+            .and_then(|gc| gc.the_airspace_volume)
+            .and_then(|tav| tav.volume);
 
-    loop {
-        buf.clear();
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(ref e) => {
-                depth += 1;
-                let name = e.name();
-                let local = local_name(name.as_ref());
-                match local {
-                    b"AirspaceTimeSlice" => {}
-                    b"interpretation" => {
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        in_baseline = text == "BASELINE";
-                    }
-                    b"type" if in_baseline => {
-                        arsp.airspace_type = Some(read_element_text(reader)?);
-                        depth -= 1;
-                    }
-                    b"designator" if in_baseline => {
-                        arsp.designator = Some(read_element_text(reader)?);
-                        depth -= 1;
-                    }
-                    b"name" if in_baseline => {
-                        arsp.name = Some(read_element_text(reader)?);
-                        depth -= 1;
-                    }
-                    b"AirspaceVolume" if in_baseline => {
-                        let vol = parse_airspace_volume(reader)?;
-                        // parse_airspace_volume consumes up to and including
-                        // the </AirspaceVolume> end tag
-                        depth -= 1;
-                        arsp.volumes.push(vol);
-                    }
-                    _ => {}
-                }
+        let volumes = match volume {
+            Some(vol) => {
+                let polygon = vol
+                    .horizontal_projection
+                    .and_then(|hp| hp.surface)
+                    .and_then(|s| s.patches)
+                    .and_then(|p| p.polygon_patch)
+                    .and_then(|pp| pp.exterior)
+                    .and_then(|ext| ext.ring)
+                    .and_then(|r| r.curve_member)
+                    .and_then(|cm| cm.curve)
+                    .and_then(|c| c.segments)
+                    .and_then(|s| s.geodesic_string)
+                    .and_then(|gs| gs.pos_list)
+                    .map(|pl| parse_pos_list(&pl))
+                    .unwrap_or_default();
+
+                vec![AirspaceVolume {
+                    upper_limit: vol.upper_limit.as_ref().and_then(|v| v.value.clone()),
+                    upper_limit_uom: vol.upper_limit.and_then(|v| v.uom),
+                    upper_limit_ref: vol.upper_limit_reference,
+                    lower_limit: vol.lower_limit.as_ref().and_then(|v| v.value.clone()),
+                    lower_limit_uom: vol.lower_limit.and_then(|v| v.uom),
+                    lower_limit_ref: vol.lower_limit_reference,
+                    polygon,
+                }]
             }
-            Event::End(_) => {
-                depth -= 1;
-                if depth == 0 {
-                    return Ok(arsp);
-                }
-            }
-            Event::Eof => return Err(Error::Xml("unexpected EOF".to_string())),
-            _ => {}
-        }
-    }
-}
+            None => Vec::new(),
+        };
 
-fn parse_airspace_volume<R: BufRead>(reader: &mut Reader<R>) -> Result<AirspaceVolume, Error> {
-    let mut vol = AirspaceVolume {
-        upper_limit: None,
-        upper_limit_uom: None,
-        upper_limit_ref: None,
-        lower_limit: None,
-        lower_limit_uom: None,
-        lower_limit_ref: None,
-        polygon: Vec::new(),
-    };
-
-    let mut buf = Vec::new();
-    let mut depth: u32 = 1;
-
-    loop {
-        buf.clear();
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(ref e) => {
-                depth += 1;
-                let name = e.name();
-                let local = local_name(name.as_ref());
-                match local {
-                    b"upperLimit" => {
-                        vol.upper_limit_uom = extract_uom(e);
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        vol.upper_limit = Some(text);
-                    }
-                    b"upperLimitReference" => {
-                        vol.upper_limit_ref = Some(read_element_text(reader)?);
-                        depth -= 1;
-                    }
-                    b"lowerLimit" => {
-                        vol.lower_limit_uom = extract_uom(e);
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        vol.lower_limit = Some(text);
-                    }
-                    b"lowerLimitReference" => {
-                        vol.lower_limit_ref = Some(read_element_text(reader)?);
-                        depth -= 1;
-                    }
-                    b"pos" => {
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        if let Ok((lat, lon)) = parse_pos(&text) {
-                            vol.polygon.push((lat, lon));
-                        }
-                    }
-                    b"posList" => {
-                        let text = read_element_text(reader)?;
-                        depth -= 1;
-                        vol.polygon.extend(parse_pos_list(&text)?);
-                    }
-                    _ => {}
-                }
-            }
-            Event::End(_) => {
-                depth -= 1;
-                if depth == 0 {
-                    return Ok(vol);
-                }
-            }
-            Event::Eof => return Err(Error::Xml("unexpected EOF".to_string())),
-            _ => {}
+        Airspace {
+            uuid: x
+                .id
+                .as_deref()
+                .map(strip_uuid_prefix)
+                .unwrap_or_default()
+                .to_string(),
+            airspace_type: ts.airspace_type,
+            designator: ts.designator,
+            name: ts.name,
+            volumes,
         }
     }
 }
