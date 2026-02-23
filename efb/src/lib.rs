@@ -100,6 +100,11 @@
 //! - **RWY** Runway
 //! - **RWYCC** Runway Condition Code
 //!
+//! ## T
+//!
+//! - **TOC** Top of Climb
+//! - **TOD** Top of Descent
+//!
 //! ## V
 //!
 //! - **VRP** Visual Reporting Point
@@ -121,7 +126,6 @@ pub mod error;
 pub mod fc;
 pub mod fms;
 pub mod fp;
-pub mod geom;
 pub mod measurements;
 pub mod nd;
 pub mod route;

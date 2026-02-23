@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ use std::rc::Rc;
 
 use efb::nd::Fix;
 use efb::prelude::*;
-use efb::route::{Leg, TotalsToLeg};
+use efb::route::{Leg, TotalsToLeg, VerticalProfile};
 use serde::ser::Serialize;
 use serde_wasm_bindgen::Serializer;
 use wasm_bindgen::prelude::*;
@@ -84,6 +84,29 @@ impl JsLeg {
 
     pub fn fuel(&self, perf: &JsPerformance) -> JsValue {
         serde_wasm_bindgen::to_value(&self.inner.fuel(&perf.clone().into())).unwrap_or_default()
+    }
+}
+
+#[wasm_bindgen(js_name = VerticalProfile)]
+pub struct JsVerticalProfile {
+    inner: VerticalProfile,
+}
+
+#[wasm_bindgen(js_class = VerticalProfile)]
+impl JsVerticalProfile {
+    #[wasm_bindgen(getter)]
+    pub fn profile(&self) -> JsValue {
+        serde_wasm_bindgen::to_value(&self.inner.profile()).unwrap_or_default()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn max_level(&self) -> JsValue {
+        serde_wasm_bindgen::to_value(&self.inner.max_level()).unwrap_or_default()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn intersections(&self) -> JsValue {
+        serde_wasm_bindgen::to_value(&self.inner.intersections()).unwrap_or_default()
     }
 }
 
@@ -153,6 +176,14 @@ impl JsRoute {
         let perf = perf.clone().map(|js_perf| Performance::from(js_perf));
         let totals = fms.route().totals(perf.as_ref());
         serde_wasm_bindgen::to_value(&totals).unwrap_or_default()
+    }
+
+    #[wasm_bindgen(js_name = verticalProfile)]
+    pub fn vertical_profile(&self) -> JsVerticalProfile {
+        let fms = self.inner.borrow();
+        JsVerticalProfile {
+            inner: fms.route().vertical_profile(fms.nd()),
+        }
     }
 
     #[wasm_bindgen(js_name = toGeojson)]

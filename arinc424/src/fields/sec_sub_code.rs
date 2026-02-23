@@ -74,6 +74,7 @@ pub enum SubCodeKind {
     CruisingTable,
     // Airspace
     ControlledAirspace,
+    RestrictiveAirspace,
 }
 
 macro_rules! sub_code_error {
@@ -122,6 +123,10 @@ impl<'a> SubCode<'a> {
             b'G' => match sec_code {
                 SecCode::Airport => Ok(SubCodeKind::Runway),
                 _ => sub_code_error!(b'G'),
+            },
+            b'R' => match sec_code {
+                SecCode::Airspace => Ok(SubCodeKind::RestrictiveAirspace),
+                _ => sub_code_error!(b'R'),
             },
             b'S' => match sec_code {
                 SecCode::MORA => Ok(SubCodeKind::GridMORA),

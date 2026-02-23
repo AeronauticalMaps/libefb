@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ struct Context {
 /// `FMS` is the type that manages all flight systems.
 ///
 /// See the [module documentation](self) for details.
-#[derive(PartialEq, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct FMS {
     nd: NavigationData,
     context: Context,

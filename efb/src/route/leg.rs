@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+
+use geo::{Bearing, Distance, Geodesic};
 
 use crate::fp::Performance;
 use crate::measurements::{Angle, AngleUnit, Duration, Length, LengthUnit, Speed};
@@ -48,12 +50,16 @@ impl Leg {
         tas: Option<Speed>,
         wind: Option<Wind>,
     ) -> Leg {
-        let bearing = from.coordinate().bearing(&to.coordinate());
+        let from_coord = from.coordinate();
+        let to_coord = to.coordinate();
+
+        // Use geo's Geodesic for bearing and distance calculations
+        let bearing_deg = Geodesic.bearing(from_coord, to_coord);
+        let bearing = Angle::t(bearing_deg as f32);
         let mc = bearing + from.mag_var();
-        let dist = from
-            .coordinate()
-            .dist(&to.coordinate())
-            .convert_to(LengthUnit::NauticalMiles);
+
+        let distance_m = Geodesic.distance(from_coord, to_coord);
+        let dist = Length::m(distance_m as f32).convert_to(LengthUnit::NauticalMiles);
 
         let (gs, wca) = {
             match (tas, wind) {

@@ -16,12 +16,12 @@
 //! Builder for constructing airspace polygons from ARINC 424 boundary records.
 
 use arinc424::fields::BoundaryPath;
-use arinc424::records::ControlledAirspace;
-use geo::{Bearing, Destination, Geodesic};
+use arinc424::records::{ControlledAirspace, RestrictiveAirspace};
+use geo::{Bearing, Destination, Geodesic, Point};
 
-use crate::geom::{Coordinate, Polygon};
+use super::fields::parse_classification;
 use crate::measurements::{Angle, Length};
-use crate::nd::{Airspace, AirspaceClass};
+use crate::nd::{Airspace, AirspaceClassification, AirspaceType};
 use crate::VerticalDistance;
 
 /// Number of points to interpolate per 90 degrees of arc.
@@ -32,15 +32,15 @@ const ARC_POINTS_PER_QUADRANT: usize = 6;
 struct BoundarySegment {
     /// The path type for this segment.
     path: BoundaryPath,
-    /// The endpoint of this segment (lat/lon).
-    end_point: Coordinate,
+    /// The endpoint of this segment (lon/lat as geo::Point).
+    end_point: Point<f64>,
     /// Arc center point (for arc segments).
-    arc_center: Option<Coordinate>,
+    arc_center: Option<Point<f64>>,
     /// Arc radius (for arc segments).
     arc_radius: Option<Length>,
 }
 
-/// Builder for constructing an [Airspace] from ARINC 424 controlled airspace records.
+/// Builder for constructing an [Airspace] from ARINC 424 airspace records.
 ///
 /// ARINC 424 airspaces are defined as a sequence of records, each describing a
 /// boundary segment. This builder accumulates segments and converts them into
@@ -48,21 +48,25 @@ struct BoundarySegment {
 #[derive(Debug, Default)]
 pub struct AirspaceBuilder {
     name: Option<String>,
-    class: Option<AirspaceClass>,
+    airspace_type: Option<AirspaceType>,
+    classification: Option<AirspaceClassification>,
     ceiling: Option<VerticalDistance>,
     floor: Option<VerticalDistance>,
     segments: Vec<BoundarySegment>,
-    start_point: Option<Coordinate>,
+    start_point: Option<Point<f64>>,
 }
 
 impl AirspaceBuilder {
-    /// Adds a boundary record to the builder.
-    pub fn add_record(&mut self, record: ControlledAirspace) -> Result<(), arinc424::Error> {
+    /// Adds a controlled airspace boundary record to the builder.
+    pub fn add_controlled_record(
+        &mut self,
+        record: ControlledAirspace,
+    ) -> Result<(), arinc424::Error> {
         let coord = match (record.latitude, record.longitude) {
-            (Some(lat), Some(lon)) => Some(Coordinate {
-                latitude: lat.as_decimal()?,
-                longitude: lon.as_decimal()?,
-            }),
+            (Some(lat), Some(lon)) => {
+                // geo uses (x, y) = (longitude, latitude)
+                Some(Point::new(lon.as_decimal()?, lat.as_decimal()?))
+            }
             _ => None,
         };
 
@@ -70,29 +74,68 @@ impl AirspaceBuilder {
         if self.start_point.is_none() {
             self.start_point = coord;
             self.name = record.arsp_name.map(|n| n.to_string());
-            self.class = Some((record.arsp_type, record.arsp_class).try_into()?);
+            self.airspace_type = Some(record.arsp_type.into());
+            self.classification =
+                parse_classification(record.arsp_type, record.arsp_class.as_ref());
             self.ceiling = record.upper_limit.map(Into::into);
             self.floor = record.lower_limit.map(Into::into);
         }
 
-        // Parse arc parameters if present
-        let arc_center = match (record.arc_origin_latitude, record.arc_origin_longitude) {
-            (Some(lat), Some(lon)) => Some(Coordinate {
-                latitude: lat.as_decimal()?,
-                longitude: lon.as_decimal()?,
-            }),
+        self.add_segment(
+            coord,
+            record.bdry_via.path,
+            record.arc_origin_latitude,
+            record.arc_origin_longitude,
+            record.arc_dist,
+        )
+    }
+
+    /// Adds a restrictive airspace boundary record to the builder.
+    pub fn add_restrictive_record(
+        &mut self,
+        record: RestrictiveAirspace,
+    ) -> Result<(), arinc424::Error> {
+        let coord = match (record.latitude, record.longitude) {
+            (Some(lat), Some(lon)) => Some(Point::new(lon.as_decimal()?, lat.as_decimal()?)),
             _ => None,
         };
 
-        let arc_radius = record
-            .arc_dist
-            .map(|d| d.dist())
-            .transpose()?
-            .map(Length::nm);
+        // First record initializes metadata and starting point
+        if self.start_point.is_none() {
+            self.start_point = coord;
+            self.name = record.arsp_name.map(|n| n.to_string());
+            self.airspace_type = Some(record.restrictive_type.into());
+            self.classification = None;
+            self.ceiling = record.upper_limit.map(Into::into);
+            self.floor = record.lower_limit.map(Into::into);
+        }
 
-        // Add segment
+        self.add_segment(
+            coord,
+            record.bdry_via.path,
+            record.arc_origin_latitude,
+            record.arc_origin_longitude,
+            record.arc_dist,
+        )
+    }
+
+    fn add_segment(
+        &mut self,
+        coord: Option<Point<f64>>,
+        path: BoundaryPath,
+        arc_origin_lat: Option<arinc424::fields::Latitude<'_>>,
+        arc_origin_lon: Option<arinc424::fields::Longitude<'_>>,
+        arc_dist: Option<arinc424::fields::ArcDistance<'_>>,
+    ) -> Result<(), arinc424::Error> {
+        let arc_center = match (arc_origin_lat, arc_origin_lon) {
+            (Some(lat), Some(lon)) => Some(Point::new(lon.as_decimal()?, lat.as_decimal()?)),
+            _ => None,
+        };
+
+        let arc_radius = arc_dist.map(|d| d.dist()).transpose()?.map(Length::nm);
+
         self.segments.push(BoundarySegment {
-            path: record.bdry_via.path,
+            path,
             end_point: coord
                 .or(arc_center)
                 .expect("record should either have coordinates or arc center"),
@@ -109,7 +152,8 @@ impl AirspaceBuilder {
 
         Ok(Airspace {
             name: self.name.unwrap_or_default(),
-            class: self.class.unwrap_or(AirspaceClass::G),
+            airspace_type: self.airspace_type.unwrap_or(AirspaceType::CTA),
+            classification: self.classification,
             ceiling: self.ceiling.unwrap_or(VerticalDistance::Unlimited),
             floor: self.floor.unwrap_or(VerticalDistance::Gnd),
             polygon,
@@ -117,8 +161,8 @@ impl AirspaceBuilder {
     }
 
     /// Builds the polygon from boundary segments.
-    fn build_polygon(&self) -> Result<Polygon, arinc424::Error> {
-        let mut coords: Vec<Coordinate> = Vec::new();
+    fn build_polygon(&self) -> Result<geo::Polygon<f64>, arinc424::Error> {
+        let mut coords: Vec<geo::Coord<f64>> = Vec::new();
 
         // Handle special case: circle (single segment with Circle path)
         if self.segments.len() == 1 && self.segments[0].path == BoundaryPath::Circle {
@@ -127,7 +171,7 @@ impl AirspaceBuilder {
 
         // Process each segment
         for (i, segment) in self.segments.iter().enumerate() {
-            let prev_coord = if i == 0 {
+            let prev_point = if i == 0 {
                 // For first segment, previous point is the start point
                 self.start_point.unwrap_or(segment.end_point)
             } else {
@@ -137,18 +181,24 @@ impl AirspaceBuilder {
             match segment.path {
                 BoundaryPath::Circle => {
                     // Circle in middle of sequence is unusual, treat as endpoint
-                    coords.push(segment.end_point);
+                    coords.push(geo::Coord {
+                        x: segment.end_point.x(),
+                        y: segment.end_point.y(),
+                    });
                 }
                 BoundaryPath::GreatCircle | BoundaryPath::RhumbLine => {
                     // Direct path - just add the endpoint
-                    coords.push(segment.end_point);
+                    coords.push(geo::Coord {
+                        x: segment.end_point.x(),
+                        y: segment.end_point.y(),
+                    });
                 }
                 BoundaryPath::ClockwiseArc => {
-                    let arc_coords = self.interpolate_arc(prev_coord, segment, true)?;
+                    let arc_coords = self.interpolate_arc(prev_point, segment, true)?;
                     coords.extend(arc_coords);
                 }
                 BoundaryPath::CounterClockwiseArc => {
-                    let arc_coords = self.interpolate_arc(prev_coord, segment, false)?;
+                    let arc_coords = self.interpolate_arc(prev_point, segment, false)?;
                     coords.extend(arc_coords);
                 }
             }
@@ -161,22 +211,27 @@ impl AirspaceBuilder {
             }
         }
 
-        Ok(Polygon::from(coords))
+        Ok(geo::Polygon::new(geo::LineString::from(coords), vec![]))
     }
 
     /// Builds a circle polygon from a circle segment.
-    fn build_circle(&self, segment: &BoundarySegment) -> Result<Polygon, arinc424::Error> {
+    fn build_circle(
+        &self,
+        segment: &BoundarySegment,
+    ) -> Result<geo::Polygon<f64>, arinc424::Error> {
         let center = segment.end_point;
         let radius_m = segment.arc_radius.map(|r| r.to_si()).unwrap_or(0.0) as f64;
 
-        let center_geo: geo::Point<f64> = center.into();
         let num_points = ARC_POINTS_PER_QUADRANT * 4;
         let mut coords = Vec::with_capacity(num_points + 1);
 
         for i in 0..num_points {
             let bearing = Angle::t((i as f32) * 360.0 / (num_points as f32));
-            let point = Geodesic.destination(center_geo, *bearing.value() as f64, radius_m);
-            coords.push(point.into());
+            let point = Geodesic.destination(center, *bearing.value() as f64, radius_m);
+            coords.push(geo::Coord {
+                x: point.x(),
+                y: point.y(),
+            });
         }
 
         // Close the circle
@@ -184,7 +239,7 @@ impl AirspaceBuilder {
             coords.push(*first);
         }
 
-        Ok(Polygon::from(coords))
+        Ok(geo::Polygon::new(geo::LineString::from(coords), vec![]))
     }
 
     /// Interpolates points along an arc.
@@ -195,39 +250,43 @@ impl AirspaceBuilder {
     /// * `clockwise` - True for clockwise arc, false for counter-clockwise
     fn interpolate_arc(
         &self,
-        start: Coordinate,
+        start: Point<f64>,
         segment: &BoundarySegment,
         clockwise: bool,
-    ) -> Result<Vec<Coordinate>, arinc424::Error> {
-        let Some(center) = segment.arc_center else {
+    ) -> Result<Vec<geo::Coord<f64>>, arinc424::Error> {
+        let (Some(center), Some(radius)) = (segment.arc_center, segment.arc_radius) else {
             // No arc center - fall back to direct line
-            return Ok(vec![segment.end_point]);
+            return Ok(vec![geo::Coord {
+                x: segment.end_point.x(),
+                y: segment.end_point.y(),
+            }]);
         };
 
-        let radius_m = segment.arc_radius.map(|r| r.to_si()).unwrap_or(0.0) as f64;
-
-        let center_geo: geo::Point<f64> = center.into();
-        let start_geo: geo::Point<f64> = start.into();
-        let end_geo: geo::Point<f64> = segment.end_point.into();
-
         // Calculate bearings from center to start and end points
-        let start_bearing = Angle::t(Geodesic.bearing(center_geo, start_geo) as f32);
-        let end_bearing = Angle::t(Geodesic.bearing(center_geo, end_geo) as f32);
+        let start_bearing = Angle::t(Geodesic.bearing(center, start) as f32);
+        let end_bearing = Angle::t(Geodesic.bearing(center, segment.end_point) as f32);
 
         // Calculate the angular sweep
         let sweep = calculate_arc_sweep(start_bearing, end_bearing, clockwise);
-        let num_points =
-            ((sweep.value().abs() / 90.0) * ARC_POINTS_PER_QUADRANT as f32).ceil() as usize;
+        let sweep_rad = sweep.to_si();
+        let num_points = ((sweep_rad.abs() / std::f32::consts::FRAC_PI_2)
+            * ARC_POINTS_PER_QUADRANT as f32)
+            .ceil() as usize;
         let num_points = num_points.max(2);
 
         let mut coords = Vec::with_capacity(num_points);
+        let radius_m = radius.to_si() as f64;
+        let start_rad = start_bearing.to_si();
 
         for i in 1..=num_points {
             let fraction = i as f32 / num_points as f32;
-            let bearing = Angle::t(start_bearing.value() + sweep.value() * fraction);
+            let bearing_deg = (start_rad + sweep_rad * fraction).to_degrees() as f64;
 
-            let point = Geodesic.destination(center_geo, *bearing.value() as f64, radius_m);
-            coords.push(point.into());
+            let point = Geodesic.destination(center, bearing_deg, radius_m);
+            coords.push(geo::Coord {
+                x: point.x(),
+                y: point.y(),
+            });
         }
 
         Ok(coords)
@@ -236,7 +295,7 @@ impl AirspaceBuilder {
 
 /// Calculates the angular sweep for an arc.
 ///
-/// Returns the signed angle from start_bearing to end_bearing,
+/// Returns the signed sweep angle from `start` to `end`,
 /// going in the specified direction (clockwise = positive).
 fn calculate_arc_sweep(start: Angle, end: Angle, clockwise: bool) -> Angle {
     let mut diff = end.value() - start.value();
@@ -253,8 +312,6 @@ fn calculate_arc_sweep(start: Angle, end: Angle, clockwise: bool) -> Angle {
         }
     }
 
-    // Note: We don't use Angle::t here because we need to preserve the sign
-    // for the sweep direction, and Angle::t wraps negative values.
     Angle::rad(diff.to_radians())
 }
 
@@ -266,25 +323,25 @@ mod tests {
     fn test_calculate_arc_sweep_clockwise() {
         // 0° to 90° clockwise = 90°
         let sweep = calculate_arc_sweep(Angle::t(0.0), Angle::t(90.0), true);
-        assert!((sweep.value().to_degrees() - 90.0).abs() < 0.001);
+        assert!((sweep.to_si().to_degrees() - 90.0).abs() < 0.001);
 
         // 90° to 0° clockwise = 270°
         let sweep = calculate_arc_sweep(Angle::t(90.0), Angle::t(0.0), true);
-        assert!((sweep.value().to_degrees() - 270.0).abs() < 0.001);
+        assert!((sweep.to_si().to_degrees() - 270.0).abs() < 0.001);
 
         // 350° to 10° clockwise = 20°
         let sweep = calculate_arc_sweep(Angle::t(350.0), Angle::t(10.0), true);
-        assert!((sweep.value().to_degrees() - 20.0).abs() < 0.001);
+        assert!((sweep.to_si().to_degrees() - 20.0).abs() < 0.001);
     }
 
     #[test]
     fn test_calculate_arc_sweep_counterclockwise() {
         // 90° to 0° counter-clockwise = -90°
         let sweep = calculate_arc_sweep(Angle::t(90.0), Angle::t(0.0), false);
-        assert!((sweep.value().to_degrees() - (-90.0)).abs() < 0.001);
+        assert!((sweep.to_si().to_degrees() - (-90.0)).abs() < 0.001);
 
         // 0° to 90° counter-clockwise = -270°
         let sweep = calculate_arc_sweep(Angle::t(0.0), Angle::t(90.0), false);
-        assert!((sweep.value().to_degrees() - (-270.0)).abs() < 0.001);
+        assert!((sweep.to_si().to_degrees() - (-270.0)).abs() < 0.001);
     }
 }

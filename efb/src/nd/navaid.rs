@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ use std::rc::Rc;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::geom::Coordinate;
 use crate::MagneticVariation;
+use geo::Point;
 
 use super::AiracCycle;
 use super::Airport;
@@ -59,7 +59,7 @@ impl Fix for NavAid {
         }
     }
 
-    fn coordinate(&self) -> Coordinate {
+    fn coordinate(&self) -> Point<f64> {
         match self {
             Self::Airport(arpt) => arpt.coordinate(),
             Self::Waypoint(wp) => wp.coordinate(),

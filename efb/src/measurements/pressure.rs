@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -69,6 +69,9 @@ impl UnitOfMeasure<f32> for PressureUnit {
 pub type Pressure = Measurement<f32, PressureUnit>;
 
 impl Pressure {
+    /// Standard atmosphere of 1013.25 hPa at MSL.
+    pub const STD: Self = Self::h_pa(1013.25);
+
     /// Returns the pressure in Inches of Mercury _inHg_.
     pub const fn in_hg(value: f32) -> Self {
         Measurement {

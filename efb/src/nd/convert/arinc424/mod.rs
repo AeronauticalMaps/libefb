@@ -55,7 +55,26 @@ impl NavigationData {
                     arinc424::records::RecordKind::ControlledAirspace => {
                         let record = arinc424::records::ControlledAirspace::try_from(bytes)?;
                         let return_to_origin = record.bdry_via.return_to_origin;
-                        airspace.get_or_insert_default().add_record(record)?;
+                        airspace
+                            .get_or_insert_default()
+                            .add_controlled_record(record)?;
+
+                        if return_to_origin {
+                            let arsp = airspace
+                                .take()
+                                .expect("there should be an airspace at this point")
+                                .build()?;
+
+                            builder.add_airspace(arsp);
+                        }
+                    }
+
+                    arinc424::records::RecordKind::RestrictiveAirspace => {
+                        let record = arinc424::records::RestrictiveAirspace::try_from(bytes)?;
+                        let return_to_origin = record.bdry_via.return_to_origin;
+                        airspace
+                            .get_or_insert_default()
+                            .add_restrictive_record(record)?;
 
                         if return_to_origin {
                             let arsp = airspace

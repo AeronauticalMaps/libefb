@@ -16,6 +16,7 @@
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+use super::index::{AirspaceIndex, NavAidIndex};
 use super::*;
 
 /// Navigation data factory, which is used to build [navigation data].
@@ -25,7 +26,7 @@ use super::*;
 pub struct NavigationDataBuilder {
     airports: HashMap<String, Airport>,
     runways: HashMap<String, Vec<Runway>>,
-    airspaces: Vec<Airspace>,
+    airspaces: Vec<Rc<Airspace>>,
     waypoints: Vec<Rc<Waypoint>>,
     terminal_waypoints: TerminalWaypoints,
     locations: HashSet<LocationIndicator>,
@@ -59,9 +60,20 @@ impl NavigationDataBuilder {
             }
         });
 
+        // Build spatial index for airspaces
+        let airspace_index = AirspaceIndex::new(self.airspaces.iter());
+
+        // Convert airports to Rc and collect
+        let airports: Vec<Rc<Airport>> = self.airports.into_values().map(Rc::new).collect();
+
+        // Build spatial index for point-based navaids
+        let navaid_index = NavAidIndex::new(airports.iter(), self.waypoints.iter());
+
         NavigationData {
-            airports: self.airports.into_values().map(Rc::new).collect(),
+            airports,
             airspaces: self.airspaces,
+            airspace_index,
+            navaid_index,
             waypoints: self.waypoints,
             terminal_waypoints: self.terminal_waypoints,
             locations: self.locations.into_iter().collect(),
@@ -86,7 +98,7 @@ impl NavigationDataBuilder {
     }
 
     pub fn add_airspace(&mut self, airspace: Airspace) {
-        self.airspaces.push(airspace);
+        self.airspaces.push(Rc::new(airspace));
     }
 
     pub fn add_waypoint(&mut self, wp: Waypoint) {
@@ -115,11 +127,5 @@ impl NavigationDataBuilder {
         data.hash(&mut hasher);
         self.partition_id = hasher.finish();
         self
-    }
-}
-
-impl Extend<Airspace> for NavigationDataBuilder {
-    fn extend<T: IntoIterator<Item = Airspace>>(&mut self, iter: T) {
-        self.airspaces.extend(iter);
     }
 }

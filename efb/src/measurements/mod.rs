@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -42,6 +42,7 @@
 //! assert_eq!(speed.value().round(), Speed::kt(126.0).value().round());
 //! ```
 
+mod altitude;
 mod angle;
 mod constants;
 mod density;
@@ -55,6 +56,7 @@ mod temperature;
 mod unit_of_measure;
 mod volume;
 
+pub use altitude::{Altitude, AltitudeUnit};
 pub use angle::{Angle, AngleUnit};
 pub use density::{Density, DensityUnit};
 pub use duration::{Duration, DurationUnit};
