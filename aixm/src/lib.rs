@@ -13,41 +13,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! AIXM 5.1 parser for aeronautical navigation data.
+//! Streaming parser for AIXM 5.1 aeronautical navigation data.
 //!
-//! This crate provides a streaming parser for AIXM 5.1/5.1.1 XML data. Only
-//! the feature types relevant for navigation are parsed: airports, runways,
-//! designated points, navaids, and airspaces. All other AIXM features are
-//! silently skipped.
+//! [AIXM] (Aeronautical Information Exchange Model) is an XML-based standard
+//! used by aviation authorities to publish navigation databases. This crate
+//! reads an AIXM 5.1 document and yields the features needed for flight
+//! planning — airports, runways, waypoints, navaids, and airspaces — while
+//! skipping everything else.
 //!
-//! The main entry point is the [`Features`] iterator which yields one
-//! [`Feature`] at a time as it streams through the XML document.
+//! # Usage
 //!
-//! # Examples
+//! The entry point is the [`Features`] iterator. Pass it the raw XML bytes and
+//! iterate to get one [`Feature`] at a time:
 //!
 //! ```no_run
-//! use aixm::Features;
+//! let data = std::fs::read("navigation_data.xml").unwrap();
 //!
-//! let data = std::fs::read("AIXM_DATA.xml").expect("file should be readable");
-//!
-//! for feature in Features::new(&data) {
-//!     match feature {
-//!         Ok(aixm::Feature::AirportHeliport(ahp)) => {
-//!             println!("Airport: {} ({})", ahp.designator, ahp.name);
+//! for result in aixm::Features::new(&data) {
+//!     match result.unwrap() {
+//!         aixm::Feature::AirportHeliport(ahp) => {
+//!             println!("Airport {} – {}", ahp.designator, ahp.name);
 //!         }
-//!         Ok(aixm::Feature::DesignatedPoint(dp)) => {
-//!             println!("Point: {}", dp.designator);
+//!         aixm::Feature::Navaid(nav) => {
+//!             println!("Navaid {} ({})", nav.designator,
+//!                 nav.navaid_type.as_deref().unwrap_or("unknown"));
 //!         }
-//!         Ok(_) => {}
-//!         Err(e) => eprintln!("Parse error: {e}"),
+//!         _ => {}
 //!     }
 //! }
 //! ```
+//!
+//! [AIXM]: https://aixm.aero
 
 mod error;
 mod features;
 mod parser;
-mod xml;
 
 pub use error::Error;
 pub use features::*;
