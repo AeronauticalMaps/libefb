@@ -13,13 +13,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Field-level conversions from AIXM coded values to efb measurement and
+//! classification types.
+
 use aixm::AirspaceVolume;
 
 use crate::measurements::{Angle, Length};
 use crate::nd::*;
 use crate::VerticalDistance;
 
-/// Converts an AIXM airspace type string to an [`AirspaceType`] and optional
+/// Maps an AIXM airspace type code to an [`AirspaceType`] and optional
 /// [`AirspaceClassification`].
 pub fn airspace_type_and_class(
     airspace_type: Option<&str>,
@@ -45,7 +48,7 @@ pub fn airspace_type_and_class(
     }
 }
 
-/// Converts an AIXM vertical limit to a [`VerticalDistance`].
+/// Maps an AIXM vertical limit (value, unit, reference) to a [`VerticalDistance`].
 pub fn vertical_distance(
     value: Option<&str>,
     uom: Option<&str>,
@@ -81,7 +84,7 @@ pub fn vertical_distance(
     }
 }
 
-/// Converts an AIXM surface composition string to a [`RunwaySurface`].
+/// Maps an AIXM surface composition code to a [`RunwaySurface`].
 pub fn runway_surface(composition: Option<&str>) -> RunwaySurface {
     match composition {
         Some("ASPH") => RunwaySurface::Asphalt,
@@ -91,7 +94,9 @@ pub fn runway_surface(composition: Option<&str>) -> RunwaySurface {
     }
 }
 
-/// Converts a bearing value to an [`Angle`].
+/// Maps a true or magnetic bearing value to an [`Angle`].
+///
+/// Prefers true bearing when available.
 pub fn bearing(true_bearing: Option<f64>, magnetic_bearing: Option<f64>) -> Angle {
     if let Some(tb) = true_bearing {
         Angle::t(tb as f32)
@@ -102,7 +107,7 @@ pub fn bearing(true_bearing: Option<f64>, magnetic_bearing: Option<f64>) -> Angl
     }
 }
 
-/// Converts an AIXM runway length with unit to a [`Length`].
+/// Maps a runway length value and unit to a [`Length`].
 pub fn runway_length(value: Option<f64>, uom: Option<&str>) -> Length {
     match (value, uom) {
         (Some(v), Some("M")) => Length::m(v as f32),
@@ -113,7 +118,7 @@ pub fn runway_length(value: Option<f64>, uom: Option<&str>) -> Length {
     }
 }
 
-/// Converts an AIXM field elevation with unit to a [`VerticalDistance`].
+/// Maps a field elevation value and unit to a [`VerticalDistance`].
 pub fn field_elevation(value: Option<f64>, uom: Option<&str>) -> VerticalDistance {
     match (value, uom) {
         (Some(v), Some("FT")) => VerticalDistance::Msl(v as u16),
@@ -126,8 +131,7 @@ pub fn field_elevation(value: Option<f64>, uom: Option<&str>) -> VerticalDistanc
     }
 }
 
-/// Converts AIXM airspace volume vertical limits to a pair of
-/// (ceiling, floor) [`VerticalDistance`] values.
+/// Extracts the ceiling and floor [`VerticalDistance`] from an airspace volume.
 pub fn volume_limits(vol: &AirspaceVolume) -> (VerticalDistance, VerticalDistance) {
     let ceiling = vertical_distance(
         vol.upper_limit.as_deref(),

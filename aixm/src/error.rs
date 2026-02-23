@@ -15,13 +15,18 @@
 
 use std::fmt;
 
+/// Errors that can occur while parsing an AIXM document.
+///
+/// Returned by the [`Features`](crate::Features) iterator when an individual
+/// feature cannot be parsed. Non-fatal — the iterator continues with the next
+/// feature after yielding an error.
 #[derive(Clone, Debug)]
 pub enum Error {
-    /// An XML parsing error from the underlying parser.
+    /// The underlying XML is malformed or uses an unexpected encoding.
     Xml(String),
-    /// A required element or attribute is missing.
+    /// A required element or attribute is missing from the feature.
     MissingField(&'static str),
-    /// A value could not be parsed (e.g. a coordinate or elevation).
+    /// A value could not be parsed (e.g. an invalid coordinate or elevation).
     InvalidValue { field: &'static str, value: String },
 }
 
