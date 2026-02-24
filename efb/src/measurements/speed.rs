@@ -53,7 +53,7 @@ impl UnitOfMeasure<f32> for SpeedUnit {
         match to {
             Self::MetersPerSecond => value,
             Self::Knots => value * constants::METER_PER_SECONDS_IN_KNOTS,
-            Self::Mach => unimplemented!(),
+            Self::Mach => value / constants::SPEED_OF_SOUND_ISA_SL,
         }
     }
 
@@ -61,7 +61,7 @@ impl UnitOfMeasure<f32> for SpeedUnit {
         match self {
             Self::MetersPerSecond => *value,
             Self::Knots => value / constants::METER_PER_SECONDS_IN_KNOTS,
-            Self::Mach => unimplemented!(),
+            Self::Mach => value * constants::SPEED_OF_SOUND_ISA_SL,
         }
     }
 }
@@ -129,8 +129,7 @@ mod tests {
     fn from_icao_4444_2_str() {
         assert_eq!("K0360".parse::<Speed>(), Ok(Speed::mps(100.0)));
         assert_eq!("N0485".parse::<Speed>(), Ok(Speed::kt(485.0)));
-        // TODO: Implement conversion of Mach to SI.
-        // assert_eq!("M082".parse::<Speed>(), Ok(Speed::mach(0.82)));
+        assert_eq!("M082".parse::<Speed>(), Ok(Speed::mach(0.82)));
         assert_eq!("M08".parse::<Speed>(), Err(Error::UnexpectedString));
     }
 }
