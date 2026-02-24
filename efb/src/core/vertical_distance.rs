@@ -106,10 +106,10 @@ impl VerticalDistance {
     /// pressure altitude to overflow.
     ///
     /// [`ImplausibleValue`]: Error::ImplausibleValue
-    // TODO: Change elevation to be a length measurement.
-    pub fn pa(elevation: i16, qnh: Pressure) -> Result<Self, Error> {
+    pub fn pa(elevation: Length, qnh: Pressure) -> Result<Self, Error> {
         // https://www.weather.gov/media/epz/wxcalc/pressureAltitude.pdf
-        let (pa, overflowed) = elevation.overflowing_add(
+        let elevation_ft = *elevation.convert_to(LengthUnit::Feet).value() as i16;
+        let (pa, overflowed) = elevation_ft.overflowing_add(
             (145366.45 * (1.0 - (qnh / Pressure::STD).powf(0.190284))).round() as i16,
         );
 
@@ -339,6 +339,24 @@ mod tests {
             .unwrap();
         let expected_ft = 10_000.0 + expected_correction;
         assert!((alt.to_si() - Length::ft(expected_ft).to_si()).abs() < 2.0);
+    }
+
+    #[test]
+    fn pa_at_standard_qnh_equals_elevation() {
+        // At standard QNH the correction is zero so PA equals the field elevation.
+        let elev = Length::ft(1000.0);
+        assert_eq!(
+            VerticalDistance::pa(elev, Pressure::STD),
+            Ok(VerticalDistance::PressureAltitude(1000))
+        );
+    }
+
+    #[test]
+    fn pa_sea_level_std_qnh_is_zero() {
+        assert_eq!(
+            VerticalDistance::pa(Length::m(0.0), Pressure::STD),
+            Ok(VerticalDistance::PressureAltitude(0))
+        );
     }
 
     #[test]

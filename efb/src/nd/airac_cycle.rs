@@ -141,10 +141,30 @@ mod tests {
 
     #[test]
     fn test_effective_dates() {
-        // TODO: Add more known cycles.
+        // AIRAC 2509: 2025-09-04 – 2025-10-01
         let cycle = AiracCycle::new(25, 9);
-        assert_eq!(cycle.effective_date(), NaiveDate::from_ymd_opt(2025, 09, 4));
+        assert_eq!(cycle.effective_date(), NaiveDate::from_ymd_opt(2025, 9, 4));
         assert_eq!(cycle.end_date(), NaiveDate::from_ymd_opt(2025, 10, 1));
+
+        // AIRAC 2501: 2025-01-23 – 2025-02-19
+        let cycle = AiracCycle::new(25, 1);
+        assert_eq!(cycle.effective_date(), NaiveDate::from_ymd_opt(2025, 1, 23));
+        assert_eq!(cycle.end_date(), NaiveDate::from_ymd_opt(2025, 2, 19));
+
+        // AIRAC 2413: 2024-12-26 – 2025-01-22
+        let cycle = AiracCycle::new(24, 13);
+        assert_eq!(cycle.effective_date(), NaiveDate::from_ymd_opt(2024, 12, 26));
+        assert_eq!(cycle.end_date(), NaiveDate::from_ymd_opt(2025, 1, 22));
+
+        // AIRAC 2601: 2026-01-22 – 2026-02-18
+        let cycle = AiracCycle::new(26, 1);
+        assert_eq!(cycle.effective_date(), NaiveDate::from_ymd_opt(2026, 1, 22));
+        assert_eq!(cycle.end_date(), NaiveDate::from_ymd_opt(2026, 2, 18));
+
+        // AIRAC 2602: 2026-02-19 – 2026-03-18
+        let cycle = AiracCycle::new(26, 2);
+        assert_eq!(cycle.effective_date(), NaiveDate::from_ymd_opt(2026, 2, 19));
+        assert_eq!(cycle.end_date(), NaiveDate::from_ymd_opt(2026, 3, 18));
     }
 
     #[test]

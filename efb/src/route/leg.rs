@@ -145,7 +145,6 @@ impl Leg {
         &self.dist
     }
 
-    // TODO add test to verify calculation
     /// The ground speed in knots.
     pub fn gs(&self) -> Option<&Speed> {
         self.gs.as_ref()
@@ -156,7 +155,6 @@ impl Leg {
         self.wca.as_ref()
     }
 
-    // TODO add test to verify calculation
     /// The estimated time enroute the leg.
     pub fn ete(&self) -> Option<&Duration> {
         self.ete.as_ref()
@@ -199,9 +197,86 @@ fn ground_speed(tas: &Speed, wind: &Wind, wca: &Angle, bearing: &Angle) -> Speed
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
     use std::str::FromStr;
 
+    use geo::Point;
+
     use super::*;
+    use crate::nd::{NavAid, Region, Waypoint, WaypointUsage};
+
+    /// Creates a simple enroute waypoint at the given latitude/longitude.
+    fn wp(ident: &str, lat: f64, lon: f64) -> NavAid {
+        NavAid::Waypoint(Rc::new(Waypoint {
+            fix_ident: ident.to_string(),
+            desc: String::new(),
+            usage: WaypointUsage::Unknown,
+            coordinate: Point::new(lon, lat),
+            mag_var: None,
+            region: Region::Enroute,
+            location: None,
+            cycle: None,
+        }))
+    }
+
+    #[test]
+    fn gs_equals_tas_with_calm_wind() {
+        // Two points due north of each other; zero wind → GS == TAS.
+        let tas = Speed::kt(120.0);
+        let wind = Wind::from_str("00000KT").unwrap();
+        let leg = Leg::new(wp("A", 0.0, 0.0), wp("B", 1.0, 0.0), None, Some(tas), Some(wind));
+
+        let gs = leg.gs().expect("GS should be present with wind and TAS");
+        // Allow a tiny floating-point tolerance.
+        assert!(
+            (gs.to_si() - tas.to_si()).abs() < 0.01,
+            "GS ({:.3} m/s) should equal TAS ({:.3} m/s) in calm conditions",
+            gs.to_si(),
+            tas.to_si(),
+        );
+    }
+
+    #[test]
+    fn gs_reduced_by_direct_headwind() {
+        // Flying due north (bearing ≈ 0°), wind from the north → pure headwind.
+        let tas = Speed::kt(100.0);
+        let wind = Wind::from_str("00020KT").unwrap(); // 20 kt from 000°
+        let leg = Leg::new(wp("A", 0.0, 0.0), wp("B", 1.0, 0.0), None, Some(tas), Some(wind));
+
+        let gs_kt = leg
+            .gs()
+            .expect("GS should be present")
+            .convert_to(crate::measurements::SpeedUnit::Knots);
+        // GS = TAS − headwind = 100 − 20 = 80 kt (within 1 kt for geodesic rounding).
+        assert!(
+            (gs_kt.value() - 80.0).abs() < 1.0,
+            "GS ({:.1} kt) should be ≈ 80 kt with 20 kt headwind",
+            gs_kt.value(),
+        );
+    }
+
+    #[test]
+    fn ete_equals_dist_over_gs() {
+        // With calm wind ETE must satisfy dist / GS == ETE.
+        let tas = Speed::kt(90.0);
+        let wind = Wind::from_str("00000KT").unwrap();
+        let leg = Leg::new(wp("A", 0.0, 0.0), wp("B", 1.0, 0.0), None, Some(tas), Some(wind));
+
+        let dist = *leg.dist();
+        let gs = *leg.gs().expect("GS should be present");
+        let ete = *leg.ete().expect("ETE should be present");
+
+        // Length / Speed returns a Duration (seconds); both sides use the same computation.
+        let expected_ete = dist / gs;
+        assert_eq!(ete, expected_ete);
+    }
+
+    #[test]
+    fn gs_and_ete_are_none_without_tas() {
+        let leg = Leg::new(wp("A", 0.0, 0.0), wp("B", 1.0, 0.0), None, None, None);
+        assert!(leg.gs().is_none());
+        assert!(leg.ete().is_none());
+    }
 
     #[test]
     fn wind_correction_angle_left() {
