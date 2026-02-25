@@ -195,7 +195,7 @@ fn parse_aixm_navigation_data() {
     // Designated Point: ABLAN
     let ablan = nd.find("ABLAN").expect("ABLAN should be found");
     assert_eq!(ablan.ident(), "ABLAN");
-    assert!((ablan.coordinate().latitude - 52.123).abs() < 0.01);
+    assert!((ablan.coordinate().y() - 52.123).abs() < 0.01);
 
     // Navaid: BOR
     let bor = nd.find("BOR").expect("BOR should be found");

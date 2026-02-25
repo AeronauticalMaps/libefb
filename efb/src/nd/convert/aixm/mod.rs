@@ -28,17 +28,18 @@ use crate::nd::*;
 mod fields;
 mod records;
 
-/// Tracks a runway direction whose parent runway and airport are not yet known.
-struct DeferredRunwayDirection {
-    rdn: aixm::RunwayDirection,
-    runway_uuid: String,
-}
-
 /// Runway properties needed when resolving deferred runway directions.
 struct RunwayInfo {
     airport_uuid: Option<String>,
     length: crate::measurements::Length,
     surface: RunwaySurface,
+}
+
+/// A deferred runway direction that needs to be resolved against a Runway UUID.
+struct DeferredRunwayDirection {
+    rdn: aixm::RunwayDirection,
+    /// UUID of the Runway this direction belongs to.
+    runway_uuid: String,
 }
 
 impl NavigationData {
@@ -55,21 +56,24 @@ impl NavigationData {
     /// # Examples
     ///
     /// ```no_run
-    /// use efb::nd::NavigationData;
+    /// use efb::nd::{Fix, NavigationData};
     ///
     /// let data = std::fs::read("aixm_data.xml").unwrap();
     /// let nd = NavigationData::try_from_aixm(&data).unwrap();
     ///
-    /// for arpt in nd.airports() {
-    ///     println!("{}", arpt.ident());
+    /// if let Some(airport) = nd.find("EADD") {
+    ///     println!("{}", airport.ident());
     /// }
     /// ```
     pub fn try_from_aixm(data: &[u8]) -> Result<Self, Error> {
         let mut builder = NavigationData::builder();
 
         // Cross-reference lookup maps
+        // airport UUID -> airport ICAO ident
         let mut airport_uuids: HashMap<String, String> = HashMap::new();
+        // runway UUID -> RunwayInfo
         let mut runway_infos: HashMap<String, RunwayInfo> = HashMap::new();
+        // Deferred items waiting for cross-reference resolution
         let mut deferred_rwys: Vec<aixm::Runway> = Vec::new();
         let mut deferred_rdns: Vec<DeferredRunwayDirection> = Vec::new();
 
@@ -85,6 +89,8 @@ impl NavigationData {
                     }
 
                     aixm::Feature::Runway(rwy) => {
+                        // Defer runway processing since we need the airport UUID
+                        // mapping and it might not be available yet.
                         deferred_rwys.push(rwy);
                     }
 
@@ -120,7 +126,7 @@ impl NavigationData {
             }
         }
 
-        // Build the runway UUID → info lookup from deferred runways.
+        // Resolve deferred runways: build the runway UUID -> info map
         for rwy in &deferred_rwys {
             let length = fields::runway_length(rwy.nominal_length, rwy.length_uom.as_deref());
             let surface = fields::runway_surface(rwy.surface_composition.as_deref());
@@ -135,8 +141,7 @@ impl NavigationData {
             );
         }
 
-        // Resolve each RunwayDirection → Runway → Airport chain and add the
-        // final Runway entries to their airports.
+        // Resolve deferred runway directions: create Runway entries
         for deferred in deferred_rdns {
             if let Some(rwy_info) = runway_infos.get(&deferred.runway_uuid) {
                 let airport_ident = rwy_info

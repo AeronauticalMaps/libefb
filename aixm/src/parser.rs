@@ -15,26 +15,14 @@
 
 //! Streaming AIXM 5.1 XML parser.
 //!
-//! The parser scans the XML byte stream for supported AIXM feature elements
-//! (e.g. `<aixm:AirportHeliport>`, `<aixm:Navaid>`, …), captures each feature
-//! subtree, and deserializes it with serde into an internal XML-mapping struct.
-//! That struct is then converted into a flat public [`Feature`] type.
-//!
-//! AIXM XML uses deeply nested elements (time slices, GML geometry, xlink
-//! references) that require matching serde structs. These internal structs are
-//! private to this module — callers only see the flat types from
-//! [`crate::features`].
+//! Scans the XML byte stream for supported AIXM feature elements and
+//! deserializes each subtree with serde into the public feature types.
 
 use quick_xml::events::Event;
 use quick_xml::Reader;
-use serde::Deserialize;
 
 use crate::error::Error;
 use crate::features::*;
-
-// ===========================================================================
-// Public iterator
-// ===========================================================================
 
 /// Streaming iterator over AIXM 5.1 features in an XML document.
 ///
@@ -62,7 +50,7 @@ use crate::features::*;
 /// let airports: Vec<String> = aixm::Features::new(&data)
 ///     .filter_map(Result::ok)
 ///     .filter_map(|f| match f {
-///         aixm::Feature::AirportHeliport(ahp) => Some(ahp.designator),
+///         aixm::Feature::AirportHeliport(ahp) => Some(ahp.designator().to_string()),
 ///         _ => None,
 ///     })
 ///     .collect();
@@ -151,10 +139,6 @@ impl<'a> Iterator for Features<'a> {
     }
 }
 
-// ===========================================================================
-// Internal deserialization dispatch
-// ===========================================================================
-
 enum FeatureKind {
     AirportHeliport,
     Runway,
@@ -165,37 +149,21 @@ enum FeatureKind {
 }
 
 fn deserialize_feature(kind: FeatureKind, xml: &str) -> Result<Feature, Error> {
-    match kind {
+    Ok(match kind {
         FeatureKind::AirportHeliport => {
-            let x: XmlAirportHeliport = quick_xml::de::from_str(xml)?;
-            Ok(Feature::AirportHeliport(x.into()))
+            Feature::AirportHeliport(quick_xml::de::from_str(xml)?)
         }
-        FeatureKind::Runway => {
-            let x: XmlRunway = quick_xml::de::from_str(xml)?;
-            Ok(Feature::Runway(x.into()))
-        }
+        FeatureKind::Runway => Feature::Runway(quick_xml::de::from_str(xml)?),
         FeatureKind::RunwayDirection => {
-            let x: XmlRunwayDirection = quick_xml::de::from_str(xml)?;
-            Ok(Feature::RunwayDirection(x.into()))
+            Feature::RunwayDirection(quick_xml::de::from_str(xml)?)
         }
         FeatureKind::DesignatedPoint => {
-            let x: XmlDesignatedPoint = quick_xml::de::from_str(xml)?;
-            Ok(Feature::DesignatedPoint(x.into()))
+            Feature::DesignatedPoint(quick_xml::de::from_str(xml)?)
         }
-        FeatureKind::Navaid => {
-            let x: XmlNavaid = quick_xml::de::from_str(xml)?;
-            Ok(Feature::Navaid(x.into()))
-        }
-        FeatureKind::Airspace => {
-            let x: XmlAirspace = quick_xml::de::from_str(xml)?;
-            Ok(Feature::Airspace(x.into()))
-        }
-    }
+        FeatureKind::Navaid => Feature::Navaid(quick_xml::de::from_str(xml)?),
+        FeatureKind::Airspace => Feature::Airspace(quick_xml::de::from_str(xml)?),
+    })
 }
-
-// ===========================================================================
-// Helpers
-// ===========================================================================
 
 /// Returns the local name portion of a possibly namespace-prefixed XML name.
 fn local_name(name: &[u8]) -> &[u8] {
@@ -203,563 +171,6 @@ fn local_name(name: &[u8]) -> &[u8] {
         .position(|&b| b == b':')
         .map_or(name, |pos| &name[pos + 1..])
 }
-
-/// Strips the `uuid.` prefix that `gml:id` attributes carry in AIXM.
-fn strip_uuid_prefix(id: &str) -> &str {
-    id.strip_prefix("uuid.").unwrap_or(id)
-}
-
-/// Strips the `urn:uuid:` prefix from an `xlink:href` value.
-fn strip_xlink_prefix(href: &str) -> &str {
-    href.strip_prefix("urn:uuid:").unwrap_or(href)
-}
-
-/// Parses a GML `pos` value (`"lat lon"`) into a coordinate pair.
-fn parse_pos(text: &str) -> Option<(f64, f64)> {
-    let mut parts = text.split_whitespace();
-    let lat = parts.next()?.parse().ok()?;
-    let lon = parts.next()?.parse().ok()?;
-    Some((lat, lon))
-}
-
-/// Parses a GML `posList` value into a list of coordinate pairs.
-fn parse_pos_list(text: &str) -> Vec<(f64, f64)> {
-    let values: Vec<f64> = text
-        .split_whitespace()
-        .filter_map(|s| s.parse().ok())
-        .collect();
-
-    values.chunks_exact(2).map(|c| (c[0], c[1])).collect()
-}
-
-// ===========================================================================
-// Conversions: XML serde structs → public feature types
-// ===========================================================================
-
-impl From<XmlAirportHeliport> for AirportHeliport {
-    fn from(x: XmlAirportHeliport) -> Self {
-        let ts = x.time_slice.inner;
-        let (latitude, longitude) = ts
-            .arp
-            .and_then(|arp| arp.elevated_point)
-            .and_then(|ep| ep.pos.as_deref().and_then(parse_pos))
-            .map_or((None, None), |(lat, lon)| (Some(lat), Some(lon)));
-
-        AirportHeliport {
-            uuid: x
-                .id
-                .as_deref()
-                .map(strip_uuid_prefix)
-                .unwrap_or_default()
-                .to_string(),
-            designator: ts.designator.unwrap_or_default(),
-            name: ts.name.unwrap_or_default(),
-            location_indicator_icao: ts.location_indicator_icao,
-            iata_designator: ts.iata_designator,
-            field_elevation: ts
-                .field_elevation
-                .as_ref()
-                .and_then(|v| v.value.as_deref()?.parse().ok()),
-            field_elevation_uom: ts.field_elevation.and_then(|v| v.uom),
-            latitude,
-            longitude,
-        }
-    }
-}
-
-impl From<XmlRunway> for Runway {
-    fn from(x: XmlRunway) -> Self {
-        let ts = x.time_slice.inner;
-        Runway {
-            uuid: x
-                .id
-                .as_deref()
-                .map(strip_uuid_prefix)
-                .unwrap_or_default()
-                .to_string(),
-            designator: ts.designator.unwrap_or_default(),
-            nominal_length: ts
-                .nominal_length
-                .as_ref()
-                .and_then(|v| v.value.as_deref()?.parse().ok()),
-            length_uom: ts.nominal_length.and_then(|v| v.uom),
-            surface_composition: ts
-                .surface_properties
-                .and_then(|sp| sp.characteristics)
-                .and_then(|sc| sc.composition),
-            associated_airport_uuid: ts
-                .associated_airport_heliport
-                .and_then(|r| r.href)
-                .map(|h| strip_xlink_prefix(&h).to_string()),
-        }
-    }
-}
-
-impl From<XmlRunwayDirection> for RunwayDirection {
-    fn from(x: XmlRunwayDirection) -> Self {
-        let ts = x.time_slice.inner;
-        RunwayDirection {
-            uuid: x
-                .id
-                .as_deref()
-                .map(strip_uuid_prefix)
-                .unwrap_or_default()
-                .to_string(),
-            designator: ts.designator.unwrap_or_default(),
-            true_bearing: ts.true_bearing.as_deref().and_then(|s| s.parse().ok()),
-            magnetic_bearing: ts.magnetic_bearing.as_deref().and_then(|s| s.parse().ok()),
-            used_runway_uuid: ts
-                .used_runway
-                .and_then(|r| r.href)
-                .map(|h| strip_xlink_prefix(&h).to_string()),
-        }
-    }
-}
-
-impl From<XmlDesignatedPoint> for DesignatedPoint {
-    fn from(x: XmlDesignatedPoint) -> Self {
-        let ts = x.time_slice.inner;
-        let (latitude, longitude) = ts
-            .location
-            .and_then(|loc| loc.elevated_point)
-            .and_then(|ep| ep.pos.as_deref().and_then(parse_pos))
-            .map_or((None, None), |(lat, lon)| (Some(lat), Some(lon)));
-
-        DesignatedPoint {
-            uuid: x
-                .id
-                .as_deref()
-                .map(strip_uuid_prefix)
-                .unwrap_or_default()
-                .to_string(),
-            designator: ts.designator.unwrap_or_default(),
-            name: ts.name,
-            point_type: ts.point_type,
-            latitude,
-            longitude,
-        }
-    }
-}
-
-impl From<XmlNavaid> for Navaid {
-    fn from(x: XmlNavaid) -> Self {
-        let ts = x.time_slice.inner;
-        let loc = ts.location.and_then(|l| l.elevated_point);
-        let (latitude, longitude) = loc
-            .as_ref()
-            .and_then(|ep| ep.pos.as_deref().and_then(parse_pos))
-            .map_or((None, None), |(lat, lon)| (Some(lat), Some(lon)));
-        let elevation = loc
-            .and_then(|ep| ep.elevation)
-            .and_then(|v| v.value.as_deref()?.parse().ok());
-
-        Navaid {
-            uuid: x
-                .id
-                .as_deref()
-                .map(strip_uuid_prefix)
-                .unwrap_or_default()
-                .to_string(),
-            designator: ts.designator.unwrap_or_default(),
-            name: ts.name,
-            navaid_type: ts.navaid_type,
-            latitude,
-            longitude,
-            elevation,
-        }
-    }
-}
-
-impl From<XmlAirspace> for Airspace {
-    fn from(x: XmlAirspace) -> Self {
-        let ts = x.time_slice.inner;
-
-        let volume = ts
-            .geometry_component
-            .and_then(|gc| gc.inner)
-            .and_then(|gc| gc.the_airspace_volume)
-            .and_then(|tav| tav.volume);
-
-        let volumes = match volume {
-            Some(vol) => {
-                let polygon = vol
-                    .horizontal_projection
-                    .and_then(|hp| hp.surface)
-                    .and_then(|s| s.patches)
-                    .and_then(|p| p.polygon_patch)
-                    .and_then(|pp| pp.exterior)
-                    .and_then(|ext| ext.ring)
-                    .and_then(|r| r.curve_member)
-                    .and_then(|cm| cm.curve)
-                    .and_then(|c| c.segments)
-                    .and_then(|s| s.geodesic_string)
-                    .and_then(|gs| gs.pos_list)
-                    .map(|pl| parse_pos_list(&pl))
-                    .unwrap_or_default();
-
-                vec![AirspaceVolume {
-                    upper_limit: vol.upper_limit.as_ref().and_then(|v| v.value.clone()),
-                    upper_limit_uom: vol.upper_limit.and_then(|v| v.uom),
-                    upper_limit_ref: vol.upper_limit_reference,
-                    lower_limit: vol.lower_limit.as_ref().and_then(|v| v.value.clone()),
-                    lower_limit_uom: vol.lower_limit.and_then(|v| v.uom),
-                    lower_limit_ref: vol.lower_limit_reference,
-                    polygon,
-                }]
-            }
-            None => Vec::new(),
-        };
-
-        Airspace {
-            uuid: x
-                .id
-                .as_deref()
-                .map(strip_uuid_prefix)
-                .unwrap_or_default()
-                .to_string(),
-            airspace_type: ts.airspace_type,
-            designator: ts.designator,
-            name: ts.name,
-            volumes,
-        }
-    }
-}
-
-// ===========================================================================
-// Internal XML serde structs
-//
-// AIXM 5.1 XML uses deeply nested elements: every feature wraps its data in a
-// TimeSlice, coordinates live inside GML geometry elements, and cross-references
-// use xlink:href attributes.  Serde needs a struct for each nesting level to
-// match the XML structure.  These types are private — the From conversions
-// above flatten them into the public types in `crate::features`.
-// ===========================================================================
-
-// -- Shared GML helpers ----------------------------------------------------
-
-#[derive(Debug, Deserialize)]
-struct XmlElevatedPoint {
-    #[serde(rename = "pos", default)]
-    pos: Option<String>,
-    #[serde(rename = "elevation", default)]
-    elevation: Option<XmlValWithUom>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlValWithUom {
-    #[serde(rename = "@uom", default)]
-    uom: Option<String>,
-    #[serde(rename = "$text", default)]
-    value: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlXlinkRef {
-    #[serde(rename = "@href", default)]
-    href: Option<String>,
-}
-
-// -- AirportHeliport -------------------------------------------------------
-
-#[derive(Debug, Deserialize)]
-struct XmlAirportHeliport {
-    #[serde(rename = "@id", default)]
-    id: Option<String>,
-    #[serde(rename = "timeSlice")]
-    time_slice: XmlAhpTimeSlice,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlAhpTimeSlice {
-    #[serde(rename = "AirportHeliportTimeSlice")]
-    inner: XmlAhpFields,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlAhpFields {
-    #[serde(default)]
-    designator: Option<String>,
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(rename = "locationIndicatorICAO", default)]
-    location_indicator_icao: Option<String>,
-    #[serde(rename = "designatorIATA", default)]
-    iata_designator: Option<String>,
-    #[serde(rename = "fieldElevation", default)]
-    field_elevation: Option<XmlValWithUom>,
-    #[serde(rename = "ARP", default)]
-    arp: Option<XmlArp>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlArp {
-    #[serde(rename = "ElevatedPoint")]
-    elevated_point: Option<XmlElevatedPoint>,
-}
-
-// -- Runway ----------------------------------------------------------------
-
-#[derive(Debug, Deserialize)]
-struct XmlRunway {
-    #[serde(rename = "@id", default)]
-    id: Option<String>,
-    #[serde(rename = "timeSlice")]
-    time_slice: XmlRwyTimeSlice,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlRwyTimeSlice {
-    #[serde(rename = "RunwayTimeSlice")]
-    inner: XmlRwyFields,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlRwyFields {
-    #[serde(default)]
-    designator: Option<String>,
-    #[serde(rename = "nominalLength", default)]
-    nominal_length: Option<XmlValWithUom>,
-    #[serde(rename = "surfaceProperties", default)]
-    surface_properties: Option<XmlSurfaceProperties>,
-    #[serde(rename = "associatedAirportHeliport", default)]
-    associated_airport_heliport: Option<XmlXlinkRef>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlSurfaceProperties {
-    #[serde(rename = "SurfaceCharacteristics")]
-    characteristics: Option<XmlSurfaceCharacteristics>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlSurfaceCharacteristics {
-    #[serde(default)]
-    composition: Option<String>,
-}
-
-// -- RunwayDirection -------------------------------------------------------
-
-#[derive(Debug, Deserialize)]
-struct XmlRunwayDirection {
-    #[serde(rename = "@id", default)]
-    id: Option<String>,
-    #[serde(rename = "timeSlice")]
-    time_slice: XmlRdnTimeSlice,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlRdnTimeSlice {
-    #[serde(rename = "RunwayDirectionTimeSlice")]
-    inner: XmlRdnFields,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlRdnFields {
-    #[serde(default)]
-    designator: Option<String>,
-    #[serde(rename = "trueBearing", default)]
-    true_bearing: Option<String>,
-    #[serde(rename = "magneticBearing", default)]
-    magnetic_bearing: Option<String>,
-    #[serde(rename = "usedRunway", default)]
-    used_runway: Option<XmlXlinkRef>,
-}
-
-// -- DesignatedPoint -------------------------------------------------------
-
-#[derive(Debug, Deserialize)]
-struct XmlDesignatedPoint {
-    #[serde(rename = "@id", default)]
-    id: Option<String>,
-    #[serde(rename = "timeSlice")]
-    time_slice: XmlDpTimeSlice,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlDpTimeSlice {
-    #[serde(rename = "DesignatedPointTimeSlice")]
-    inner: XmlDpFields,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlDpFields {
-    #[serde(default)]
-    designator: Option<String>,
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(rename = "type", default)]
-    point_type: Option<String>,
-    #[serde(default)]
-    location: Option<XmlPointLocation>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlPointLocation {
-    #[serde(rename = "ElevatedPoint", default)]
-    elevated_point: Option<XmlElevatedPoint>,
-}
-
-// -- Navaid ----------------------------------------------------------------
-
-#[derive(Debug, Deserialize)]
-struct XmlNavaid {
-    #[serde(rename = "@id", default)]
-    id: Option<String>,
-    #[serde(rename = "timeSlice")]
-    time_slice: XmlNavTimeSlice,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlNavTimeSlice {
-    #[serde(rename = "NavaidTimeSlice")]
-    inner: XmlNavFields,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlNavFields {
-    #[serde(rename = "type", default)]
-    navaid_type: Option<String>,
-    #[serde(default)]
-    designator: Option<String>,
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(default)]
-    location: Option<XmlNavLocation>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlNavLocation {
-    #[serde(rename = "ElevatedPoint")]
-    elevated_point: Option<XmlElevatedPoint>,
-}
-
-// -- Airspace --------------------------------------------------------------
-
-#[derive(Debug, Deserialize)]
-struct XmlAirspace {
-    #[serde(rename = "@id", default)]
-    id: Option<String>,
-    #[serde(rename = "timeSlice")]
-    time_slice: XmlArspTimeSlice,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlArspTimeSlice {
-    #[serde(rename = "AirspaceTimeSlice")]
-    inner: XmlArspFields,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlArspFields {
-    #[serde(rename = "type", default)]
-    airspace_type: Option<String>,
-    #[serde(default)]
-    designator: Option<String>,
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(rename = "geometryComponent", default)]
-    geometry_component: Option<XmlGeometryComponent>,
-}
-
-// Airspace geometry nesting mirrors the AIXM/GML XML structure:
-//   geometryComponent > AirspaceGeometryComponent > theAirspaceVolume >
-//   AirspaceVolume > horizontalProjection > Surface > patches >
-//   PolygonPatch > exterior > Ring > curveMember > Curve > segments >
-//   GeodesicString > posList
-
-#[derive(Debug, Deserialize)]
-struct XmlGeometryComponent {
-    #[serde(rename = "AirspaceGeometryComponent")]
-    inner: Option<XmlGeometryComponentInner>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlGeometryComponentInner {
-    #[serde(rename = "theAirspaceVolume")]
-    the_airspace_volume: Option<XmlTheAirspaceVolume>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlTheAirspaceVolume {
-    #[serde(rename = "AirspaceVolume")]
-    volume: Option<XmlAirspaceVolume>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlAirspaceVolume {
-    #[serde(rename = "upperLimit", default)]
-    upper_limit: Option<XmlValWithUom>,
-    #[serde(rename = "upperLimitReference", default)]
-    upper_limit_reference: Option<String>,
-    #[serde(rename = "lowerLimit", default)]
-    lower_limit: Option<XmlValWithUom>,
-    #[serde(rename = "lowerLimitReference", default)]
-    lower_limit_reference: Option<String>,
-    #[serde(rename = "horizontalProjection", default)]
-    horizontal_projection: Option<XmlHorizontalProjection>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlHorizontalProjection {
-    #[serde(rename = "Surface")]
-    surface: Option<XmlSurface>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlSurface {
-    #[serde(default)]
-    patches: Option<XmlPatches>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlPatches {
-    #[serde(rename = "PolygonPatch")]
-    polygon_patch: Option<XmlPolygonPatch>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlPolygonPatch {
-    exterior: Option<XmlExterior>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlExterior {
-    #[serde(rename = "Ring")]
-    ring: Option<XmlRing>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlRing {
-    #[serde(rename = "curveMember")]
-    curve_member: Option<XmlCurveMember>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlCurveMember {
-    #[serde(rename = "Curve")]
-    curve: Option<XmlCurve>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlCurve {
-    segments: Option<XmlSegments>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlSegments {
-    #[serde(rename = "GeodesicString")]
-    geodesic_string: Option<XmlGeodesicString>,
-}
-
-#[derive(Debug, Deserialize)]
-struct XmlGeodesicString {
-    #[serde(rename = "posList")]
-    pos_list: Option<String>,
-}
-
-// ===========================================================================
-// Tests
-// ===========================================================================
 
 #[cfg(test)]
 mod tests {
@@ -806,14 +217,16 @@ mod tests {
 
         match &features[0] {
             Feature::AirportHeliport(ahp) => {
-                assert_eq!(ahp.uuid, "dd062d88-3e64-4a5d-bebd-89476db9ebea");
-                assert_eq!(ahp.designator, "EADH");
-                assert_eq!(ahp.name, "DONLON/DOWNTOWN HELIPORT");
-                assert_eq!(ahp.location_indicator_icao.as_deref(), Some("EADH"));
-                assert_eq!(ahp.field_elevation, Some(18.0));
-                assert_eq!(ahp.field_elevation_uom.as_deref(), Some("M"));
-                assert!((ahp.latitude.unwrap() - 52.2889).abs() < 0.001);
-                assert!((ahp.longitude.unwrap() - (-32.035)).abs() < 0.001);
+                assert_eq!(ahp.uuid(), "dd062d88-3e64-4a5d-bebd-89476db9ebea");
+                assert_eq!(ahp.designator(), "EADH");
+                assert_eq!(ahp.name(), "DONLON/DOWNTOWN HELIPORT");
+                assert_eq!(ahp.location_indicator_icao(), Some("EADH"));
+                let (elev, uom) = ahp.field_elevation();
+                assert_eq!(elev, Some(18.0));
+                assert_eq!(uom, Some("M"));
+                let (lat, lon) = ahp.coordinate().unwrap();
+                assert!((lat - 52.2889).abs() < 0.001);
+                assert!((lon - (-32.035)).abs() < 0.001);
             }
             _ => panic!("expected AirportHeliport"),
         }
@@ -865,12 +278,13 @@ mod tests {
 
         match &features[0] {
             Feature::Runway(rwy) => {
-                assert_eq!(rwy.designator, "09L/27R");
-                assert_eq!(rwy.nominal_length, Some(2800.0));
-                assert_eq!(rwy.length_uom.as_deref(), Some("M"));
-                assert_eq!(rwy.surface_composition.as_deref(), Some("CONC"));
+                assert_eq!(rwy.designator(), "09L/27R");
+                let (len, uom) = rwy.nominal_length();
+                assert_eq!(len, Some(2800.0));
+                assert_eq!(uom, Some("M"));
+                assert_eq!(rwy.surface_composition(), Some("CONC"));
                 assert_eq!(
-                    rwy.associated_airport_uuid.as_deref(),
+                    rwy.associated_airport_uuid(),
                     Some("1b54b2d6-a5ff-4e57-94c2-f4047a381c64")
                 );
             }
@@ -879,10 +293,10 @@ mod tests {
 
         match &features[1] {
             Feature::RunwayDirection(rdn) => {
-                assert_eq!(rdn.designator, "09L");
-                assert_eq!(rdn.true_bearing, Some(85.23));
+                assert_eq!(rdn.designator(), "09L");
+                assert_eq!(rdn.true_bearing(), Some(85.23));
                 assert_eq!(
-                    rdn.used_runway_uuid.as_deref(),
+                    rdn.used_runway_uuid(),
                     Some("9e51668f-bf8a-4f5b-ba6e-27087972b9b8")
                 );
             }
@@ -922,11 +336,12 @@ mod tests {
 
         match &features[0] {
             Feature::DesignatedPoint(dp) => {
-                assert_eq!(dp.designator, "ABLAN");
-                assert_eq!(dp.name.as_deref(), Some("ABLAN"));
-                assert_eq!(dp.point_type.as_deref(), Some("ICAO"));
-                assert!((dp.latitude.unwrap() - 52.123).abs() < 0.001);
-                assert!((dp.longitude.unwrap() - 10.456).abs() < 0.001);
+                assert_eq!(dp.designator(), "ABLAN");
+                assert_eq!(dp.name(), Some("ABLAN"));
+                assert_eq!(dp.point_type(), Some("ICAO"));
+                let (lat, lon) = dp.coordinate().unwrap();
+                assert!((lat - 52.123).abs() < 0.001);
+                assert!((lon - 10.456).abs() < 0.001);
             }
             _ => panic!("expected DesignatedPoint"),
         }
@@ -966,12 +381,13 @@ mod tests {
 
         match &features[0] {
             Feature::Navaid(nav) => {
-                assert_eq!(nav.designator, "BOR");
-                assert_eq!(nav.name.as_deref(), Some("BOORSPIJK"));
-                assert_eq!(nav.navaid_type.as_deref(), Some("VOR_DME"));
-                assert!((nav.latitude.unwrap() - 52.368389).abs() < 0.0001);
-                assert!((nav.longitude.unwrap() - (-32.375222)).abs() < 0.0001);
-                assert_eq!(nav.elevation, Some(30.0));
+                assert_eq!(nav.designator(), "BOR");
+                assert_eq!(nav.name(), Some("BOORSPIJK"));
+                assert_eq!(nav.navaid_type(), Some("VOR_DME"));
+                let (lat, lon) = nav.coordinate().unwrap();
+                assert!((lat - 52.368389).abs() < 0.0001);
+                assert!((lon - (-32.375222)).abs() < 0.0001);
+                assert_eq!(nav.elevation(), Some(30.0));
             }
             _ => panic!("expected Navaid"),
         }
@@ -1037,12 +453,13 @@ mod tests {
 
         match &features[0] {
             Feature::Airspace(arsp) => {
-                assert_eq!(arsp.airspace_type.as_deref(), Some("CTR"));
-                assert_eq!(arsp.designator.as_deref(), Some("EADD CTR"));
-                assert_eq!(arsp.name.as_deref(), Some("DONLON CTR"));
-                assert_eq!(arsp.volumes.len(), 1);
+                assert_eq!(arsp.airspace_type(), Some("CTR"));
+                assert_eq!(arsp.designator(), Some("EADD CTR"));
+                assert_eq!(arsp.name(), Some("DONLON CTR"));
+                let volumes = arsp.volumes();
+                assert_eq!(volumes.len(), 1);
 
-                let vol = &arsp.volumes[0];
+                let vol = &volumes[0];
                 assert_eq!(vol.upper_limit.as_deref(), Some("195"));
                 assert_eq!(vol.upper_limit_uom.as_deref(), Some("FL"));
                 assert_eq!(vol.upper_limit_ref.as_deref(), Some("MSL"));
@@ -1091,7 +508,6 @@ mod tests {
         </message:AIXMBasicMessage>"#;
 
         let features: Vec<_> = Features::new(&xml[..]).collect::<Result<_, _>>().unwrap();
-        // OrganisationAuthority should be skipped
         assert_eq!(features.len(), 1);
         assert!(matches!(&features[0], Feature::DesignatedPoint(_)));
     }
