@@ -28,12 +28,6 @@ use crate::nd::*;
 mod fields;
 mod records;
 
-/// Tracks a runway direction whose parent runway and airport are not yet known.
-struct DeferredRunwayDirection {
-    rdn: aixm::RunwayDirection,
-    runway_uuid: String,
-}
-
 /// Runway properties needed when resolving deferred runway directions.
 struct RunwayInfo {
     airport_uuid: Option<String>,
@@ -55,13 +49,13 @@ impl NavigationData {
     /// # Examples
     ///
     /// ```no_run
-    /// use efb::nd::NavigationData;
+    /// use efb::nd::{Fix, NavigationData};
     ///
     /// let data = std::fs::read("aixm_data.xml").unwrap();
     /// let nd = NavigationData::try_from_aixm(&data).unwrap();
     ///
-    /// for arpt in nd.airports() {
-    ///     println!("{}", arpt.ident());
+    /// if let Some(airport) = nd.find("EADD") {
+    ///     println!("{}", airport.ident());
     /// }
     /// ```
     pub fn try_from_aixm(data: &[u8]) -> Result<Self, Error> {
@@ -71,14 +65,14 @@ impl NavigationData {
         let mut airport_uuids: HashMap<String, String> = HashMap::new();
         let mut runway_infos: HashMap<String, RunwayInfo> = HashMap::new();
         let mut deferred_rwys: Vec<aixm::Runway> = Vec::new();
-        let mut deferred_rdns: Vec<DeferredRunwayDirection> = Vec::new();
+        let mut deferred_rdns: Vec<(aixm::RunwayDirection, String)> = Vec::new();
 
         for feature in aixm::Features::new(data) {
             if let Err(e) = || -> Result<(), aixm::Error> {
                 match feature? {
                     aixm::Feature::AirportHeliport(ahp) => {
-                        let uuid = ahp.uuid.clone();
-                        let arpt = Airport::try_from(ahp)?;
+                        let uuid = ahp.uuid().to_string();
+                        let arpt = Airport::try_from(&ahp)?;
                         let ident = arpt.ident();
                         airport_uuids.insert(uuid, ident.clone());
                         builder.add_airport(arpt);
@@ -89,20 +83,20 @@ impl NavigationData {
                     }
 
                     aixm::Feature::RunwayDirection(rdn) => {
-                        let runway_uuid = match rdn.used_runway_uuid.clone() {
-                            Some(uuid) => uuid,
+                        let runway_uuid = match rdn.used_runway_uuid() {
+                            Some(uuid) => uuid.to_string(),
                             None => return Ok(()),
                         };
-                        deferred_rdns.push(DeferredRunwayDirection { rdn, runway_uuid });
+                        deferred_rdns.push((rdn, runway_uuid));
                     }
 
                     aixm::Feature::DesignatedPoint(dp) => {
-                        let wp = Waypoint::try_from(dp)?;
+                        let wp = Waypoint::try_from(&dp)?;
                         builder.add_waypoint(wp);
                     }
 
                     aixm::Feature::Navaid(nav) => {
-                        let wp = Waypoint::try_from(nav)?;
+                        let wp = Waypoint::try_from(&nav)?;
                         builder.add_waypoint(wp);
                     }
 
@@ -120,25 +114,26 @@ impl NavigationData {
             }
         }
 
-        // Build the runway UUID → info lookup from deferred runways.
+        // Build the runway UUID -> info lookup from deferred runways.
         for rwy in &deferred_rwys {
-            let length = fields::runway_length(rwy.nominal_length, rwy.length_uom.as_deref());
-            let surface = fields::runway_surface(rwy.surface_composition.as_deref());
+            let (length_val, length_uom) = rwy.nominal_length();
+            let length = fields::runway_length(length_val, length_uom);
+            let surface = fields::runway_surface(rwy.surface_composition());
 
             runway_infos.insert(
-                rwy.uuid.clone(),
+                rwy.uuid().to_string(),
                 RunwayInfo {
-                    airport_uuid: rwy.associated_airport_uuid.clone(),
+                    airport_uuid: rwy.associated_airport_uuid().map(str::to_string),
                     length,
                     surface,
                 },
             );
         }
 
-        // Resolve each RunwayDirection → Runway → Airport chain and add the
+        // Resolve each RunwayDirection -> Runway -> Airport chain and add the
         // final Runway entries to their airports.
-        for deferred in deferred_rdns {
-            if let Some(rwy_info) = runway_infos.get(&deferred.runway_uuid) {
+        for (rdn, runway_uuid) in deferred_rdns {
+            if let Some(rwy_info) = runway_infos.get(&runway_uuid) {
                 let airport_ident = rwy_info
                     .airport_uuid
                     .as_ref()
@@ -147,11 +142,8 @@ impl NavigationData {
 
                 if let Some(ident) = airport_ident {
                     let rwy = Runway {
-                        designator: deferred.rdn.designator,
-                        bearing: fields::bearing(
-                            deferred.rdn.true_bearing,
-                            deferred.rdn.magnetic_bearing,
-                        ),
+                        designator: rdn.designator().to_string(),
+                        bearing: fields::bearing(rdn.true_bearing(), rdn.magnetic_bearing()),
                         length: rwy_info.length,
                         tora: rwy_info.length,
                         toda: rwy_info.length,

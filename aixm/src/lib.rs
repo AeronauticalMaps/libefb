@@ -32,11 +32,11 @@
 //! for result in aixm::Features::new(&data) {
 //!     match result.unwrap() {
 //!         aixm::Feature::AirportHeliport(ahp) => {
-//!             println!("Airport {} – {}", ahp.designator, ahp.name);
+//!             println!("Airport {} – {}", ahp.designator(), ahp.name());
 //!         }
 //!         aixm::Feature::Navaid(nav) => {
-//!             println!("Navaid {} ({})", nav.designator,
-//!                 nav.navaid_type.as_deref().unwrap_or("unknown"));
+//!             println!("Navaid {} ({})", nav.designator(),
+//!                 nav.navaid_type().unwrap_or("unknown"));
 //!         }
 //!         _ => {}
 //!     }
