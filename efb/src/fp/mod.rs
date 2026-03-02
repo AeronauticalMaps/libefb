@@ -29,6 +29,7 @@
 use serde::{Deserialize, Serialize};
 
 mod builder;
+mod climb_descent_performance;
 mod fuel_planning;
 mod mb;
 mod perf;
@@ -36,6 +37,10 @@ mod runway_analysis;
 mod takeoff_landing_performance;
 
 pub use builder::*;
+pub use climb_descent_performance::{
+    ClimbDescentPerformance, ClimbDescentPerformanceRow, ClimbDescentPerformanceTable,
+    ClimbDescentResult,
+};
 pub use fuel_planning::*;
 pub use mb::MassAndBalance;
 pub use perf::{Performance, PerformanceTable, PerformanceTableRow};
