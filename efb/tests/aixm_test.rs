@@ -189,8 +189,8 @@ fn parse_aixm_navigation_data() {
     // Airport: EADD
     let arpt = nd.find("EADD").expect("EADD should be found");
     assert_eq!(arpt.ident(), "EADD");
-    assert!((arpt.coordinate().latitude - 52.36).abs() < 0.01);
-    assert!((arpt.coordinate().longitude - (-31.94)).abs() < 0.01);
+    assert!((arpt.coordinate().y() - 52.36).abs() < 0.01);
+    assert!((arpt.coordinate().x() - (-31.94)).abs() < 0.01);
 
     // Designated Point: ABLAN
     let ablan = nd.find("ABLAN").expect("ABLAN should be found");
