@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,9 +18,9 @@ use log::{debug, trace};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use super::Performance;
+use super::{ClimbDescentPerformance, Performance};
 use crate::aircraft::Aircraft;
-use crate::measurements::Duration;
+use crate::measurements::{Duration, Speed};
 use crate::route::Route;
 use crate::{Fuel, VerticalDistance};
 
@@ -70,6 +70,7 @@ pub enum FuelPolicy {
 pub struct FuelPlanning {
     taxi: Fuel,
     climb: Option<Fuel>,
+    descent: Option<Fuel>,
     trip: Fuel,
     alternate: Option<Fuel>,
     reserve: Fuel,
@@ -87,11 +88,34 @@ impl FuelPlanning {
         route: &Route,
         reserve: &Reserve,
         perf: &Performance,
+        climb_perf: Option<&ClimbDescentPerformance>,
+        descent_perf: Option<&ClimbDescentPerformance>,
     ) -> Option<Self> {
-        let climb = None; // TODO add climb fuel
+        let cruise_level = route.level()?;
+
+        let climb = climb_perf.and_then(|cp| {
+            let origin_elev = route.origin()?.elevation;
+            let hw = route
+                .legs()
+                .first()
+                .and_then(|l| l.headwind())
+                .unwrap_or(Speed::kt(0.0));
+            Some(cp.between(&origin_elev, &cruise_level)?.with_wind(hw).fuel)
+        });
+
+        let descent = descent_perf.and_then(|dp| {
+            let dest_elev = route.destination()?.elevation;
+            let hw = route
+                .legs()
+                .last()
+                .and_then(|l| l.headwind())
+                .unwrap_or(Speed::kt(0.0));
+            Some(dp.between(&dest_elev, &cruise_level)?.with_wind(hw).fuel)
+        });
+
         let trip = route.totals(Some(perf))?.fuel().cloned()?;
         let alternate = route.alternate().and_then(|alternate| alternate.fuel(perf));
-        let reserve = reserve.fuel(perf, &route.level()?);
+        let reserve = reserve.fuel(perf, &cruise_level);
 
         trace!("fuel planning: trip={:?}, alternate={:?}, reserve={:?}", trip, alternate, reserve);
 
@@ -100,6 +124,10 @@ impl FuelPlanning {
 
             if let Some(climb) = climb {
                 min = min + climb;
+            }
+
+            if let Some(descent) = descent {
+                min = min + descent;
             }
 
             if let Some(alternate) = alternate {
@@ -128,7 +156,16 @@ impl FuelPlanning {
             }
         };
 
-        let after_landing = total - taxi - trip;
+        let after_landing = {
+            let mut remaining = total - taxi - trip;
+            if let Some(climb) = climb {
+                remaining = remaining - climb;
+            }
+            if let Some(descent) = descent {
+                remaining = remaining - descent;
+            }
+            remaining
+        };
 
         debug!(
             "fuel planning: min={:?}, total={:?}, extra={:?}, after_landing={:?}",
@@ -138,6 +175,7 @@ impl FuelPlanning {
         Some(Self {
             taxi,
             climb,
+            descent,
             trip,
             alternate,
             reserve,
@@ -154,6 +192,10 @@ impl FuelPlanning {
 
     pub fn climb(&self) -> Option<&Fuel> {
         self.climb.as_ref()
+    }
+
+    pub fn descent(&self) -> Option<&Fuel> {
+        self.descent.as_ref()
     }
 
     pub fn trip(&self) -> &Fuel {
