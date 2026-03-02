@@ -54,6 +54,7 @@ mod pressure;
 mod speed;
 mod temperature;
 mod unit_of_measure;
+mod vertical_rate;
 mod volume;
 
 pub use altitude::{Altitude, AltitudeUnit};
@@ -67,4 +68,5 @@ pub use pressure::{Pressure, PressureUnit};
 pub use speed::{Speed, SpeedUnit};
 pub use temperature::{Temperature, TemperatureUnit};
 pub use unit_of_measure::{PhysicalQuantity, UnitOfMeasure};
+pub use vertical_rate::{VerticalRate, VerticalRateUnit};
 pub use volume::{Volume, VolumeUnit};
