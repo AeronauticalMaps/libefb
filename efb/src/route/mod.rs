@@ -19,7 +19,7 @@ use std::rc::Rc;
 use log::{debug, trace, warn};
 
 use crate::error::Error;
-use crate::fp::Performance;
+use crate::fp::{ClimbDescentPerformance, Performance};
 use crate::measurements::Speed;
 use crate::nd::*;
 use crate::VerticalDistance;
@@ -313,7 +313,7 @@ impl Route {
     /// # use efb::route::Route;
     /// # use efb::nd::NavigationData;
     /// # fn show_profile(route: &Route, nd: &NavigationData) {
-    /// let profile = route.vertical_profile(nd);
+    /// let profile = route.vertical_profile(nd, None, None);
     ///
     /// for intersection in profile.intersections() {
     ///     println!("{}: {:.1} NM to {:.1} NM",
@@ -323,8 +323,13 @@ impl Route {
     /// }
     /// # }
     /// ```
-    pub fn vertical_profile(&self, nd: &NavigationData) -> VerticalProfile {
-        VerticalProfile::new(self, nd)
+    pub fn vertical_profile(
+        &self,
+        nd: &NavigationData,
+        climb: Option<&ClimbDescentPerformance>,
+        descent: Option<&ClimbDescentPerformance>,
+    ) -> VerticalProfile {
+        VerticalProfile::new(self, nd, climb, descent)
     }
 }
 
