@@ -136,7 +136,8 @@ pub mod prelude {
     pub use crate::error::Error;
     pub use crate::fms::FMS;
     pub use crate::fp::{
-        AlteringFactor, AlteringFactors, FactorOfEffect, FlightPlanning, FlightPlanningBuilder,
+        AlteringFactor, AlteringFactors, ClimbDescentBand, ClimbDescentPerformance,
+        CumulativeClimbDescentEntry, FactorOfEffect, FlightPlanning, FlightPlanningBuilder,
         FuelPolicy, Performance, Reserve, TakeoffLandingPerformance,
     };
     pub use crate::measurements::*;
