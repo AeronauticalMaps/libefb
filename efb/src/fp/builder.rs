@@ -65,10 +65,13 @@ impl FlightPlanningBuilder {
         ) {
             (Some(aircraft), Some(policy), Some(taxi), Some(reserve), Some(perf)) => {
                 debug!("computing fuel planning (policy={:?})", policy);
-                let fp = FuelPlanning::new(aircraft, policy, taxi, route, reserve, perf);
+                let fp =
+                    FuelPlanning::new(aircraft, policy, taxi, route, reserve, perf, None, None);
+
                 if fp.is_none() {
                     warn!("fuel planning could not be computed (missing route totals)");
                 }
+
                 fp
             }
             _ => {
