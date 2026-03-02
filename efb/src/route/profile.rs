@@ -23,7 +23,8 @@ use rstar::RTreeObject;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::measurements::{Length, LengthUnit};
+use crate::fp::ClimbDescentPerformance;
+use crate::measurements::{Length, LengthUnit, Speed};
 use crate::nd::{Airspace, Fix, NavAid, NavigationData};
 use crate::VerticalDistance;
 
@@ -128,6 +129,16 @@ impl VerticalPoint {
             Self::LevelOf { level, .. } => level,
         }
     }
+
+    /// Returns the along-route distance from the route origin to this point.
+    pub fn distance(&self) -> &Length {
+        match self {
+            Self::TopOfClimb { distance, .. } => distance,
+            Self::NavAid { distance, .. } => distance,
+            Self::TopOfDescent { distance, .. } => distance,
+            Self::LevelOf { distance, .. } => distance,
+        }
+    }
 }
 
 /// Vertical profile of a route with airspaces intersected by the route.
@@ -148,9 +159,26 @@ pub struct VerticalProfile {
 impl VerticalProfile {
     /// Creates a vertical profile of the route.
     ///
-    /// The profile includes the intersections of the route with the navigation
-    /// data's airspaces.
+    /// The profile includes airspace intersections and NavAid points. To also
+    /// compute the top-of-climb and top-of-descent positions, use
+    /// [`new_with_perf`].
+    ///
+    /// [`new_with_perf`]: Self::new_with_perf
     pub fn new(route: &Route, nd: &NavigationData) -> Self {
+        Self::new_with_perf(route, nd, None, None)
+    }
+
+    /// Creates a vertical profile with climb and descent performance data.
+    ///
+    /// When `climb_perf` and/or `descent_perf` are provided the profile will
+    /// include [`VerticalPoint::TopOfClimb`] and [`VerticalPoint::TopOfDescent`]
+    /// points at the computed along-route distances.
+    pub fn new_with_perf(
+        route: &Route,
+        nd: &NavigationData,
+        climb_perf: Option<&ClimbDescentPerformance>,
+        descent_perf: Option<&ClimbDescentPerformance>,
+    ) -> Self {
         let legs = route.legs();
         if legs.is_empty() {
             return Self::default();
@@ -202,7 +230,7 @@ impl VerticalProfile {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        let profile = Self::compute_profile(route);
+        let profile = Self::compute_profile(route, climb_perf, descent_perf);
 
         Self {
             intersections,
@@ -322,8 +350,15 @@ impl VerticalProfile {
     ///
     /// The profile starts with the origin airport elevation, includes
     /// intermediate navaids at their leg's cruise level, and ends with the
-    /// destination airport elevation.
-    fn compute_profile(route: &Route) -> Vec<VerticalPoint> {
+    /// destination airport elevation. When `climb_perf` and/or `descent_perf`
+    /// are provided, `TopOfClimb` and `TopOfDescent` points are inserted at
+    /// the computed along-route distances and the profile is sorted by
+    /// distance.
+    fn compute_profile(
+        route: &Route,
+        climb_perf: Option<&ClimbDescentPerformance>,
+        descent_perf: Option<&ClimbDescentPerformance>,
+    ) -> Vec<VerticalPoint> {
         let legs = route.legs();
 
         if legs.is_empty() {
@@ -343,15 +378,17 @@ impl VerticalProfile {
 
         // Intermediate and final points from accumulated leg totals
         let num_legs = legs.len();
+        let mut total_dist = Length::nm(0.0);
         for (i, (leg, totals)) in legs.iter().zip(route.accumulate_legs(None)).enumerate() {
             let is_last = i == num_legs - 1;
+            total_dist = *totals.dist();
 
             if is_last {
                 // Last point: destination airport elevation
                 if let Some(dest) = route.destination() {
                     profile.push(VerticalPoint::NavAid {
                         level: dest.elevation,
-                        distance: *totals.dist(),
+                        distance: total_dist,
                         navaid: NavAid::Airport(dest),
                     });
                 }
@@ -359,10 +396,62 @@ impl VerticalProfile {
                 // Intermediate point at the leg's cruise level
                 profile.push(VerticalPoint::NavAid {
                     level: *level,
-                    distance: *totals.dist(),
+                    distance: total_dist,
                     navaid: leg.to().clone(),
                 });
             }
+        }
+
+        // Insert TopOfClimb when climb performance is available
+        if let (Some(cp), Some(cruise_level), Some(origin)) =
+            (climb_perf, route.level(), route.origin())
+        {
+            let headwind = legs
+                .first()
+                .and_then(|leg| leg.wind().map(|w| w.headwind(leg.bearing())))
+                .unwrap_or(Speed::kt(0.0));
+
+            if let Some(result) = cp.compute(&origin.elevation, &cruise_level) {
+                let toc_distance = result.with_wind(headwind).horizontal_distance_tas;
+                // Only insert if within the route bounds
+                if toc_distance < total_dist {
+                    profile.push(VerticalPoint::TopOfClimb {
+                        level: cruise_level,
+                        distance: toc_distance,
+                    });
+                }
+            }
+        }
+
+        // Insert TopOfDescent when descent performance is available
+        if let (Some(dp), Some(cruise_level), Some(dest)) =
+            (descent_perf, route.level(), route.destination())
+        {
+            let headwind = legs
+                .last()
+                .and_then(|leg| leg.wind().map(|w| w.headwind(leg.bearing())))
+                .unwrap_or(Speed::kt(0.0));
+
+            if let Some(result) = dp.compute(&dest.elevation, &cruise_level) {
+                let tod_from_end = result.with_wind(headwind).horizontal_distance_tas;
+                let tod_distance = total_dist - tod_from_end;
+                // Only insert if the TOD is past the route start
+                if *tod_distance.value() > 0.0 {
+                    profile.push(VerticalPoint::TopOfDescent {
+                        level: cruise_level,
+                        distance: tod_distance,
+                    });
+                }
+            }
+        }
+
+        // Sort by along-route distance so all points are in route order
+        if climb_perf.is_some() || descent_perf.is_some() {
+            profile.sort_by(|a, b| {
+                a.distance()
+                    .partial_cmp(b.distance())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
         }
 
         profile

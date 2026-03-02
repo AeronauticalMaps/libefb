@@ -19,7 +19,7 @@ use std::rc::Rc;
 use log::{debug, trace, warn};
 
 use crate::error::Error;
-use crate::fp::Performance;
+use crate::fp::{ClimbDescentPerformance, Performance};
 use crate::measurements::Speed;
 use crate::nd::*;
 use crate::{VerticalDistance, Wind};
@@ -339,6 +339,17 @@ impl Route {
     /// ```
     pub fn vertical_profile(&self, nd: &NavigationData) -> VerticalProfile {
         VerticalProfile::new(self, nd)
+    }
+
+    /// Creates a vertical profile that includes top-of-climb and
+    /// top-of-descent points computed from the supplied performance tables.
+    pub fn vertical_profile_with_perf(
+        &self,
+        nd: &NavigationData,
+        climb_perf: Option<&ClimbDescentPerformance>,
+        descent_perf: Option<&ClimbDescentPerformance>,
+    ) -> VerticalProfile {
+        VerticalProfile::new_with_perf(self, nd, climb_perf, descent_perf)
     }
 }
 

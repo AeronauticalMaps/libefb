@@ -81,6 +81,7 @@ pub struct FuelPlanning {
 }
 
 impl FuelPlanning {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         aircraft: &Aircraft,
         policy: &FuelPolicy,
