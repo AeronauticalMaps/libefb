@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,9 @@
 //! This module contains tools to help planning a flight. The following aspects
 //! of the flight planning are covered by this module:
 //!
+//! - [`ClimbDescentPerformance`] to model aircraft performance during climbs
+//!   and descents, computing time, fuel, and horizontal distance per altitude
+//!   band
 //! - [`FuelPlanning`] to estimate the fuel required for the trip including any
 //!   safety reserves
 //! - [`MassAndBalance`] to check if the mass and CG are within the aircraft's
@@ -29,6 +32,7 @@
 use serde::{Deserialize, Serialize};
 
 mod builder;
+mod climb_descent_performance;
 mod fuel_planning;
 mod mb;
 mod perf;
@@ -36,6 +40,9 @@ mod runway_analysis;
 mod takeoff_landing_performance;
 
 pub use builder::*;
+pub use climb_descent_performance::{
+    ClimbDescentBand, ClimbDescentPerformance, ClimbDescentResult, CumulativeClimbDescentEntry,
+};
 pub use fuel_planning::*;
 pub use mb::MassAndBalance;
 pub use perf::{Performance, PerformanceTable, PerformanceTableRow};
