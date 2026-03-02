@@ -18,16 +18,18 @@ use std::rc::Rc;
 use geo::{
     Contains, Distance, Geodesic, Intersects, LineIntersection, LineLocatePoint, LineString, Point,
 };
+use log::trace;
 use rstar::RTreeObject;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::measurements::{Length, LengthUnit};
+use crate::fp::ClimbDescentPerformance;
+use crate::measurements::{Length, LengthUnit, Speed};
 use crate::nd::{Airspace, Fix, NavAid, NavigationData};
 use crate::VerticalDistance;
 
-use super::Route;
+use super::{Leg, Route};
 
 /// An intersection of a route with an airspace.
 ///
@@ -92,27 +94,34 @@ impl AirspaceIntersection {
 #[derive(Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum VerticalPoint {
+    /// The point where the aircraft begins climbing to a new level.
+    BeginOfClimb {
+        level: VerticalDistance,
+        distance: Length,
+    },
     /// The point where the aircraft reaches its cruise level.
     TopOfClimb {
         level: VerticalDistance,
         distance: Length,
     },
     /// A navigation aid (airport or waypoint) at a given level and distance.
+    ///
+    /// When `overflow` is `true`, the preceding climb or descent does not fit
+    /// within the leg and the `level` is `None` because the aircraft cannot
+    /// reach it in time.
     NavAid {
-        level: VerticalDistance,
+        level: Option<VerticalDistance>,
         distance: Length,
         navaid: NavAid,
+        overflow: bool,
     },
     /// The point where the aircraft begins its descent from cruise level.
     TopOfDescent {
         level: VerticalDistance,
         distance: Length,
     },
-    /// The transition point between climb/descent to level flight.
-    ///
-    /// The TOC and TOD are special cases of this point that occur at the
-    /// transition to and from cruise level.
-    LevelOf {
+    /// The point where the aircraft reaches the target level after a descent.
+    EndOfDescent {
         level: VerticalDistance,
         distance: Length,
     },
@@ -120,12 +129,24 @@ pub enum VerticalPoint {
 
 impl VerticalPoint {
     /// Returns the vertical distance (altitude or flight level) at this point.
-    pub fn level(&self) -> &VerticalDistance {
+    pub fn level(&self) -> Option<&VerticalDistance> {
         match self {
-            Self::TopOfClimb { level, .. } => level,
-            Self::NavAid { level, .. } => level,
-            Self::TopOfDescent { level, .. } => level,
-            Self::LevelOf { level, .. } => level,
+            Self::BeginOfClimb { level, .. } => Some(level),
+            Self::TopOfClimb { level, .. } => Some(level),
+            Self::NavAid { level, .. } => level.as_ref(),
+            Self::TopOfDescent { level, .. } => Some(level),
+            Self::EndOfDescent { level, .. } => Some(level),
+        }
+    }
+
+    /// Returns the along-route distance from the route origin to this point.
+    pub fn distance(&self) -> &Length {
+        match self {
+            Self::BeginOfClimb { distance, .. } => distance,
+            Self::TopOfClimb { distance, .. } => distance,
+            Self::NavAid { distance, .. } => distance,
+            Self::TopOfDescent { distance, .. } => distance,
+            Self::EndOfDescent { distance, .. } => distance,
         }
     }
 }
@@ -148,9 +169,18 @@ pub struct VerticalProfile {
 impl VerticalProfile {
     /// Creates a vertical profile of the route.
     ///
-    /// The profile includes the intersections of the route with the navigation
-    /// data's airspaces.
-    pub fn new(route: &Route, nd: &NavigationData) -> Self {
+    /// The profile includes airspace intersections and NavAid points. When
+    /// climb and/or descent performance are provided the profile will include
+    /// [TOC] and [TOD] points along-route distances.
+    ///
+    /// [TOC]: VerticalPoint::TopOfClimb
+    /// [TOD]: VerticalPoint::TopOfDescent
+    pub fn new(
+        route: &Route,
+        nd: &NavigationData,
+        climb: Option<&ClimbDescentPerformance>,
+        descent: Option<&ClimbDescentPerformance>,
+    ) -> Self {
         let legs = route.legs();
         if legs.is_empty() {
             return Self::default();
@@ -202,7 +232,7 @@ impl VerticalProfile {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        let profile = Self::compute_profile(route);
+        let profile = Self::compute_profile(route, climb, descent);
 
         Self {
             intersections,
@@ -321,9 +351,28 @@ impl VerticalProfile {
     /// Computes the vertical profile points from the route's legs.
     ///
     /// The profile starts with the origin airport elevation, includes
-    /// intermediate navaids at their leg's cruise level, and ends with the
-    /// destination airport elevation.
-    fn compute_profile(route: &Route) -> Vec<VerticalPoint> {
+    /// intermediate navaids at their leg's level, and ends with the destination
+    /// airport elevation. Level changes are handled according to their
+    /// semantics:
+    ///
+    /// - **`start_at_from`**: The aircraft begins a climb or descent at the
+    ///   FROM fix. If climb/descent performance is available, a transition
+    ///   marker is placed where the new level is reached.
+    /// - **`reach_at_to`**: The aircraft must arrive at the TO fix at the new
+    ///   level. The transition begins before the TO fix.
+    ///
+    /// When `climb_perf` and/or `descent_perf` are provided, `TopOfClimb`,
+    /// `TopOfDescent`, `BeginOfClimb`, and `EndOfDescent` points are inserted
+    /// at the computed along-route distances.
+    ///
+    /// If a transition requires more horizontal distance than the leg
+    /// provides, the [`VerticalPoint::NavAid`] at the TO fix is flagged with
+    /// `overflow: true` and its `level` is set to `None`.
+    fn compute_profile(
+        route: &Route,
+        climb_perf: Option<&ClimbDescentPerformance>,
+        descent_perf: Option<&ClimbDescentPerformance>,
+    ) -> Vec<VerticalPoint> {
         let legs = route.legs();
 
         if legs.is_empty() {
@@ -332,35 +381,119 @@ impl VerticalProfile {
 
         let mut profile = Vec::new();
 
+        // Track the previous level for computing level transitions. Starts
+        // with the origin airport elevation if available.
+        let mut prev_level: Option<VerticalDistance> = route.origin().map(|o| o.elevation);
+
         // First point: origin airport elevation at distance 0
         if let Some(origin) = route.origin() {
             profile.push(VerticalPoint::NavAid {
-                level: origin.elevation,
+                level: Some(origin.elevation),
                 distance: Length::nm(0.0),
                 navaid: NavAid::Airport(origin),
+                overflow: false,
             });
         }
 
-        // Intermediate and final points from accumulated leg totals
-        let num_legs = legs.len();
-        for (i, (leg, totals)) in legs.iter().zip(route.accumulate_legs(None)).enumerate() {
-            let is_last = i == num_legs - 1;
+        // Collect accumulated leg totals once for reuse
+        let accumulated: Vec<_> = route.accumulate_legs(None).collect();
+        let total_route_dist = accumulated
+            .last()
+            .map(|t| *t.dist())
+            .unwrap_or(Length::nm(0.0));
 
-            if is_last {
-                // Last point: destination airport elevation
-                if let Some(dest) = route.destination() {
-                    profile.push(VerticalPoint::NavAid {
-                        level: dest.elevation,
-                        distance: *totals.dist(),
-                        navaid: NavAid::Airport(dest),
+        for (leg, totals) in legs.iter().zip(accumulated.iter()) {
+            let total_dist = *totals.dist();
+            let from_dist = total_dist - *leg.dist();
+
+            let start_at_from = leg.climb_descent().start_at_from();
+            let reach_at_to = leg.climb_descent().reach_at_to();
+
+            let mut overflow = false;
+
+            // start_at_from: transition begins at FROM fix, heading forward
+            if let (Some(level), Some(prev)) = (start_at_from, prev_level) {
+                let is_climb = *level > prev;
+                let perf = if is_climb { climb_perf } else { descent_perf };
+
+                if let Some(dist) = perf.and_then(|p| transition_distance(p, &prev, level, leg)) {
+                    let level_of_dist = from_dist + dist;
+
+                    profile.push(if is_climb {
+                        VerticalPoint::TopOfClimb {
+                            level: *level,
+                            distance: level_of_dist,
+                        }
+                    } else {
+                        VerticalPoint::EndOfDescent {
+                            level: *level,
+                            distance: level_of_dist,
+                        }
                     });
+
+                    overflow = level_of_dist > total_dist || level_of_dist >= total_route_dist;
                 }
-            } else if let Some(level) = leg.level() {
-                // Intermediate point at the leg's cruise level
+
+                prev_level = Some(*level);
+            }
+
+            // reach_at_to: transition must complete by TO fix, starts before it
+            if let (Some(level), Some(prev)) = (reach_at_to, prev_level) {
+                trace!("change level to reach {} at {}", leg.to().ident(), level);
+
+                let is_climb = *level > prev;
+                let perf = if is_climb { climb_perf } else { descent_perf };
+
+                if let Some(dist) = perf.and_then(|p| transition_distance(p, &prev, level, leg)) {
+                    let level_of_dist = total_dist - dist;
+
+                    trace!(
+                        "begin climb/descent from {prev} to {level} at {:.1} along the route",
+                        level_of_dist
+                    );
+
+                    profile.push(if is_climb {
+                        VerticalPoint::BeginOfClimb {
+                            level: prev,
+                            distance: level_of_dist,
+                        }
+                    } else {
+                        VerticalPoint::TopOfDescent {
+                            level: prev,
+                            distance: level_of_dist,
+                        }
+                    });
+
+                    overflow = level_of_dist < from_dist || *level_of_dist.value() <= 0.0;
+                }
+
+                prev_level = Some(*level);
+            }
+
+            // Emit NavAid at TO fix
+            if let Some(prev) = prev_level {
                 profile.push(VerticalPoint::NavAid {
-                    level: *level,
-                    distance: *totals.dist(),
+                    level: if overflow { None } else { Some(prev) },
+                    distance: total_dist,
                     navaid: leg.to().clone(),
+                    overflow,
+                });
+            }
+        }
+
+        // Last point: destination airport elevation (skip if the last leg already
+        // emitted a NavAid at the same distance)
+        if let Some(dest) = route.destination() {
+            let already_emitted = profile.last().is_some_and(|p| {
+                matches!(p, VerticalPoint::NavAid { distance, .. } if *distance == total_route_dist)
+            });
+
+            if !already_emitted {
+                profile.push(VerticalPoint::NavAid {
+                    level: Some(dest.elevation),
+                    distance: total_route_dist,
+                    navaid: NavAid::Airport(dest),
+                    overflow: false,
                 });
             }
         }
@@ -387,7 +520,7 @@ impl VerticalProfile {
     pub fn max_level(&self) -> Option<&VerticalDistance> {
         self.profile
             .iter()
-            .map(|point| point.level())
+            .filter_map(|point| point.level())
             .filter(|level| {
                 matches!(
                     level,
@@ -410,6 +543,20 @@ impl VerticalProfile {
     pub fn is_empty(&self) -> bool {
         self.intersections.is_empty()
     }
+}
+
+/// Computes the horizontal distance required for a level transition,
+/// accounting for the leg's headwind.
+fn transition_distance(
+    perf: &ClimbDescentPerformance,
+    from: &VerticalDistance,
+    to: &VerticalDistance,
+    leg: &Leg,
+) -> Option<Length> {
+    let (lo, hi) = if from < to { (from, to) } else { (to, from) };
+    let hw = leg.headwind().unwrap_or(Speed::kt(0.0));
+    perf.between(lo, hi)
+        .map(|r| r.with_wind(hw).horizontal_distance)
 }
 
 /// Computes the geodesic distance from the route start to an intersection point
@@ -474,7 +621,7 @@ mod tests {
     fn empty_route_produces_empty_profile() {
         let nd = NavigationData::new();
         let route = Route::new();
-        let profile = VerticalProfile::new(&route, &nd);
+        let profile = VerticalProfile::new(&route, &nd, None, None);
         assert!(profile.is_empty());
     }
 
@@ -511,7 +658,7 @@ mod tests {
         // For this test, we verify the profile computation works with an empty route
         // A full integration test would require setting up waypoints in NavigationData
         let route = Route::new();
-        let profile = VerticalProfile::new(&route, &nd);
+        let profile = VerticalProfile::new(&route, &nd, None, None);
 
         // Empty route should produce empty profile
         assert!(profile.is_empty());
