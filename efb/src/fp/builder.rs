@@ -33,6 +33,8 @@ pub struct FlightPlanningBuilder {
     taxi: Option<Fuel>,
     reserve: Option<Reserve>,
     perf: Option<Performance>,
+    climb_perf: Option<ClimbDescentPerformance>,
+    descent_perf: Option<ClimbDescentPerformance>,
     takeoff_perf: Option<TakeoffLandingPerformance>,
     takeoff_factors: Option<AlteringFactors>,
     origin_rwycc: Option<RunwayConditionCode>,
@@ -65,8 +67,16 @@ impl FlightPlanningBuilder {
         ) {
             (Some(aircraft), Some(policy), Some(taxi), Some(reserve), Some(perf)) => {
                 debug!("computing fuel planning (policy={:?})", policy);
-                let fp =
-                    FuelPlanning::new(aircraft, policy, taxi, route, reserve, perf, None, None);
+                let fp = FuelPlanning::new(
+                    aircraft,
+                    policy,
+                    taxi,
+                    route,
+                    reserve,
+                    perf,
+                    self.climb_perf.as_ref(),
+                    self.descent_perf.as_ref(),
+                );
 
                 if fp.is_none() {
                     warn!("fuel planning could not be computed (missing route totals)");
@@ -209,6 +219,16 @@ impl FlightPlanningBuilder {
 
     pub fn perf(&mut self, perf: Performance) -> &mut Self {
         self.perf = Some(perf);
+        self
+    }
+
+    pub fn climb_perf(&mut self, perf: ClimbDescentPerformance) -> &mut Self {
+        self.climb_perf = Some(perf);
+        self
+    }
+
+    pub fn descent_perf(&mut self, perf: ClimbDescentPerformance) -> &mut Self {
+        self.descent_perf = Some(perf);
         self
     }
 
