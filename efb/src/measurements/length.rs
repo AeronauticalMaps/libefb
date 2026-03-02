@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::ops::Div;
+use std::ops::{Div, Mul};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -154,6 +154,18 @@ impl Div<Duration> for Length {
 
         let value = self.to_si() / rhs.to_si() as f32;
         Speed::from_si(value, unit)
+    }
+}
+
+impl Mul<Duration> for Speed {
+    type Output = Length;
+
+    /// Multiplies speed by time to produce distance.
+    ///
+    /// Uses SI units internally: speed in m/s × time in s = distance in m.
+    fn mul(self, rhs: Duration) -> Self::Output {
+        let m = self.to_si() * rhs.to_si() as f32;
+        Length::from_si(m, LengthUnit::Meters)
     }
 }
 
