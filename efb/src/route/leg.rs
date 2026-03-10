@@ -25,29 +25,76 @@ use crate::measurements::{Angle, AngleUnit, Duration, Length, LengthUnit, Speed}
 use crate::nd::{Fix, NavAid};
 use crate::{Fuel, VerticalDistance, Wind};
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ClimbDescentAlongLeg {
+    start_at_from: Option<VerticalDistance>,
+    reach_at_to: Option<VerticalDistance>,
+}
+
+impl ClimbDescentAlongLeg {
+    pub fn start_at_from(&self) -> Option<&VerticalDistance> {
+        self.start_at_from.as_ref()
+    }
+
+    pub fn reach_at_to(&self) -> Option<&VerticalDistance> {
+        self.reach_at_to.as_ref()
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct LegBuilder {
     level: Option<VerticalDistance>,
+    climb_descent: ClimbDescentAlongLeg,
     tas: Option<Speed>,
     wind: Option<Wind>,
 }
 
 impl LegBuilder {
     /// Builds a new leg `from` → `to`.
+    ///
+    /// The builder consumes all level changes and updates the level according
+    /// to the changes. Subsequent builds retain the latest cruise level in case
+    /// no further level changes occur.
     pub fn build(&mut self, from: NavAid, to: NavAid) -> Leg {
+        self.climb_descent
+            .start_at_from
+            .inspect(|level| trace!("climb/descent to {level} from {from}"));
+        self.climb_descent
+            .reach_at_to
+            .inspect(|level| trace!("reach {to} on {level}"));
+
         let leg = Leg::new(
             from,
             to,
+            self.climb_descent,
             self.level,
             self.tas,
             self.wind,
         );
 
+        // update the cruise of subsequent legs
+        let _ = self.climb_descent.start_at_from.take();
+        // the "to" level change is the last to happen along this leg and
+        // therefore the last reached level
+        if self.climb_descent.reach_at_to.is_some() {
+            self.level = self.climb_descent.reach_at_to.take();
+        }
+
         leg
     }
 
     pub fn cruise(self: &mut Self, level: VerticalDistance) {
+        // Since we can't teleport to the new level, we need to climb/descent to
+        // it starting at the "from" fix.
+        self.climb_descent.start_at_from = Some(level);
         self.level = Some(level);
+    }
+
+    pub fn level_at_fix(self: &mut Self, level: VerticalDistance) {
+        // Reaching a new level at a fix along the leg is only possible for the
+        // "to" fix.
+        self.climb_descent.reach_at_to = Some(level);
     }
 
     pub fn tas(self: &mut Self, tas: Speed) {
@@ -67,6 +114,7 @@ impl LegBuilder {
 pub struct Leg {
     from: NavAid,
     to: NavAid,
+    climb_descent: ClimbDescentAlongLeg,
     level: Option<VerticalDistance>,
     tas: Option<Speed>,
     wind: Option<Wind>,
@@ -89,6 +137,7 @@ impl Leg {
         Leg::new(
             self.from.clone(),
             alternate,
+            self.climb_descent,
             self.level,
             self.tas,
             self.wind,
@@ -98,6 +147,7 @@ impl Leg {
     fn new(
         from: NavAid,
         to: NavAid,
+        climb_descent: ClimbDescentAlongLeg,
         level: Option<VerticalDistance>,
         tas: Option<Speed>,
         wind: Option<Wind>,
@@ -130,7 +180,7 @@ impl Leg {
         let ete = gs.map(|gs| dist / gs);
 
         trace!(
-            "leg {} -> {}: dist={:?}, bearing={:?}, gs={:?}, ete={:?}",
+            "leg {} -> {}: dist={:.1}, bearing={:.1}, gs={:?}, ete={:?}",
             from.ident(),
             to.ident(),
             dist,
@@ -142,6 +192,7 @@ impl Leg {
         Self {
             from,
             to,
+            climb_descent,
             level,
             tas,
             wind,
@@ -169,6 +220,10 @@ impl Leg {
     /// The level of the leg.
     pub fn level(&self) -> Option<&VerticalDistance> {
         self.level.as_ref()
+    }
+
+    pub fn climb_descent(&self) -> &ClimbDescentAlongLeg {
+        &self.climb_descent
     }
 
     /// The desired true airspeed (TAS).
