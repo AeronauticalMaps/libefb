@@ -22,7 +22,7 @@ use crate::error::Error;
 use crate::fp::Performance;
 use crate::measurements::Speed;
 use crate::nd::*;
-use crate::{VerticalDistance, Wind};
+use crate::VerticalDistance;
 
 mod accumulator;
 mod leg;
@@ -88,42 +88,27 @@ impl Route {
     /// idents read from the navigation data `nd`.
     pub fn decode(&mut self, route: &str, nd: &NavigationData) -> Result<(), Error> {
         debug!("route decode: {:?}", route);
+        self.clear();
         self.tokens = Tokens::new(route, nd);
-        self.legs.clear();
 
-        // clear values relevant during parsing of all tokens
-        self.origin.take();
-        self.destination.take();
-        self.takeoff_rwy.take();
-        self.landing_rwy.take();
-
-        let mut level: Option<VerticalDistance> = None;
-        let mut tas: Option<Speed> = None;
-        let mut wind: Option<Wind> = None;
+        // the builder keeps track of level changes etc
+        let mut builder = Leg::builder();
         let mut from: Option<NavAid> = None;
         let mut to: Option<NavAid> = None;
 
         for token in &self.tokens {
             match token.kind() {
                 TokenKind::Speed(value) => {
-                    tas = Some(*value);
-                    // first speed is cruise speed
-                    if self.speed.is_none() {
-                        self.speed = Some(*value);
-                        debug!("cruise speed set to {:?}", value);
-                    }
+                    builder.tas(*value);
                 }
 
                 TokenKind::Level(value) => {
-                    level = Some(*value);
-                    // first level is cruise level
-                    if self.level.is_none() {
-                        self.level = Some(*value);
-                        debug!("cruise level set to {:?}", value);
-                    }
+                    builder.cruise(*value);
                 }
 
-                TokenKind::Wind(value) => wind = Some(*value),
+                TokenKind::Wind(value) => {
+                    builder.wind(*value);
+                }
 
                 TokenKind::Airport { arpt, rwy } => {
                     // Track for leg building
@@ -178,8 +163,7 @@ impl Route {
             match (&from, &to) {
                 (Some(from), Some(to)) => {
                     trace!("creating leg: {} -> {}", from.ident(), to.ident());
-                    self.legs
-                        .push(Leg::new(from.clone(), to.clone(), level, tas, wind));
+                    self.legs.push(builder.build(from.clone(), to.clone()));
                 }
                 _ => continue,
             }
@@ -201,6 +185,10 @@ impl Route {
     pub fn clear(&mut self) {
         self.tokens.clear();
         self.legs.clear();
+        self.origin.take();
+        self.takeoff_rwy.take();
+        self.destination.take();
+        self.landing_rwy.take();
         self.alternate.take();
     }
 
@@ -232,16 +220,14 @@ impl Route {
         self.alternate = alternate;
     }
 
-    /// Returns the final leg but going to the alternate.
+    /// Diverts the last leg to the alternate.
+    ///
+    /// Returns `None` if no alternate is set or if the route is empty.
     pub fn alternate(&self) -> Option<Leg> {
-        let final_leg = self.legs.last()?.clone();
-        Some(Leg::new(
-            final_leg.from().clone(),
-            self.alternate.clone()?,
-            final_leg.level().copied(),
-            final_leg.tas().copied(),
-            final_leg.wind().copied(),
-        ))
+        let alternate = self.alternate.clone()?;
+        self.legs
+            .last()
+            .map(|final_leg| final_leg.divert(alternate))
     }
 
     /// Returns the origin airport if one is defined in the route.
