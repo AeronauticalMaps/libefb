@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -81,6 +81,8 @@ pub enum TokenKind {
     Speed(Speed),
     /// Flight level or altitude for subsequent legs.
     Level(VerticalDistance),
+    /// Level at which the following fix should be reached.
+    LevelAtFix(VerticalDistance),
     /// Wind conditions for subsequent legs.
     Wind(Wind),
     /// Airport with optional runway specification.
@@ -137,6 +139,7 @@ impl Tokens {
             let kind = match &word.kind {
                 WordKind::Speed(speed) => TokenKind::Speed(*speed),
                 WordKind::Level(level) => TokenKind::Level(*level),
+                WordKind::LevelAt(level) => TokenKind::LevelAtFix(*level),
                 WordKind::Wind(wind) => TokenKind::Wind(*wind),
 
                 WordKind::Via(via) => {
@@ -343,6 +346,7 @@ enum WordKind {
     Via(Via),
     Speed(Speed),
     Level(VerticalDistance),
+    LevelAt(VerticalDistance),
     Wind(Wind),
     Airport {
         arpt: Rc<Airport>,
@@ -364,8 +368,10 @@ impl Lexer {
         let base = upper.as_ptr() as usize;
 
         upper
-            .split_whitespace()
+            // include the separator so we can figure out the @ relations
+            .split_inclusive(&[' ', '@'])
             .map(|s| {
+                let s = s.trim_end();
                 let start = s.as_ptr() as usize - base;
                 Word {
                     range: start..start + s.len(),
@@ -382,6 +388,14 @@ impl Lexer {
             trace!("lexed {:?} as DCT (direct)", s);
             return WordKind::Via(Via::Direct);
         }
+
+        // Check for level@fix syntax (e.g. A022@N2, F085@EDDH, A030@EDHL07)
+        if let Some(s) = s.strip_suffix('@') {
+            if let Ok(level) = s.parse::<VerticalDistance>() {
+                trace!("lexed {:?} as level at: {:?}", s, level);
+                return WordKind::LevelAt(level);
+            }
+        };
 
         // Try navaids or airports
         if let Some(navaid) = nd.find(s) {
@@ -431,11 +445,20 @@ impl Lexer {
 
                 return match rwy {
                     Some(_) => {
-                        trace!("lexed {:?} as airport {} with runway {}", s, ident, rwy_designator);
+                        trace!(
+                            "lexed {:?} as airport {} with runway {}",
+                            s,
+                            ident,
+                            rwy_designator
+                        );
                         WordKind::Airport { arpt, rwy }
                     }
                     None => {
-                        warn!("unknown runway {:?} for airport {}", rwy_designator, arpt.ident());
+                        warn!(
+                            "unknown runway {:?} for airport {}",
+                            rwy_designator,
+                            arpt.ident()
+                        );
                         WordKind::Err(Error::UnknownRunwayInRoute {
                             arpt: arpt.ident(),
                             rwy: rwy_designator.to_string(),

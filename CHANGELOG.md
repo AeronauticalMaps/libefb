@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- "Reach level at fix" syntax in route prompt
 - Climb/descent performance
 - Instrument key code paths with structured log messages
 

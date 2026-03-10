@@ -106,6 +106,10 @@ impl Route {
                     builder.cruise(*value);
                 }
 
+                TokenKind::LevelAtFix(value) => {
+                    builder.level_at_fix(*value);
+                }
+
                 TokenKind::Wind(value) => {
                     builder.wind(*value);
                 }
