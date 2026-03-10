@@ -59,6 +59,8 @@ pub enum Error {
     //
     /// The ARINC 424 navigation data record is invalid.
     InvalidA424 { record: Vec<u8>, error: String },
+    /// The AIXM navigation data is invalid.
+    InvalidAixm { error: String },
     /// The string that should be parsed to create some type is malformed.
     UnexpectedString,
     /// The value that should be returned is implausible.
@@ -118,6 +120,9 @@ impl fmt::Display for Error {
             Self::InvalidA424 { record, error } => {
                 let s = String::from_utf8_lossy(record);
                 write!(f, "invalid ARINC 424: {error} ({s})")
+            }
+            Self::InvalidAixm { error } => {
+                write!(f, "invalid AIXM: {error}")
             }
             Self::UnexpectedString => write!(f, "unexpected string"),
             Self::ImplausibleValue => write!(f, "value seams implausuble"),

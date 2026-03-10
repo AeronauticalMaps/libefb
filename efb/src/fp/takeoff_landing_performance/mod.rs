@@ -13,8 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::VerticalDistance;
 use crate::measurements::{Length, Temperature};
+use crate::VerticalDistance;
 
 mod altering_factors;
 mod builder;
@@ -107,7 +107,11 @@ impl TakeoffLandingPerformance {
                 // 1. Find the rows that have the PA that is the closest
                 //    to the influence's level and equal or above.
                 let closest_level = if row.0 >= *pa && closest.0 >= *pa {
-                    if row.0 < closest.0 { row } else { closest }
+                    if row.0 < closest.0 {
+                        row
+                    } else {
+                        closest
+                    }
                 } else if row.0 >= *pa {
                     row
                 } else {
