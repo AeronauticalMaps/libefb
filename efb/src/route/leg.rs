@@ -25,6 +25,42 @@ use crate::measurements::{Angle, AngleUnit, Duration, Length, LengthUnit, Speed}
 use crate::nd::{Fix, NavAid};
 use crate::{Fuel, VerticalDistance, Wind};
 
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct LegBuilder {
+    level: Option<VerticalDistance>,
+    tas: Option<Speed>,
+    wind: Option<Wind>,
+}
+
+impl LegBuilder {
+    /// Builds a new leg `from` → `to`.
+    pub fn build(&mut self, from: NavAid, to: NavAid) -> Leg {
+        let leg = Leg::new(
+            from,
+            to,
+            self.level,
+            self.tas,
+            self.wind,
+        );
+
+        leg
+    }
+
+    pub fn cruise(self: &mut Self, level: VerticalDistance) {
+        self.level = Some(level);
+    }
+
+    pub fn tas(self: &mut Self, tas: Speed) {
+        self.tas = Some(tas);
+        trace!("cruise speed set to {tas}");
+    }
+
+    pub fn wind(self: &mut Self, wind: Wind) {
+        self.wind = Some(wind);
+        trace!("wind set to {wind}");
+    }
+}
+
 /// A leg `from` one point `to` another.
 #[derive(Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -45,7 +81,21 @@ pub struct Leg {
 }
 
 impl Leg {
-    pub fn new(
+    pub(super) fn builder() -> LegBuilder {
+        LegBuilder::default()
+    }
+
+    pub fn divert(&self, alternate: NavAid) -> Leg {
+        Leg::new(
+            self.from.clone(),
+            alternate,
+            self.level,
+            self.tas,
+            self.wind,
+        )
+    }
+
+    fn new(
         from: NavAid,
         to: NavAid,
         level: Option<VerticalDistance>,
@@ -129,6 +179,11 @@ impl Leg {
     /// The wind to take into account.
     pub fn wind(&self) -> Option<&Wind> {
         self.wind.as_ref()
+    }
+
+    /// The headwind component along this leg's bearing.
+    pub fn headwind(&self) -> Option<Speed> {
+        self.wind.map(|w| w.headwind(&self.bearing))
     }
 
     /// The true heading considering the wind correction angle (WCA).
