@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -60,14 +60,24 @@ impl JsFlightPlanningBuilder {
         self.inner.reserve(reserve.into());
     }
 
+    #[wasm_bindgen(setter, js_name = takeoffPerf)]
+    pub fn set_takeoff_perf(&mut self, perf: JsTakeoffLandingPerformance) {
+        self.inner.takeoff_perf(perf.into());
+    }
+
+    #[wasm_bindgen(setter, js_name = climbPerf)]
+    pub fn set_climb_perf(&mut self, perf: JsClimbDescentPerformance) {
+        self.inner.climb_perf(perf.into());
+    }
+
     #[wasm_bindgen(setter)]
     pub fn set_perf(&mut self, perf: JsPerformance) {
         self.inner.perf(perf.into());
     }
 
-    #[wasm_bindgen(setter, js_name = takeoffPerf)]
-    pub fn set_takeoff_perf(&mut self, perf: JsTakeoffLandingPerformance) {
-        self.inner.takeoff_perf(perf.into());
+    #[wasm_bindgen(setter, js_name = descentPerf)]
+    pub fn set_descent_perf(&mut self, perf: JsClimbDescentPerformance) {
+        self.inner.descent_perf(perf.into());
     }
 
     #[wasm_bindgen(setter, js_name = landingPerf)]
@@ -105,6 +115,8 @@ impl From<JsFlightPlanningBuilder> for FlightPlanningBuilder {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Fuel planning
+////////////////////////////////////////////////////////////////////////////////
 
 #[wasm_bindgen(js_name = FuelPolicy)]
 pub struct JsFuelPolicy {
@@ -134,8 +146,6 @@ impl From<JsFuelPolicy> for FuelPolicy {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
 #[wasm_bindgen(js_name = Reserve)]
 pub struct JsReserve {
     inner: Reserve,
@@ -157,6 +167,8 @@ impl From<JsReserve> for Reserve {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Cruise performance
+////////////////////////////////////////////////////////////////////////////////
 
 #[wasm_bindgen(js_name = Performance)]
 #[derive(Debug, Clone)]
@@ -176,6 +188,30 @@ impl From<Performance> for JsPerformance {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Climb & Descent performance
+////////////////////////////////////////////////////////////////////////////////
+
+#[wasm_bindgen(js_name = ClimbDescentPerformance)]
+#[derive(Debug, Clone)]
+pub struct JsClimbDescentPerformance {
+    inner: ClimbDescentPerformance,
+}
+
+impl From<JsClimbDescentPerformance> for ClimbDescentPerformance {
+    fn from(value: JsClimbDescentPerformance) -> Self {
+        value.inner
+    }
+}
+
+impl From<ClimbDescentPerformance> for JsClimbDescentPerformance {
+    fn from(value: ClimbDescentPerformance) -> Self {
+        Self { inner: value }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Takeoff & Landing performance
 ////////////////////////////////////////////////////////////////////////////////
 
 #[wasm_bindgen(js_name = TakeoffLandingPerformance)]

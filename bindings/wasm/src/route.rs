@@ -23,7 +23,7 @@ use serde::ser::Serialize;
 use serde_wasm_bindgen::Serializer;
 use wasm_bindgen::prelude::*;
 
-use crate::JsPerformance;
+use crate::{JsClimbDescentPerformance, JsPerformance};
 
 #[wasm_bindgen(js_name = Leg)]
 pub struct JsLeg {
@@ -44,6 +44,11 @@ impl JsLeg {
 
     #[wasm_bindgen(getter)]
     pub fn level(&self) -> JsValue {
+        serde_wasm_bindgen::to_value(&self.inner.level()).unwrap_or_default()
+    }
+
+    #[wasm_bindgen(getter, js_name = "levelChange")]
+    pub fn level_change(&self) -> JsValue {
         serde_wasm_bindgen::to_value(&self.inner.level()).unwrap_or_default()
     }
 
@@ -179,10 +184,23 @@ impl JsRoute {
     }
 
     #[wasm_bindgen(js_name = verticalProfile)]
-    pub fn vertical_profile(&self) -> JsVerticalProfile {
+    pub fn vertical_profile(
+        &self,
+        climb: Option<JsClimbDescentPerformance>,
+        descent: Option<JsClimbDescentPerformance>,
+    ) -> JsVerticalProfile {
         let fms = self.inner.borrow();
+        let climb = climb
+            .clone()
+            .map(|js_climb| ClimbDescentPerformance::from(js_climb));
+        let descent = descent
+            .clone()
+            .map(|js_descent| ClimbDescentPerformance::from(js_descent));
+
         JsVerticalProfile {
-            inner: fms.route().vertical_profile(fms.nd()),
+            inner: fms
+                .route()
+                .vertical_profile(fms.nd(), climb.as_ref(), descent.as_ref()),
         }
     }
 
