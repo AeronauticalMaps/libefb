@@ -23,6 +23,16 @@ all string together.
 - `cargo fmt` - Format code
 - `cargo doc --open` - Generate and open documentation
 
+### CI/CD
+
+CI runs on push/PR to `main` via `.github/workflows/rust.yml`
+(build + test on ubuntu-latest).
+
+### Git Hooks
+
+The repo uses `.githooks/pre-commit` (configured via
+`core.hooksPath`). No additional setup needed if cloned fresh.
+
 ### Workspace Structure
 
 This is a Cargo workspace with the following main crates:
@@ -33,7 +43,12 @@ This is a Cargo workspace with the following main crates:
 - `bindings/c/` - C bindings for FFI
 - `bindings/python/` - Python bindings using PyO3
 - `bindings/wasm/` - WebAssembly bindings
-- `bindings/swift/` - Swift bindings
+- `handbook/` - mdBook-based handbook, embedded into the library via
+  build.rs when the `handbook` feature is enabled
+
+Non-Cargo workspace members:
+
+- `bindings/swift/` - Swift package (standalone, not a Cargo crate)
 
 ### Language Bindings
 
@@ -66,15 +81,19 @@ The central component is `efb::fms::FMS` which integrates:
 
 ### Key Modules
 
+- `efb::core/` - Fundamental aviation types: Fuel, FuelType, FuelFlow,
+  Wind, MagVar, VerticalDistance
 - `efb::measurements/` - Comprehensive measurement types (length,
   speed, mass, etc.) with unit conversions
 - `efb::aircraft/` - Aircraft configuration including fuel tanks, CG
   envelopes, stations
 - `efb::geom/` - Geometric calculations for coordinates, bounding
   boxes
-- `efb::route/` - Route representation with legs and navigation
-- `efb::fp/` - Flight planning with fuel calculations and performance
-  analysis
+- `efb::route/` - Route representation with legs, vertical profiles,
+  and navigation
+- `efb::fp/` - Flight planning: fuel, mass & balance, runway analysis,
+  takeoff/landing performance, climb/descent performance
+- `efb::fc/` - Flight computer utilities (DMS angle conversion)
 
 ### Data Flow
 
