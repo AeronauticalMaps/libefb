@@ -403,7 +403,7 @@ impl Lexer {
         // Check for level@fix syntax (e.g. A022@N2, F085@EDDH, A030@EDHL07)
         if let Some(s) = s.strip_suffix('@') {
             if let Ok(level) = s.parse::<VerticalDistance>() {
-                trace!("lexed {:?} as level at: {:?}", s, level);
+                trace!("lexed {:?} as level at: {}", s, level);
                 return WordKind::LevelAt(level);
             }
         };
@@ -431,17 +431,17 @@ impl Lexer {
 
         // Try parsing as performance elements
         if let Ok(speed) = s.parse::<Speed>() {
-            trace!("lexed {:?} as speed: {:?}", s, speed);
+            trace!("lexed {:?} as speed: {}", s, speed);
             return WordKind::Speed(speed);
         }
 
         if let Ok(level) = s.parse::<VerticalDistance>() {
-            trace!("lexed {:?} as level: {:?}", s, level);
+            trace!("lexed {:?} as level: {}", s, level);
             return WordKind::Level(level);
         }
 
         if let Ok(wind) = s.parse::<Wind>() {
-            trace!("lexed {:?} as wind: {:?}", s, wind);
+            trace!("lexed {:?} as wind: {}", s, wind);
             return WordKind::Wind(wind);
         }
 

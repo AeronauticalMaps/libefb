@@ -119,7 +119,7 @@ impl FuelPlanning {
         let reserve = reserve.fuel(perf, &cruise_level);
 
         trace!(
-            "fuel planning: trip={:?}, alternate={:?}, reserve={:?}",
+            "fuel planning: trip={:.1}, alternate={:.1?}, reserve={:.1?}",
             trip,
             alternate,
             reserve
@@ -174,7 +174,7 @@ impl FuelPlanning {
         };
 
         debug!(
-            "fuel planning: min={:?}, total={:?}, extra={:?}, after_landing={:?}",
+            "fuel planning: min={:.1}, total={:.1}, extra={:.1?}, after_landing={:.1}",
             min, total, extra, after_landing
         );
 
