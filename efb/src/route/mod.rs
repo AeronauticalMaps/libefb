@@ -201,14 +201,17 @@ impl Route {
     ///
     /// The cruise speed or level is remove from the route by setting it to
     /// `None`.
+    #[deprecated]
     pub fn set_cruise(&mut self, _speed: Option<Speed>, _level: Option<VerticalDistance>) {
         todo!("Add/remove speed and level from the elements")
     }
 
+    #[deprecated]
     pub fn speed(&self) -> Option<Speed> {
         self.speed
     }
 
+    #[deprecated]
     pub fn level(&self) -> Option<VerticalDistance> {
         self.level
     }
