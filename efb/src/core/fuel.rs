@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -114,9 +114,9 @@ impl Fuel {
 impl Display for Fuel {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         let tmp = if let Some(precision) = f.precision() {
-            format!("{:.precision$}", self.volume())
+            format!("{:.precision$} {:?}", self.volume(), self.fuel_type)
         } else {
-            format!("{}", self.volume())
+            format!("{} {:?}", self.volume(), self.fuel_type)
         };
 
         f.pad_integral(true, "", &tmp)

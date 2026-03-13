@@ -118,7 +118,12 @@ impl FuelPlanning {
         let alternate = route.alternate().and_then(|alternate| alternate.fuel(perf));
         let reserve = reserve.fuel(perf, &cruise_level);
 
-        trace!("fuel planning: trip={:?}, alternate={:?}, reserve={:?}", trip, alternate, reserve);
+        trace!(
+            "fuel planning: trip={:.1}, alternate={:.1?}, reserve={:.1?}",
+            trip,
+            alternate,
+            reserve
+        );
 
         let min = {
             let mut min = taxi + trip + reserve;
@@ -169,7 +174,7 @@ impl FuelPlanning {
         };
 
         debug!(
-            "fuel planning: min={:?}, total={:?}, extra={:?}, after_landing={:?}",
+            "fuel planning: min={:.1}, total={:.1}, extra={:.1?}, after_landing={:.1}",
             min, total, extra, after_landing
         );
 

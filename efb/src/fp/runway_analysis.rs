@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -70,7 +70,10 @@ impl RunwayAnalysis {
 
         debug!(
             "takeoff analysis rwy {}: ground_roll={:?}, margin={:?} ({:.0}%)",
-            rwy.designator, ground_roll, margin, pct_margin * 100.0
+            rwy.designator,
+            ground_roll,
+            margin,
+            pct_margin * 100.0
         );
 
         if pct_margin < 0.0 {
@@ -114,7 +117,10 @@ impl RunwayAnalysis {
 
         debug!(
             "landing analysis rwy {}: ground_roll={:?}, margin={:?} ({:.0}%)",
-            rwy.designator, ground_roll, margin, pct_margin * 100.0
+            rwy.designator,
+            ground_roll,
+            margin,
+            pct_margin * 100.0
         );
 
         if pct_margin < 0.0 {
