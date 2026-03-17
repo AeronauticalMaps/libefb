@@ -13,10 +13,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::ops::Div;
+
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use super::{constants, Measurement, PhysicalQuantity, UnitOfMeasure};
+use super::{
+    constants, Duration, DurationUnit, Measurement, PhysicalQuantity, UnitOfMeasure, VerticalRate,
+    VerticalRateUnit,
+};
 
 /// Altitude unit with _m_ as SI unit.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -86,5 +91,27 @@ impl Altitude {
             value,
             unit: AltitudeUnit::Meters,
         }
+    }
+}
+
+impl Div<Duration> for Altitude {
+    type Output = VerticalRate;
+
+    fn div(self, rhs: Duration) -> Self::Output {
+        let mps = self.to_si() / rhs.to_si() as f32;
+        let unit = match self.unit {
+            AltitudeUnit::Feet => VerticalRateUnit::FeetPerMinute,
+            AltitudeUnit::Meters => VerticalRateUnit::MetersPerSecond,
+        };
+        VerticalRate::from_si(mps, unit)
+    }
+}
+
+impl Div<VerticalRate> for Altitude {
+    type Output = Duration;
+
+    fn div(self, rhs: VerticalRate) -> Self::Output {
+        let s = self.to_si() / rhs.to_si();
+        Duration::from_si(s.round() as u32, DurationUnit::Seconds)
     }
 }
