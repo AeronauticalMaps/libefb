@@ -189,6 +189,18 @@ macro_rules! div_impl {
 
 div_impl! { usize f32 }
 
+impl Div<Duration> for Fuel {
+    type Output = FuelFlow;
+
+    fn div(self, rhs: Duration) -> Self::Output {
+        let mass = self.mass * (3600.0 / *rhs.value() as f32);
+        FuelFlow::PerHour(Fuel {
+            fuel_type: self.fuel_type,
+            mass,
+        })
+    }
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum FuelFlow {
