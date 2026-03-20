@@ -355,10 +355,10 @@ impl VerticalProfile {
     /// airport elevation. Level changes are handled according to their
     /// semantics:
     ///
-    /// - **`start_at_from`**: The aircraft begins a climb or descent at the
-    ///   FROM fix. If climb/descent performance is available, a transition
-    ///   marker is placed where the new level is reached.
-    /// - **`reach_at_to`**: The aircraft must arrive at the TO fix at the new
+    /// - **`to`**: The aircraft begins a climb or descent at the FROM fix.
+    ///   If climb/descent performance is available, a transition marker is
+    ///   placed where the new level is reached.
+    /// - **`reach_at`**: The aircraft must arrive at the TO fix at the new
     ///   level. The transition begins before the TO fix.
     ///
     /// When `climb_perf` and/or `descent_perf` are provided, `TopOfClimb`,
@@ -381,8 +381,8 @@ impl VerticalProfile {
 
         let mut profile = Vec::new();
 
-        // Track the previous level for computing level transitions. Starts
-        // with the origin airport elevation if available.
+        // Each leg now carries its own `from` level, but we still need to
+        // track the previous level for the origin NavAid point.
         let mut prev_level: Option<VerticalDistance> = route.origin().map(|o| o.elevation);
 
         // First point: origin airport elevation at distance 0
@@ -406,13 +406,15 @@ impl VerticalProfile {
             let total_dist = *totals.dist();
             let from_dist = total_dist - *leg.dist();
 
-            let start_at_from = leg.climb_descent().start_at_from();
-            let reach_at_to = leg.climb_descent().reach_at_to();
+            let cd_to = leg.climb_descent().to();
+            let cd_reach_at = leg.climb_descent().reach_at();
+            // Use the leg's own from level, falling back to tracked prev_level
+            let cd_from = leg.climb_descent().from().copied().or(prev_level);
 
             let mut overflow = false;
 
-            // start_at_from: transition begins at FROM fix, heading forward
-            if let (Some(level), Some(prev)) = (start_at_from, prev_level) {
+            // cd_to: transition begins at FROM fix, heading forward
+            if let (Some(level), Some(prev)) = (cd_to, cd_from) {
                 let is_climb = *level > prev;
                 let perf = if is_climb { climb_perf } else { descent_perf };
 
@@ -437,8 +439,8 @@ impl VerticalProfile {
                 prev_level = Some(*level);
             }
 
-            // reach_at_to: transition must complete by TO fix, starts before it
-            if let (Some(level), Some(prev)) = (reach_at_to, prev_level) {
+            // cd_reach_at: transition must complete by TO fix, starts before it
+            if let (Some(level), Some(prev)) = (cd_reach_at, prev_level) {
                 trace!("change level to reach {} at {}", leg.to().ident(), level);
 
                 let is_climb = *level > prev;

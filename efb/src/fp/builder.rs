@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -63,20 +63,15 @@ impl FlightPlanningBuilder {
             &self.policy,
             self.taxi,
             &self.reserve,
-            &self.perf,
         ) {
-            (Some(aircraft), Some(policy), Some(taxi), Some(reserve), Some(perf)) => {
+            (Some(aircraft), Some(policy), Some(taxi), Some(reserve)) => {
                 debug!("computing fuel planning (policy={:?})", policy);
-                let fp = FuelPlanning::new(
-                    aircraft,
-                    policy,
-                    taxi,
-                    route,
-                    reserve,
-                    perf,
+                let leg_perf = LegPerformance::new(
+                    self.perf.as_ref(),
                     self.climb_perf.as_ref(),
                     self.descent_perf.as_ref(),
                 );
+                let fp = FuelPlanning::new(aircraft, policy, taxi, route, reserve, &leg_perf);
 
                 if fp.is_none() {
                     warn!("fuel planning could not be computed (missing route totals)");

@@ -19,7 +19,7 @@ use std::rc::Rc;
 use log::{debug, trace, warn};
 
 use crate::error::Error;
-use crate::fp::{ClimbDescentPerformance, Performance};
+use crate::fp::{ClimbDescentPerformance, LegPerformance};
 use crate::measurements::Speed;
 use crate::nd::*;
 use crate::VerticalDistance;
@@ -269,8 +269,8 @@ impl Route {
     ///
     /// ```rust
     /// # use efb::route::Route;
-    /// # use efb::prelude::Performance;
-    /// # fn accumulate_legs(route: Route, perf: Performance) {
+    /// # use efb::prelude::LegPerformance;
+    /// # fn accumulate_legs(route: Route, perf: LegPerformance) {
     /// // Iterate through route showing progressive totals
     /// for (i, totals) in route.accumulate_legs(Some(&perf)).enumerate() {
     ///     println!("Leg {}: Total distance: {}, Total fuel: {:?}",
@@ -288,23 +288,21 @@ impl Route {
     /// [totals]: `TotalsToLeg`
     pub fn accumulate_legs<'a>(
         &'a self,
-        perf: Option<&'a Performance>,
+        perf: Option<&'a LegPerformance<'a>>,
     ) -> impl Iterator<Item = TotalsToLeg> + 'a {
         self.legs
             .iter()
             .scan(None, move |totals_to_leg: &mut Option<TotalsToLeg>, leg| {
-                // accumulate totals from previous legs
                 *totals_to_leg = Some(match totals_to_leg.as_ref() {
                     None => TotalsToLeg::new(leg, perf),
                     Some(prev) => prev.accumulate(leg, perf),
                 });
-                // the totals up to this leg
                 *totals_to_leg
             })
     }
 
     /// Returns the totals of the entire route.
-    pub fn totals(&self, perf: Option<&Performance>) -> Option<TotalsToLeg> {
+    pub fn totals(&self, perf: Option<&LegPerformance>) -> Option<TotalsToLeg> {
         self.accumulate_legs(perf).last()
     }
 

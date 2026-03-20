@@ -18,9 +18,9 @@ use log::{debug, trace};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use super::{ClimbDescentPerformance, Performance};
+use super::{LegPerformance, Performance};
 use crate::aircraft::Aircraft;
-use crate::measurements::{Duration, Speed};
+use crate::measurements::Duration;
 use crate::route::Route;
 use crate::{Fuel, VerticalDistance};
 
@@ -69,8 +69,6 @@ pub enum FuelPolicy {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct FuelPlanning {
     taxi: Fuel,
-    climb: Option<Fuel>,
-    descent: Option<Fuel>,
     trip: Fuel,
     alternate: Option<Fuel>,
     reserve: Fuel,
@@ -81,42 +79,21 @@ pub struct FuelPlanning {
 }
 
 impl FuelPlanning {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         aircraft: &Aircraft,
         policy: &FuelPolicy,
         taxi: Fuel,
         route: &Route,
         reserve: &Reserve,
-        perf: &Performance,
-        climb_perf: Option<&ClimbDescentPerformance>,
-        descent_perf: Option<&ClimbDescentPerformance>,
+        perf: &LegPerformance,
     ) -> Option<Self> {
-        let cruise_level = route.level()?;
-
-        let climb = climb_perf.and_then(|cp| {
-            let origin_elev = route.origin()?.elevation;
-            let hw = route
-                .legs()
-                .first()
-                .and_then(|l| l.headwind())
-                .unwrap_or(Speed::kt(0.0));
-            Some(cp.between(&origin_elev, &cruise_level)?.with_wind(hw).fuel)
-        });
-
-        let descent = descent_perf.and_then(|dp| {
-            let dest_elev = route.destination()?.elevation;
-            let hw = route
-                .legs()
-                .last()
-                .and_then(|l| l.headwind())
-                .unwrap_or(Speed::kt(0.0));
-            Some(dp.between(&dest_elev, &cruise_level)?.with_wind(hw).fuel)
-        });
-
         let trip = route.totals(Some(perf))?.fuel().cloned()?;
+
+        // Use the last leg's level for reserve fuel calculation
+        let last_level = route.legs().last().and_then(|l| l.level()).cloned()?;
+
         let alternate = route.alternate().and_then(|alternate| alternate.fuel(perf));
-        let reserve = reserve.fuel(perf, &cruise_level);
+        let reserve = reserve.fuel(perf.cruise()?, &last_level);
 
         trace!(
             "fuel planning: trip={:.1}, alternate={:.1?}, reserve={:.1?}",
@@ -127,14 +104,6 @@ impl FuelPlanning {
 
         let min = {
             let mut min = taxi + trip + reserve;
-
-            if let Some(climb) = climb {
-                min = min + climb;
-            }
-
-            if let Some(descent) = descent {
-                min = min + descent;
-            }
 
             if let Some(alternate) = alternate {
                 min = min + alternate;
@@ -162,16 +131,7 @@ impl FuelPlanning {
             }
         };
 
-        let after_landing = {
-            let mut remaining = total - taxi - trip;
-            if let Some(climb) = climb {
-                remaining = remaining - climb;
-            }
-            if let Some(descent) = descent {
-                remaining = remaining - descent;
-            }
-            remaining
-        };
+        let after_landing = total - taxi - trip;
 
         debug!(
             "fuel planning: min={:.1}, total={:.1}, extra={:.1?}, after_landing={:.1}",
@@ -180,8 +140,6 @@ impl FuelPlanning {
 
         Some(Self {
             taxi,
-            climb,
-            descent,
             trip,
             alternate,
             reserve,
@@ -194,14 +152,6 @@ impl FuelPlanning {
 
     pub fn taxi(&self) -> &Fuel {
         &self.taxi
-    }
-
-    pub fn climb(&self) -> Option<&Fuel> {
-        self.climb.as_ref()
-    }
-
-    pub fn descent(&self) -> Option<&Fuel> {
-        self.descent.as_ref()
     }
 
     pub fn trip(&self) -> &Fuel {
