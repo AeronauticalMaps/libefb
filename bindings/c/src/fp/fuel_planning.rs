@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,11 +19,6 @@ use efb::Fuel;
 #[no_mangle]
 pub extern "C" fn efb_fuel_planning_taxi(planning: &FuelPlanning) -> &Fuel {
     planning.taxi()
-}
-
-#[no_mangle]
-pub extern "C" fn efb_fuel_planning_climb(planning: &FuelPlanning) -> Option<&Fuel> {
-    planning.climb()
 }
 
 #[no_mangle]

@@ -211,6 +211,62 @@ impl From<ClimbDescentPerformance> for JsClimbDescentPerformance {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Leg performance (JS duck-typed object)
+////////////////////////////////////////////////////////////////////////////////
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(
+        typescript_type = "{ cruise?: Performance, climb?: ClimbDescentPerformance, descent?: ClimbDescentPerformance }"
+    )]
+    pub type JsLegPerformance;
+
+    #[wasm_bindgen(method, getter, structural)]
+    fn cruise(this: &JsLegPerformance) -> Option<JsPerformance>;
+
+    #[wasm_bindgen(method, getter, structural)]
+    fn climb(this: &JsLegPerformance) -> Option<JsClimbDescentPerformance>;
+
+    #[wasm_bindgen(method, getter, structural)]
+    fn descent(this: &JsLegPerformance) -> Option<JsClimbDescentPerformance>;
+}
+
+pub struct OwnedLegPerformance {
+    cruise: Option<Performance>,
+    climb: Option<ClimbDescentPerformance>,
+    descent: Option<ClimbDescentPerformance>,
+}
+
+impl OwnedLegPerformance {
+    /// Returns a borrowed [`LegPerformance`] referencing the owned data.
+    pub fn as_leg_perf(&self) -> LegPerformance<'_> {
+        LegPerformance::new(
+            self.cruise.as_ref(),
+            self.climb.as_ref(),
+            self.descent.as_ref(),
+        )
+    }
+
+    pub fn climb(&self) -> Option<&ClimbDescentPerformance> {
+        self.climb.as_ref()
+    }
+
+    pub fn descent(&self) -> Option<&ClimbDescentPerformance> {
+        self.descent.as_ref()
+    }
+}
+
+impl From<JsLegPerformance> for OwnedLegPerformance {
+    fn from(js: JsLegPerformance) -> Self {
+        Self {
+            cruise: js.cruise().map(|p| p.clone().into()),
+            climb: js.climb().map(|c| c.clone().into()),
+            descent: js.descent().map(|d| d.clone().into()),
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Takeoff & Landing performance
 ////////////////////////////////////////////////////////////////////////////////
 

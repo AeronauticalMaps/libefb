@@ -138,7 +138,7 @@ pub mod prelude {
     pub use crate::fp::{
         AlteringFactor, AlteringFactors, ClimbDescentBand, ClimbDescentPerformance,
         CumulativeClimbDescentEntry, FactorOfEffect, FlightPlanning, FlightPlanningBuilder,
-        FuelPolicy, Performance, Reserve, TakeoffLandingPerformance,
+        FuelPolicy, LegPerformance, Performance, Reserve, TakeoffLandingPerformance,
     };
     pub use crate::measurements::*;
     pub use crate::nd::{Fix, InputFormat, NavigationData};

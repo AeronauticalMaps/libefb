@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* Copyright 2024 Joe Pearson
+/* Copyright 2024, 2026 Joe Pearson
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -819,9 +819,6 @@ efb_flight_planning_builder_set_perf(
 
 const EfbFuel *
 efb_fuel_planning_taxi(const EfbFuelPlanning *planning);
-
-const EfbFuel *
-efb_fuel_planning_climb(const EfbFuelPlanning *planning);
 
 const EfbFuel *
 efb_fuel_planning_trip(const EfbFuelPlanning *planning);

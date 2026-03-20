@@ -23,7 +23,7 @@ use serde::ser::Serialize;
 use serde_wasm_bindgen::Serializer;
 use wasm_bindgen::prelude::*;
 
-use crate::{JsClimbDescentPerformance, JsPerformance};
+use crate::fp::{JsLegPerformance, OwnedLegPerformance};
 
 #[wasm_bindgen(js_name = Leg)]
 pub struct JsLeg {
@@ -87,8 +87,10 @@ impl JsLeg {
         serde_wasm_bindgen::to_value(&self.inner.ete()).unwrap_or_default()
     }
 
-    pub fn fuel(&self, perf: &JsPerformance) -> JsValue {
-        serde_wasm_bindgen::to_value(&self.inner.fuel(&perf.clone().into())).unwrap_or_default()
+    pub fn fuel(&self, perf: JsLegPerformance) -> JsValue {
+        let owned: OwnedLegPerformance = perf.into();
+        let leg_perf = owned.as_leg_perf();
+        serde_wasm_bindgen::to_value(&self.inner.fuel(&leg_perf)).unwrap_or_default()
     }
 }
 
@@ -169,38 +171,31 @@ impl JsRoute {
     }
 
     #[wasm_bindgen(js_name = accumulateLegs)]
-    pub fn accumulate_legs(&self, perf: Option<JsPerformance>) -> JsValue {
+    pub fn accumulate_legs(&self, perf: JsLegPerformance) -> JsValue {
         let fms = self.inner.borrow();
-        let perf = perf.clone().map(|js_perf| Performance::from(js_perf));
-        let totals: Vec<TotalsToLeg> = fms.route().accumulate_legs(perf.as_ref()).collect();
+        let owned: OwnedLegPerformance = perf.into();
+        let leg_perf = owned.as_leg_perf();
+        let totals: Vec<TotalsToLeg> = fms.route().accumulate_legs(Some(&leg_perf)).collect();
         serde_wasm_bindgen::to_value(&totals).unwrap_or_default()
     }
 
-    pub fn totals(&self, perf: Option<JsPerformance>) -> JsValue {
+    pub fn totals(&self, perf: JsLegPerformance) -> JsValue {
         let fms = self.inner.borrow();
-        let perf = perf.clone().map(|js_perf| Performance::from(js_perf));
-        let totals = fms.route().totals(perf.as_ref());
+        let owned: OwnedLegPerformance = perf.into();
+        let leg_perf = owned.as_leg_perf();
+        let totals = fms.route().totals(Some(&leg_perf));
         serde_wasm_bindgen::to_value(&totals).unwrap_or_default()
     }
 
     #[wasm_bindgen(js_name = verticalProfile)]
-    pub fn vertical_profile(
-        &self,
-        climb: Option<JsClimbDescentPerformance>,
-        descent: Option<JsClimbDescentPerformance>,
-    ) -> JsVerticalProfile {
+    pub fn vertical_profile(&self, perf: JsLegPerformance) -> JsVerticalProfile {
         let fms = self.inner.borrow();
-        let climb = climb
-            .clone()
-            .map(|js_climb| ClimbDescentPerformance::from(js_climb));
-        let descent = descent
-            .clone()
-            .map(|js_descent| ClimbDescentPerformance::from(js_descent));
+        let owned: OwnedLegPerformance = perf.into();
 
         JsVerticalProfile {
             inner: fms
                 .route()
-                .vertical_profile(fms.nd(), climb.as_ref(), descent.as_ref()),
+                .vertical_profile(fms.nd(), owned.climb(), owned.descent()),
         }
     }
 
