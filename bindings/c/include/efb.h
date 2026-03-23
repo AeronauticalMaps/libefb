@@ -121,6 +121,13 @@ typedef struct EfbFuelTank EfbFuelTank;
 /// A leg `from` one point `to` another.
 typedef struct EfbLeg EfbLeg;
 
+/// Per-phase fuel breakdown for a leg.
+///
+/// Splits the fuel consumed on a leg into climb, cruise, and descent
+/// components. A phase is [`None`] when the leg does not include that phase
+/// (e.g. a leg that is entirely a climb has no cruise component).
+typedef struct EfbLegFuel EfbLegFuel;
+
 /// The mass & balance on ramp and after landing.
 ///
 /// The mass and balance of the [`Aircraft`] is computed from [`Station`]s
@@ -989,6 +996,25 @@ efb_leg_get_gs(const EfbLeg *leg);
 /// Returns the estimated time enroute the leg or null if unknown.
 const EfbDuration *
 efb_leg_get_ete(const EfbLeg *leg);
+
+/// Returns the climb fuel from a leg fuel breakdown, or null if the leg has no
+/// climb phase.
+const EfbFuel *
+efb_leg_fuel_climb(const EfbLegFuel *leg_fuel);
+
+/// Returns the cruise fuel from a leg fuel breakdown, or null if the leg has no
+/// cruise phase.
+const EfbFuel *
+efb_leg_fuel_cruise(const EfbLegFuel *leg_fuel);
+
+/// Returns the descent fuel from a leg fuel breakdown, or null if the leg has
+/// no descent phase.
+const EfbFuel *
+efb_leg_fuel_descent(const EfbLegFuel *leg_fuel);
+
+/// Returns the total fuel from a leg fuel breakdown.
+const EfbFuel *
+efb_leg_fuel_total(const EfbLegFuel *leg_fuel);
 
 #ifdef __cplusplus
 } // extern "C"

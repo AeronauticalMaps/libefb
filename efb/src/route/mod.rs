@@ -26,11 +26,13 @@ use crate::VerticalDistance;
 
 mod accumulator;
 mod leg;
+mod leg_fuel;
 mod profile;
 mod token;
 
 pub use accumulator::TotalsToLeg;
 pub use leg::Leg;
+pub use leg_fuel::LegFuel;
 pub use profile::{AirspaceIntersection, VerticalPoint, VerticalProfile};
 use token::Tokens;
 pub use token::{Token, TokenKind};

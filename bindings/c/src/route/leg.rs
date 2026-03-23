@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@ use std::ffi::{c_char, CString};
 
 use efb::measurements::{Angle, Duration, Length, Speed};
 use efb::nd::Fix;
-use efb::route::Leg;
-use efb::{VerticalDistance, Wind};
+use efb::route::{Leg, LegFuel};
+use efb::{Fuel, VerticalDistance, Wind};
 
 /// Returns the ident from where the leg starts.
 ///
@@ -100,4 +100,31 @@ pub extern "C" fn efb_leg_get_gs(leg: &Leg) -> Option<&Speed> {
 #[no_mangle]
 pub extern "C" fn efb_leg_get_ete(leg: &Leg) -> Option<&Duration> {
     leg.ete()
+}
+
+/// Returns the climb fuel from a leg fuel breakdown, or null if the leg has no
+/// climb phase.
+#[no_mangle]
+pub extern "C" fn efb_leg_fuel_climb(leg_fuel: &LegFuel) -> Option<&Fuel> {
+    leg_fuel.climb()
+}
+
+/// Returns the cruise fuel from a leg fuel breakdown, or null if the leg has no
+/// cruise phase.
+#[no_mangle]
+pub extern "C" fn efb_leg_fuel_cruise(leg_fuel: &LegFuel) -> Option<&Fuel> {
+    leg_fuel.cruise()
+}
+
+/// Returns the descent fuel from a leg fuel breakdown, or null if the leg has
+/// no descent phase.
+#[no_mangle]
+pub extern "C" fn efb_leg_fuel_descent(leg_fuel: &LegFuel) -> Option<&Fuel> {
+    leg_fuel.descent()
+}
+
+/// Returns the total fuel from a leg fuel breakdown.
+#[no_mangle]
+pub extern "C" fn efb_leg_fuel_total(leg_fuel: &LegFuel) -> &Fuel {
+    leg_fuel.total()
 }
