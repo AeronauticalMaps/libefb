@@ -18,9 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::fp::LegPerformance;
 use crate::measurements::{Duration, Length};
-use crate::Fuel;
-
-use super::Leg;
+use super::{Leg, LegFuel};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -28,7 +26,7 @@ use super::Leg;
 pub struct TotalsToLeg {
     dist: Length,
     ete: Option<Duration>,
-    fuel: Option<Fuel>,
+    fuel: Option<LegFuel>,
 }
 
 impl TotalsToLeg {
@@ -75,7 +73,7 @@ impl TotalsToLeg {
     }
 
     /// The cumulative fuel or [`None`] if fuel is missing for any leg.
-    pub fn fuel(&self) -> Option<&Fuel> {
+    pub fn fuel(&self) -> Option<&LegFuel> {
         self.fuel.as_ref()
     }
 }

@@ -87,12 +87,15 @@ impl FuelPlanning {
         reserve: &Reserve,
         perf: &LegPerformance,
     ) -> Option<Self> {
-        let trip = route.totals(Some(perf))?.fuel().cloned()?;
+        let trip = *route.totals(Some(perf))?.fuel()?.total();
 
         // Use the last leg's level for reserve fuel calculation
         let last_level = route.legs().last().and_then(|l| l.level()).cloned()?;
 
-        let alternate = route.alternate().and_then(|alternate| alternate.fuel(perf));
+        let alternate = route
+            .alternate()
+            .and_then(|alternate| alternate.fuel(perf))
+            .map(|lf| *lf.total());
         let reserve = reserve.fuel(perf.cruise()?, &last_level);
 
         trace!(
