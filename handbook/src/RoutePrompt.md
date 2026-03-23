@@ -35,6 +35,15 @@ Level is entered in the FPL form's format (ICAO Doc. 4444 Annex 2):
 - Altitude in tens of metres, expressed as M followed by 4 figures
   e.g. `M0840` for 8400 m
 
+### Level Changes
+
+The level can be changed at each fix along the route like following:
+
+- Climb/descent starting at a fix to the new level
+  - `ELSOB A022` climbs or descents starting at `ELSOB` to 2200 ft
+- Climb/descent at the end of a leg to reach the next fix at the new level
+  - `A022@ELSOB` crosses the point `ELSOB` in 2200 ft
+
 ### Wind
 
 Wind is entered in the METAR's format:

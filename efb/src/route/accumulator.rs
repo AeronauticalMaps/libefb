@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,11 +16,9 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::fp::Performance;
+use crate::fp::LegPerformance;
 use crate::measurements::{Duration, Length};
-use crate::Fuel;
-
-use super::Leg;
+use super::{Leg, LegFuel};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -28,25 +26,25 @@ use super::Leg;
 pub struct TotalsToLeg {
     dist: Length,
     ete: Option<Duration>,
-    fuel: Option<Fuel>,
+    fuel: Option<LegFuel>,
 }
 
 impl TotalsToLeg {
     /// Creates totals for the first leg.
     ///
     /// Accumulates the fuel if the performance is [`Some`].
-    pub fn new(leg: &Leg, perf: Option<&Performance>) -> Self {
+    pub fn new(leg: &Leg, perf: Option<&LegPerformance>) -> Self {
         Self {
             dist: *leg.dist(),
             ete: leg.ete().cloned(),
-            fuel: perf.and_then(|perf| leg.fuel(perf)),
+            fuel: perf.and_then(|p| leg.fuel(p)),
         }
     }
 
     /// Creates totals that add the current leg to previous totals.
     ///
     /// Accumulates the fuel if the performance is [`Some`].
-    pub fn accumulate(&self, leg: &Leg, perf: Option<&Performance>) -> Self {
+    pub fn accumulate(&self, leg: &Leg, perf: Option<&LegPerformance>) -> Self {
         let ete = match (self.ete, leg.ete()) {
             (Some(a), Some(b)) => Some(a + *b),
             _ => None,
@@ -75,7 +73,7 @@ impl TotalsToLeg {
     }
 
     /// The cumulative fuel or [`None`] if fuel is missing for any leg.
-    pub fn fuel(&self) -> Option<&Fuel> {
+    pub fn fuel(&self) -> Option<&LegFuel> {
         self.fuel.as_ref()
     }
 }

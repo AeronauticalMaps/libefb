@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -60,14 +60,24 @@ impl JsFlightPlanningBuilder {
         self.inner.reserve(reserve.into());
     }
 
+    #[wasm_bindgen(setter, js_name = takeoffPerf)]
+    pub fn set_takeoff_perf(&mut self, perf: JsTakeoffLandingPerformance) {
+        self.inner.takeoff_perf(perf.into());
+    }
+
+    #[wasm_bindgen(setter, js_name = climbPerf)]
+    pub fn set_climb_perf(&mut self, perf: JsClimbDescentPerformance) {
+        self.inner.climb_perf(perf.into());
+    }
+
     #[wasm_bindgen(setter)]
     pub fn set_perf(&mut self, perf: JsPerformance) {
         self.inner.perf(perf.into());
     }
 
-    #[wasm_bindgen(setter, js_name = takeoffPerf)]
-    pub fn set_takeoff_perf(&mut self, perf: JsTakeoffLandingPerformance) {
-        self.inner.takeoff_perf(perf.into());
+    #[wasm_bindgen(setter, js_name = descentPerf)]
+    pub fn set_descent_perf(&mut self, perf: JsClimbDescentPerformance) {
+        self.inner.descent_perf(perf.into());
     }
 
     #[wasm_bindgen(setter, js_name = landingPerf)]
@@ -105,6 +115,8 @@ impl From<JsFlightPlanningBuilder> for FlightPlanningBuilder {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Fuel planning
+////////////////////////////////////////////////////////////////////////////////
 
 #[wasm_bindgen(js_name = FuelPolicy)]
 pub struct JsFuelPolicy {
@@ -134,8 +146,6 @@ impl From<JsFuelPolicy> for FuelPolicy {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
 #[wasm_bindgen(js_name = Reserve)]
 pub struct JsReserve {
     inner: Reserve,
@@ -157,6 +167,8 @@ impl From<JsReserve> for Reserve {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Cruise performance
+////////////////////////////////////////////////////////////////////////////////
 
 #[wasm_bindgen(js_name = Performance)]
 #[derive(Debug, Clone)]
@@ -176,6 +188,86 @@ impl From<Performance> for JsPerformance {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Climb & Descent performance
+////////////////////////////////////////////////////////////////////////////////
+
+#[wasm_bindgen(js_name = ClimbDescentPerformance)]
+#[derive(Debug, Clone)]
+pub struct JsClimbDescentPerformance {
+    inner: ClimbDescentPerformance,
+}
+
+impl From<JsClimbDescentPerformance> for ClimbDescentPerformance {
+    fn from(value: JsClimbDescentPerformance) -> Self {
+        value.inner
+    }
+}
+
+impl From<ClimbDescentPerformance> for JsClimbDescentPerformance {
+    fn from(value: ClimbDescentPerformance) -> Self {
+        Self { inner: value }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Leg performance (JS duck-typed object)
+////////////////////////////////////////////////////////////////////////////////
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(
+        typescript_type = "{ cruise?: Performance, climb?: ClimbDescentPerformance, descent?: ClimbDescentPerformance }"
+    )]
+    pub type JsLegPerformance;
+
+    #[wasm_bindgen(method, getter, structural)]
+    fn cruise(this: &JsLegPerformance) -> Option<JsPerformance>;
+
+    #[wasm_bindgen(method, getter, structural)]
+    fn climb(this: &JsLegPerformance) -> Option<JsClimbDescentPerformance>;
+
+    #[wasm_bindgen(method, getter, structural)]
+    fn descent(this: &JsLegPerformance) -> Option<JsClimbDescentPerformance>;
+}
+
+pub struct OwnedLegPerformance {
+    cruise: Option<Performance>,
+    climb: Option<ClimbDescentPerformance>,
+    descent: Option<ClimbDescentPerformance>,
+}
+
+impl OwnedLegPerformance {
+    /// Returns a borrowed [`LegPerformance`] referencing the owned data.
+    pub fn as_leg_perf(&self) -> LegPerformance<'_> {
+        LegPerformance::new(
+            self.cruise.as_ref(),
+            self.climb.as_ref(),
+            self.descent.as_ref(),
+        )
+    }
+
+    pub fn climb(&self) -> Option<&ClimbDescentPerformance> {
+        self.climb.as_ref()
+    }
+
+    pub fn descent(&self) -> Option<&ClimbDescentPerformance> {
+        self.descent.as_ref()
+    }
+}
+
+impl From<JsLegPerformance> for OwnedLegPerformance {
+    fn from(js: JsLegPerformance) -> Self {
+        Self {
+            cruise: js.cruise().map(|p| p.clone().into()),
+            climb: js.climb().map(|c| c.clone().into()),
+            descent: js.descent().map(|d| d.clone().into()),
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Takeoff & Landing performance
 ////////////////////////////////////////////////////////////////////////////////
 
 #[wasm_bindgen(js_name = TakeoffLandingPerformance)]

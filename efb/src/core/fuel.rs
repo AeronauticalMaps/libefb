@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -114,9 +114,9 @@ impl Fuel {
 impl Display for Fuel {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         let tmp = if let Some(precision) = f.precision() {
-            format!("{:.precision$}", self.volume())
+            format!("{:.precision$} {:?}", self.volume(), self.fuel_type)
         } else {
-            format!("{}", self.volume())
+            format!("{} {:?}", self.volume(), self.fuel_type)
         };
 
         f.pad_integral(true, "", &tmp)
@@ -188,6 +188,18 @@ macro_rules! div_impl {
 }
 
 div_impl! { usize f32 }
+
+impl Div<Duration> for Fuel {
+    type Output = FuelFlow;
+
+    fn div(self, rhs: Duration) -> Self::Output {
+        let mass = self.mass * (3600.0 / *rhs.value() as f32);
+        FuelFlow::PerHour(Fuel {
+            fuel_type: self.fuel_type,
+            mass,
+        })
+    }
+}
 
 #[repr(C)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]

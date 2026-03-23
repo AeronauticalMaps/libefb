@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -51,11 +51,17 @@ impl UnitOfMeasure<u32> for DurationUnit {
 pub type Duration = Measurement<u32, DurationUnit>;
 
 impl Duration {
+    /// Creates a duration from seconds.
     pub fn s(value: u32) -> Self {
         Measurement {
             value,
             unit: DurationUnit::Seconds,
         }
+    }
+
+    /// Creates a duration from minutes.
+    pub fn m(value: u32) -> Self {
+        Self::s(value * 60)
     }
 
     pub fn hours(&self) -> u32 {
@@ -117,8 +123,17 @@ mod tests {
     }
 
     #[test]
+    fn from_minutes() {
+        let duration = Duration::m(4);
+        assert_eq!(*duration.value(), 240);
+        assert_eq!(duration.hours(), 0);
+        assert_eq!(duration.minutes(), 4);
+        assert_eq!(duration.seconds(), 0);
+    }
+
+    #[test]
     fn sum_durations() {
-        let sum = Duration::s(3561) + Duration::s(100);
+        let sum = Duration::m(60) + Duration::s(60) + Duration::s(1);
         assert_eq!(sum.hours(), 1);
         assert_eq!(sum.minutes(), 1);
         assert_eq!(sum.seconds(), 1);
