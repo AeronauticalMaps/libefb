@@ -20,10 +20,112 @@ use serde::{Deserialize, Serialize};
 
 use geo::{Bearing, Distance, Geodesic};
 
-use crate::fp::Performance;
+use crate::fp::LegPerformance;
 use crate::measurements::{Angle, AngleUnit, Duration, Length, LengthUnit, Speed};
 use crate::nd::{Fix, NavAid};
 use crate::{Fuel, VerticalDistance, Wind};
+
+use super::LegFuel;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ClimbDescentAlongLeg {
+    /// Level the aircraft is at when entering this leg (before any transitions).
+    from: Option<VerticalDistance>,
+    /// Target level of a transition starting at the FROM fix.
+    to: Option<VerticalDistance>,
+    /// Target level that must be reached by the TO fix.
+    reach_at: Option<VerticalDistance>,
+}
+
+impl ClimbDescentAlongLeg {
+    /// Level the aircraft is at when entering this leg.
+    pub fn from(&self) -> Option<&VerticalDistance> {
+        self.from.as_ref()
+    }
+
+    /// Target level of a transition starting at the FROM fix.
+    pub fn to(&self) -> Option<&VerticalDistance> {
+        self.to.as_ref()
+    }
+
+    /// Target level that must be reached by the TO fix.
+    pub fn reach_at(&self) -> Option<&VerticalDistance> {
+        self.reach_at.as_ref()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct LegBuilder {
+    level: Option<VerticalDistance>,
+    climb_descent: ClimbDescentAlongLeg,
+    tas: Option<Speed>,
+    wind: Option<Wind>,
+}
+
+impl LegBuilder {
+    /// Builds a new leg `from` → `to`.
+    ///
+    /// The builder consumes all level changes and updates the level according
+    /// to the changes. Subsequent builds retain the latest cruise level in case
+    /// no further level changes occur.
+    pub fn build(&mut self, from: NavAid, to: NavAid) -> Leg {
+        // Seed `from` level from the builder's current level (before any
+        // transitions on this leg). If still None and the FROM fix is an
+        // airport, use its elevation.
+        self.climb_descent.from = self.level.or_else(|| match &from {
+            NavAid::Airport(arpt) => Some(arpt.elevation),
+            _ => None,
+        });
+
+        self.climb_descent
+            .to
+            .inspect(|level| trace!("climb/descent to {level} from {from}"));
+        self.climb_descent
+            .reach_at
+            .inspect(|level| trace!("reach {to} on {level}"));
+
+        // The leg's cruise level is the level after the `to` transition (if
+        // any), otherwise the previous level.
+        let level = self.climb_descent.to.or(self.level);
+
+        let leg = Leg::new(from, to, self.climb_descent, level, self.tas, self.wind);
+
+        // Update the level for subsequent legs: the last transition reached
+        // is the new cruise level. Clear both transitions for the next leg.
+        if let Some(reach_at) = self.climb_descent.reach_at.take() {
+            self.level = Some(reach_at);
+        } else if let Some(to) = self.climb_descent.to.take() {
+            self.level = Some(to);
+        }
+        self.climb_descent.to.take();
+
+        leg
+    }
+
+    pub fn cruise(&mut self, level: VerticalDistance) {
+        // Since we can't teleport to the new level, we need to climb/descent to
+        // it starting at the "from" fix. Don't update self.level here — build()
+        // needs it to set climb_descent.from to the *previous* level first.
+        self.climb_descent.to = Some(level);
+    }
+
+    pub fn level_at_fix(&mut self, level: VerticalDistance) {
+        // Reaching a new level at a fix along the leg is only possible for the
+        // "to" fix.
+        self.climb_descent.reach_at = Some(level);
+    }
+
+    pub fn tas(&mut self, tas: Speed) {
+        self.tas = Some(tas);
+        trace!("cruise speed set to {tas}");
+    }
+
+    pub fn wind(&mut self, wind: Wind) {
+        self.wind = Some(wind);
+        trace!("wind set to {wind}");
+    }
+}
 
 /// A leg `from` one point `to` another.
 #[derive(Clone, PartialEq, Debug)]
@@ -31,6 +133,7 @@ use crate::{Fuel, VerticalDistance, Wind};
 pub struct Leg {
     from: NavAid,
     to: NavAid,
+    climb_descent: ClimbDescentAlongLeg,
     level: Option<VerticalDistance>,
     tas: Option<Speed>,
     wind: Option<Wind>,
@@ -45,9 +148,25 @@ pub struct Leg {
 }
 
 impl Leg {
-    pub fn new(
+    pub(super) fn builder() -> LegBuilder {
+        LegBuilder::default()
+    }
+
+    pub fn divert(&self, alternate: NavAid) -> Leg {
+        Leg::new(
+            self.from.clone(),
+            alternate,
+            self.climb_descent,
+            self.level,
+            self.tas,
+            self.wind,
+        )
+    }
+
+    fn new(
         from: NavAid,
         to: NavAid,
+        climb_descent: ClimbDescentAlongLeg,
         level: Option<VerticalDistance>,
         tas: Option<Speed>,
         wind: Option<Wind>,
@@ -80,7 +199,7 @@ impl Leg {
         let ete = gs.map(|gs| dist / gs);
 
         trace!(
-            "leg {} -> {}: dist={:?}, bearing={:?}, gs={:?}, ete={:?}",
+            "leg {} -> {}: dist={:.1}, bearing={:.1}, gs={:?}, ete={:?}",
             from.ident(),
             to.ident(),
             dist,
@@ -92,6 +211,7 @@ impl Leg {
         Self {
             from,
             to,
+            climb_descent,
             level,
             tas,
             wind,
@@ -121,6 +241,11 @@ impl Leg {
         self.level.as_ref()
     }
 
+    /// The climb and descent transitions along this leg.
+    pub fn climb_descent(&self) -> &ClimbDescentAlongLeg {
+        &self.climb_descent
+    }
+
     /// The desired true airspeed (TAS).
     pub fn tas(&self) -> Option<&Speed> {
         self.tas.as_ref()
@@ -129,6 +254,11 @@ impl Leg {
     /// The wind to take into account.
     pub fn wind(&self) -> Option<&Wind> {
         self.wind.as_ref()
+    }
+
+    /// The headwind component along this leg's bearing.
+    pub fn headwind(&self) -> Option<Speed> {
+        self.wind.map(|w| w.headwind(&self.bearing))
     }
 
     /// The true heading considering the wind correction angle (WCA).
@@ -158,7 +288,7 @@ impl Leg {
     }
 
     // TODO add test to verify calculation
-    /// The ground speed in knots.
+    /// The ground speed.
     pub fn gs(&self) -> Option<&Speed> {
         self.gs.as_ref()
     }
@@ -174,12 +304,88 @@ impl Leg {
         self.ete.as_ref()
     }
 
-    /// The [Fuel] consumed on the leg with the given [Performance].
-    pub fn fuel(&self, perf: &Performance) -> Option<Fuel> {
-        match (self.level, self.ete) {
-            (Some(level), Some(ete)) => Some(perf.ff(&level) * ete),
-            _ => None,
+    /// The [fuel breakdown](LegFuel) for the leg with the given
+    /// [performance](LegPerformance).
+    ///
+    /// When climb or descent performance is available, climb/descent fuel is
+    /// computed for any level transitions on the leg and the cruise time is
+    /// reduced accordingly. Falls back to pure cruise when no transitions
+    /// exist or no climb/descent performance is provided.
+    pub fn fuel(&self, perf: &LegPerformance) -> Option<LegFuel> {
+        let from_level = self.climb_descent.from;
+        let to_level = self.climb_descent.to;
+        let reach_at = self.climb_descent.reach_at;
+
+        let mut climb_time = Duration::s(0);
+        let mut descent_time = Duration::s(0);
+        let mut climb_fuel: Option<Fuel> = None;
+        let mut descent_fuel: Option<Fuel> = None;
+
+        let mut add_transition =
+            |current: &VerticalDistance, target: &VerticalDistance| -> Option<()> {
+                let (lo, hi) = if target > current {
+                    (current, target)
+                } else {
+                    (target, current)
+                };
+                let is_climb = target > current;
+                let cdp = if is_climb {
+                    perf.climb()?
+                } else {
+                    perf.descent()?
+                };
+
+                let hw = self.headwind().unwrap_or(Speed::kt(0.0));
+                let result = cdp.between(lo, hi)?.with_wind(hw);
+
+                if is_climb {
+                    climb_time = climb_time + result.time;
+                    climb_fuel = Some(match climb_fuel {
+                        Some(f) => f + result.fuel,
+                        None => result.fuel,
+                    });
+                } else {
+                    descent_time = descent_time + result.time;
+                    descent_fuel = Some(match descent_fuel {
+                        Some(f) => f + result.fuel,
+                        None => result.fuel,
+                    });
+                }
+                Some(())
+            };
+
+        // Transition at FROM fix (to_level)
+        let mut current = from_level;
+        if let (Some(from), Some(to)) = (current, to_level) {
+            if add_transition(&from, &to).is_some() {
+                current = Some(to);
+            }
         }
+
+        // Transition reaching TO fix (reach_at)
+        if let (Some(from), Some(ra)) = (current.or(from_level), reach_at) {
+            add_transition(&from, &ra);
+        }
+
+        // Cruise for the remaining time (requires both ETE and a cruise level)
+        let cruise_fuel = match (self.ete, self.level) {
+            (Some(ete), Some(level)) => {
+                let climb_descent_time = climb_time + descent_time;
+                if climb_descent_time < ete {
+                    let cruise_time = ete - climb_descent_time;
+                    perf.cruise().map(|c| c.ff(&level) * cruise_time)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+
+        if climb_fuel.is_none() && cruise_fuel.is_none() && descent_fuel.is_none() {
+            return None;
+        }
+
+        Some(LegFuel::new(climb_fuel, cruise_fuel, descent_fuel))
     }
 }
 

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Climb/descent fuel per leg
+- "Reach level at fix" syntax in route prompt
+- Climb/descent performance
 - Instrument key code paths with structured log messages
 
 ## [0.6.0] - 2026-02-23

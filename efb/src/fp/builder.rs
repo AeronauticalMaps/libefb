@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,6 +33,8 @@ pub struct FlightPlanningBuilder {
     taxi: Option<Fuel>,
     reserve: Option<Reserve>,
     perf: Option<Performance>,
+    climb_perf: Option<ClimbDescentPerformance>,
+    descent_perf: Option<ClimbDescentPerformance>,
     takeoff_perf: Option<TakeoffLandingPerformance>,
     takeoff_factors: Option<AlteringFactors>,
     origin_rwycc: Option<RunwayConditionCode>,
@@ -61,14 +63,20 @@ impl FlightPlanningBuilder {
             &self.policy,
             self.taxi,
             &self.reserve,
-            &self.perf,
         ) {
-            (Some(aircraft), Some(policy), Some(taxi), Some(reserve), Some(perf)) => {
+            (Some(aircraft), Some(policy), Some(taxi), Some(reserve)) => {
                 debug!("computing fuel planning (policy={:?})", policy);
-                let fp = FuelPlanning::new(aircraft, policy, taxi, route, reserve, perf);
+                let leg_perf = LegPerformance::new(
+                    self.perf.as_ref(),
+                    self.climb_perf.as_ref(),
+                    self.descent_perf.as_ref(),
+                );
+                let fp = FuelPlanning::new(aircraft, policy, taxi, route, reserve, &leg_perf);
+
                 if fp.is_none() {
                     warn!("fuel planning could not be computed (missing route totals)");
                 }
+
                 fp
             }
             _ => {
@@ -206,6 +214,16 @@ impl FlightPlanningBuilder {
 
     pub fn perf(&mut self, perf: Performance) -> &mut Self {
         self.perf = Some(perf);
+        self
+    }
+
+    pub fn climb_perf(&mut self, perf: ClimbDescentPerformance) -> &mut Self {
+        self.climb_perf = Some(perf);
+        self
+    }
+
+    pub fn descent_perf(&mut self, perf: ClimbDescentPerformance) -> &mut Self {
+        self.descent_perf = Some(perf);
         self
     }
 

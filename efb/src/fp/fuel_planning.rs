@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ use log::{debug, trace};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use super::Performance;
+use super::{LegPerformance, Performance};
 use crate::aircraft::Aircraft;
 use crate::measurements::Duration;
 use crate::route::Route;
@@ -69,7 +69,6 @@ pub enum FuelPolicy {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct FuelPlanning {
     taxi: Fuel,
-    climb: Option<Fuel>,
     trip: Fuel,
     alternate: Option<Fuel>,
     reserve: Fuel,
@@ -86,21 +85,28 @@ impl FuelPlanning {
         taxi: Fuel,
         route: &Route,
         reserve: &Reserve,
-        perf: &Performance,
+        perf: &LegPerformance,
     ) -> Option<Self> {
-        let climb = None; // TODO add climb fuel
-        let trip = route.totals(Some(perf))?.fuel().cloned()?;
-        let alternate = route.alternate().and_then(|alternate| alternate.fuel(perf));
-        let reserve = reserve.fuel(perf, &route.level()?);
+        let trip = *route.totals(Some(perf))?.fuel()?.total();
 
-        trace!("fuel planning: trip={:?}, alternate={:?}, reserve={:?}", trip, alternate, reserve);
+        // Use the last leg's level for reserve fuel calculation
+        let last_level = route.legs().last().and_then(|l| l.level()).cloned()?;
+
+        let alternate = route
+            .alternate()
+            .and_then(|alternate| alternate.fuel(perf))
+            .map(|lf| *lf.total());
+        let reserve = reserve.fuel(perf.cruise()?, &last_level);
+
+        trace!(
+            "fuel planning: trip={:.1}, alternate={:.1?}, reserve={:.1?}",
+            trip,
+            alternate,
+            reserve
+        );
 
         let min = {
             let mut min = taxi + trip + reserve;
-
-            if let Some(climb) = climb {
-                min = min + climb;
-            }
 
             if let Some(alternate) = alternate {
                 min = min + alternate;
@@ -131,13 +137,12 @@ impl FuelPlanning {
         let after_landing = total - taxi - trip;
 
         debug!(
-            "fuel planning: min={:?}, total={:?}, extra={:?}, after_landing={:?}",
+            "fuel planning: min={:.1}, total={:.1}, extra={:.1?}, after_landing={:.1}",
             min, total, extra, after_landing
         );
 
         Some(Self {
             taxi,
-            climb,
             trip,
             alternate,
             reserve,
@@ -150,10 +155,6 @@ impl FuelPlanning {
 
     pub fn taxi(&self) -> &Fuel {
         &self.taxi
-    }
-
-    pub fn climb(&self) -> Option<&Fuel> {
-        self.climb.as_ref()
     }
 
     pub fn trip(&self) -> &Fuel {
