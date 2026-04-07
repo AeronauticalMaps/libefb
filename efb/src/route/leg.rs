@@ -125,6 +125,19 @@ impl LegBuilder {
         self.wind = Some(wind);
         trace!("wind set to {wind}");
     }
+
+    /// Marks the next TO fix as the route destination.
+    ///
+    /// If the destination is an airport and no explicit `reach_at` level has
+    /// been set, the aircraft must descend to the airport elevation by the
+    /// TO fix.
+    pub fn destination(&mut self, dest: &NavAid) {
+        if self.climb_descent.reach_at.is_none() {
+            if let NavAid::Airport(arpt) = dest {
+                self.climb_descent.reach_at = Some(arpt.elevation);
+            }
+        }
+    }
 }
 
 /// A leg `from` one point `to` another.

@@ -98,7 +98,13 @@ impl Route {
         let mut from: Option<NavAid> = None;
         let mut to: Option<NavAid> = None;
 
-        for token in &self.tokens {
+        let destination_idx = self
+            .tokens
+            .tokens()
+            .iter()
+            .rposition(|t| matches!(t.kind(), TokenKind::Airport { .. }));
+
+        for (i, token) in self.tokens.tokens().iter().enumerate() {
             match token.kind() {
                 TokenKind::Speed(value) => {
                     builder.tas(*value);
@@ -117,35 +123,34 @@ impl Route {
                 }
 
                 TokenKind::Airport { arpt, rwy } => {
+                    let navaid = NavAid::Airport(Rc::clone(arpt));
+
                     // Track for leg building
                     if from.is_none() {
-                        from = Some(NavAid::Airport(Rc::clone(arpt)));
+                        from = Some(navaid.clone());
                     } else if to.is_none() {
-                        to = Some(NavAid::Airport(Rc::clone(arpt)));
+                        to = Some(navaid.clone());
                     }
 
-                    // First airport is origin, subsequent airports are destinations
-                    match &self.origin {
-                        None => {
-                            // First airport = origin with optional takeoff runway
-                            debug!(
-                                "origin set to {} (RWY {:?})",
-                                arpt.ident(),
-                                rwy.as_ref().map(|r| &r.designator)
-                            );
-                            self.origin = Some(Rc::clone(arpt));
-                            self.takeoff_rwy = rwy.clone();
-                        }
-                        Some(_) => {
-                            // Any subsequent airport = destination with optional landing runway
-                            debug!(
-                                "destination set to {} (RWY {:?})",
-                                arpt.ident(),
-                                rwy.as_ref().map(|r| &r.designator)
-                            );
-                            self.destination = Some(Rc::clone(arpt));
-                            self.landing_rwy = rwy.clone();
-                        }
+                    if self.origin.is_none() {
+                        // First airport = origin with optional takeoff runway
+                        debug!(
+                            "origin set to {} (RWY {:?})",
+                            arpt.ident(),
+                            rwy.as_ref().map(|r| &r.designator)
+                        );
+                        self.origin = Some(Rc::clone(arpt));
+                        self.takeoff_rwy = rwy.clone();
+                    } else if Some(i) == destination_idx {
+                        // Last airport = destination with optional landing runway
+                        debug!(
+                            "destination set to {} (RWY {:?})",
+                            arpt.ident(),
+                            rwy.as_ref().map(|r| &r.designator)
+                        );
+                        self.destination = Some(Rc::clone(arpt));
+                        self.landing_rwy = rwy.clone();
+                        builder.destination(&navaid);
                     }
                 }
 
