@@ -88,25 +88,22 @@ In a first stage, the library should be extended to allow proper
 flight planning by adding the following feature:
 
 - [x] Add runway analysis to planning
-- [ ] Add missions with multiple flights
-- [x] Add Python bindings to allow easy scripted planning
 - [x] Add measurement trait and refactor core types
-- [ ] Extend printer to render HTML
+- [x] Add vertical flight profile to FMS
 - [ ] Add AIXM parser
-- [ ] Add NOTAMS to FMS
-- [ ] Add vertical flight profile to FMS
 - [ ] Add book to outline how the FMS and planning is used from the
       user perspective
+- [ ] Add NOTAMS to FMS
+- [ ] Add missions with multiple flights
 
 Once those feature are available and flight planning can be conducted
 with this library, the goal is to move on to add feature that will be
 needed in flight:
 
-- [ ] Create concept to provide geo-referenced VFR approach charts
 - [ ] Add position input to FMS
 - [ ] Add airspace alerts to FMS
 - [ ] Add location info to FMS
-- [ ] Create concept to gather weather data and METAR
+- [ ] Gather weather data and METAR
 - [ ] Add initial airport information with frequencies and RWYs
 - [ ] Add landing field analysis for EMER
 - [ ] Add wake turbulence predictor
