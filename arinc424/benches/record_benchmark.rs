@@ -33,7 +33,10 @@ fn bench_to_owned(c: &mut Criterion) {
     c.bench_function("numeric to u32", |b| {
         b.iter(|| {
             let rwy = Runway::try_from(black_box(RUNWAY)).expect("runway should parse");
-            let _: u32 = rwy.runway_length.as_u32().expect("runway length should parse");
+            let _: u32 = rwy
+                .runway_length
+                .as_u32()
+                .expect("runway length should parse");
         })
     });
 }
