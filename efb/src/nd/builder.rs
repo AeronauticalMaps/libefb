@@ -135,4 +135,9 @@ impl NavigationDataBuilder {
         self.source_format = Some(fmt);
         self
     }
+
+    pub(crate) fn with_partition_id(mut self, id: u64) -> Self {
+        self.partition_id = id;
+        self
+    }
 }

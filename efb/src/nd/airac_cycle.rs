@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -54,6 +54,14 @@ pub struct AiracCycle {
 impl AiracCycle {
     pub fn new(year: u8, cycle: u8) -> Self {
         Self { year, cycle }
+    }
+
+    pub fn year(&self) -> u8 {
+        self.year
+    }
+
+    pub fn cycle(&self) -> u8 {
+        self.cycle
     }
 
     /// Calculates the effective date when this AIRAC cycle starts.

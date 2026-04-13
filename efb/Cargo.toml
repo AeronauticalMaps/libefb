@@ -15,7 +15,7 @@
 
 [package]
 name = "efb"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 authors = ["Joe Pearson"]
 license = "Apache-2.0"
@@ -34,14 +34,17 @@ rustdoc-args = ["--cfg", "docsrs"]
 arinc424 = { path = "../arinc424", version = "0.4.0" }
 chrono = "0.4.42"
 geo = "0.32.0"
-rstar = "0.12.2"
 geojson = { version = "0.24.2", optional = true }
 log = "0.4"
+rstar = "0.12.2"
+rusqlite = { version = "0.39.0", features = ["bundled"], optional = true }
+rusqlite_migration = { version = "2.5.0", optional = true }
 serde = { version = "1.0.219", features = ["derive", "rc"], optional = true  }
 time = { version = "0.3.47", features = ["wasm-bindgen"] }
 world_magnetic_model = "0.2.0"
 
 [features]
 geojson = ["dep:geojson"]
-serde = ["dep:serde", "geo/serde", "rstar/serde"]
 handbook = []
+serde = ["dep:serde", "geo/serde", "rstar/serde"]
+sqlite = ["dep:rusqlite", "dep:rusqlite_migration"]

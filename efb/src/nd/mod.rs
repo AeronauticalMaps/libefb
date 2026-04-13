@@ -43,6 +43,9 @@ mod navaid;
 mod runway;
 mod waypoint;
 
+#[cfg(feature = "sqlite")]
+pub mod db;
+
 pub use airac_cycle::{AiracCycle, CycleValidity};
 pub use airport::Airport;
 pub use airspace::{Airspace, AirspaceClassification, AirspaceType};
@@ -135,7 +138,16 @@ impl NavigationData {
     ///
     /// [format]: SourceFormat
     pub fn source_format(&self) -> Option<SourceFormat> {
-        self.source_format
+        let mut formats = std::iter::once(self.source_format)
+            .chain(self.partitions.values().map(|p| p.source_format))
+            .flatten();
+
+        let first = formats.next()?;
+        if formats.all(|f| f == first) {
+            Some(first)
+        } else {
+            None
+        }
     }
 
     /// Returns the identifier of the navigation data.
@@ -273,6 +285,25 @@ impl NavigationData {
         let id = other.partition_id();
         debug!("appending navigation data partition {}", id);
         self.partitions.insert(id, other);
+        debug!(
+            "navigation data now has {} partition(s)",
+            self.partitions.len()
+        );
+        self.reindex();
+    }
+
+    /// Concatenates other navigation data.
+    ///
+    /// Unlike [`append`] this method can be used to append multiple partitions
+    /// since the spatial index is only reindexed after all partitions are add.
+    ///
+    /// [`append`]: Self::append
+    pub fn concat(&mut self, other: Vec<NavigationData>) {
+        for nd in other {
+            let id = nd.partition_id();
+            debug!("appending navigation data partition {}", id);
+            self.partitions.insert(id, nd);
+        }
         debug!(
             "navigation data now has {} partition(s)",
             self.partitions.len()
