@@ -115,7 +115,10 @@ impl NavigationData {
             }
         }
 
-        let nd = builder.with_source(data).build();
+        let nd = builder
+            .with_source(data)
+            .with_format(SourceFormat::A424)
+            .build();
 
         info!(
             "ARINC 424 loading complete: {} waypoints, {} airports, {} runways, {} airspaces",

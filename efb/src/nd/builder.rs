@@ -32,6 +32,7 @@ pub struct NavigationDataBuilder {
     locations: HashSet<LocationIndicator>,
     cycle: Option<AiracCycle>,
     partition_id: u64,
+    source_format: Option<SourceFormat>,
     errors: Vec<Error>,
 }
 
@@ -79,6 +80,7 @@ impl NavigationDataBuilder {
             locations: self.locations.into_iter().collect(),
             cycle: self.cycle,
             partition_id: self.partition_id,
+            source_format: self.source_format,
             partitions: HashMap::new(),
             errors: self.errors,
         }
@@ -126,6 +128,11 @@ impl NavigationDataBuilder {
         let mut hasher = DefaultHasher::new();
         data.hash(&mut hasher);
         self.partition_id = hasher.finish();
+        self
+    }
+
+    pub fn with_format(mut self, fmt: SourceFormat) -> Self {
+        self.source_format = Some(fmt);
         self
     }
 }

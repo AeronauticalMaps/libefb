@@ -141,7 +141,7 @@ pub mod prelude {
         FuelPolicy, LegPerformance, Performance, Reserve, TakeoffLandingPerformance,
     };
     pub use crate::measurements::*;
-    pub use crate::nd::{Fix, InputFormat, NavigationData};
+    pub use crate::nd::{Fix, NavigationData, SourceFormat};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -27,7 +27,7 @@ use log::{debug, info, trace};
 
 use crate::error::Error;
 use crate::fc;
-use crate::nd::{Airspace, AirspaceClassification, AirspaceType, NavigationData};
+use crate::nd::{Airspace, AirspaceClassification, AirspaceType, NavigationData, SourceFormat};
 use crate::VerticalDistance;
 use geo::Point;
 
@@ -51,7 +51,10 @@ impl NavigationData {
         builder.add_airspace((&mut element).into());
         count += 1;
 
-        let nd = builder.with_source(s.as_bytes()).build();
+        let nd = builder
+            .with_source(s.as_bytes())
+            .with_format(SourceFormat::OpenAir)
+            .build();
         info!("OpenAir loading complete: {} airspaces", count);
         debug!("OpenAir data partition ID: {}", nd.partition_id());
 

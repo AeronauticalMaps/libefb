@@ -46,11 +46,6 @@ typedef enum {
   JetA,
 } EfbFuelType;
 
-typedef enum {
-  Arinc424,
-  OpenAir,
-} EfbInputFormat;
-
 /// Length unit with _m_ as SI unit.
 typedef enum {
   Centimeters,
@@ -67,6 +62,14 @@ typedef enum {
   Kilograms,
   Pounds,
 } EfbMassUnit;
+
+/// The file format from which navigation data was parsed.
+typedef enum {
+  /// ARINC 424 navigation data.
+  A424,
+  /// OpenAir airspace format.
+  OpenAir,
+} EfbSourceFormat;
 
 /// Speed unit with _m/s_ as SI unit.
 typedef enum {
@@ -610,7 +613,7 @@ efb_fms_free(EfbFMS *fms);
 ///
 /// It is up to the caller to guarantee that `s` points to a valid string.
 void
-efb_fms_nd_read(EfbFMS *fms, const char *s, EfbInputFormat fmt);
+efb_fms_nd_read(EfbFMS *fms, const char *s, EfbSourceFormat fmt);
 
 /// Decodes the route and enters it into the FMS.
 ///

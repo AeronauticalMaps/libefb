@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ use std::ffi::{c_char, CStr, CString};
 
 use efb::fms::FMS;
 use efb::fp::{FlightPlanning, FlightPlanningBuilder};
-use efb::nd::{InputFormat, NavigationData};
+use efb::nd::{NavigationData, SourceFormat};
 
 use super::EfbRoute;
 
@@ -60,14 +60,14 @@ pub extern "C" fn efb_fms_free(fms: Option<Box<EfbFMS>>) {
 ///
 /// It is up to the caller to guarantee that `s` points to a valid string.
 #[no_mangle]
-pub unsafe extern "C" fn efb_fms_nd_read(fms: &mut EfbFMS, s: *const c_char, fmt: InputFormat) {
+pub unsafe extern "C" fn efb_fms_nd_read(fms: &mut EfbFMS, s: *const c_char, fmt: SourceFormat) {
     // TODO: Shouldn't crash when passing the wrong format!
     if let Ok(s) = unsafe { CStr::from_ptr(s).to_str() } {
         let new_nd = match fmt {
             // TODO: This is quite inefficient. Change the reader function once
             //       OpenAir is parsed from an byte array too.
-            InputFormat::Arinc424 => NavigationData::try_from_arinc424(s.as_bytes()),
-            InputFormat::OpenAir => NavigationData::try_from_openair(s),
+            SourceFormat::A424 => NavigationData::try_from_arinc424(s.as_bytes()),
+            SourceFormat::OpenAir => NavigationData::try_from_openair(s),
         };
 
         if let Ok(new_nd) = new_nd {
