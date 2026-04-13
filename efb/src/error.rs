@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -74,6 +74,15 @@ pub enum Error {
     /// The RWYCC should be between 0 and 6.
     InvalidRWYCC,
 
+    // Errors that originate from the SQLite-backed navigation data store:
+    //
+    /// The underlying SQLite operation failed. The wrapped string is the
+    /// stringified `rusqlite` / `rusqlite_migration` error message; we
+    /// stringify because [`Error`] derives `Clone`/`Eq`/`Hash` and the raw
+    /// SQLite error types do not.
+    #[cfg(feature = "sqlite")]
+    Database(String),
+
     // Errors that originate from the mass & balance planning:
     //
     /// The number of masses doesn't match the number of stations to which the
@@ -129,6 +138,9 @@ impl fmt::Display for Error {
             Self::UnknownIdent(ident) => write!(f, "unknown ident {ident}"),
             Self::InvalidRWYCC => write!(f, "RWYCC should be between 0 and 6"),
 
+            #[cfg(feature = "sqlite")]
+            Self::Database(msg) => write!(f, "database error: {msg}"),
+
             Self::UnexpectedMassesForStations => {
                 write!(f, "mass should match to aircraft's stations")
             }
@@ -151,3 +163,17 @@ impl fmt::Display for Error {
 }
 
 impl error::Error for Error {}
+
+#[cfg(feature = "sqlite")]
+impl From<rusqlite::Error> for Error {
+    fn from(err: rusqlite::Error) -> Self {
+        Self::Database(err.to_string())
+    }
+}
+
+#[cfg(feature = "sqlite")]
+impl From<rusqlite_migration::Error> for Error {
+    fn from(err: rusqlite_migration::Error) -> Self {
+        Self::Database(err.to_string())
+    }
+}

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Load navigation data from and store in SQLite database
 - Climb/descent fuel per leg
 - "Reach level at fix" syntax in route prompt
 - Climb/descent performance
