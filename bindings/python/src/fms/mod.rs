@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,27 +16,27 @@
 use pyo3::prelude::*;
 
 use efb::fms::FMS;
-use efb::nd::{InputFormat, NavigationData};
+use efb::nd::{NavigationData, SourceFormat};
 
 mod flight_planning_builder;
 use flight_planning_builder::*;
 
 /// Input format of navigation data.
-#[pyclass(module = "efb", name = "InputFormat", eq, eq_int)]
+#[pyclass(module = "efb", name = "SourceFormat", eq, eq_int)]
 #[derive(Clone, PartialEq)]
-pub enum PyInputFormat {
-    #[pyo3(name = "ARINC_424")]
-    Arinc424,
+pub enum PySourceFormat {
+    #[pyo3(name = "A424")]
+    A424,
 
     #[pyo3(name = "OPEN_AIR")]
     OpenAir,
 }
 
-impl From<PyInputFormat> for InputFormat {
-    fn from(fmt: PyInputFormat) -> InputFormat {
+impl From<PySourceFormat> for SourceFormat {
+    fn from(fmt: PySourceFormat) -> SourceFormat {
         match fmt {
-            PyInputFormat::Arinc424 => InputFormat::Arinc424,
-            PyInputFormat::OpenAir => InputFormat::OpenAir,
+            PySourceFormat::A424 => SourceFormat::A424,
+            PySourceFormat::OpenAir => SourceFormat::OpenAir,
         }
     }
 }
@@ -60,11 +60,11 @@ impl PyFMS {
     /// Reads the navigation data from a string.
     ///
     /// :param str s: The data as string.
-    /// :param InputFormat fmt: The format of the string.
-    pub fn nd_read(&mut self, s: &str, fmt: PyInputFormat) {
+    /// :param SourceFormat fmt: The format of the string.
+    pub fn nd_read(&mut self, s: &str, fmt: PySourceFormat) {
         let new_nd = match fmt {
-            PyInputFormat::Arinc424 => NavigationData::try_from_arinc424(s.as_bytes()),
-            PyInputFormat::OpenAir => NavigationData::try_from_openair(s),
+            PySourceFormat::A424 => NavigationData::try_from_arinc424(s.as_bytes()),
+            PySourceFormat::OpenAir => NavigationData::try_from_openair(s),
         };
 
         if let Ok(new_nd) = new_nd {
@@ -98,7 +98,7 @@ impl PyFMS {
 
 pub fn register_fms_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyFlightPlanningBuilder>()?;
-    m.add_class::<PyInputFormat>()?;
+    m.add_class::<PySourceFormat>()?;
     m.add_class::<PyFMS>()?;
     Ok(())
 }

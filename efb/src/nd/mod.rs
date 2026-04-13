@@ -55,10 +55,14 @@ pub use waypoint::*;
 pub(crate) use builder::NavigationDataBuilder;
 pub(crate) use index::{AirspaceIndex, NavAidIndex};
 
+/// The file format from which navigation data was parsed.
 #[repr(C)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub enum InputFormat {
-    Arinc424,
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum SourceFormat {
+    /// ARINC 424 navigation data.
+    A424,
+    /// OpenAir airspace format.
     OpenAir,
 }
 
@@ -102,6 +106,7 @@ pub struct NavigationData {
     locations: Vec<LocationIndicator>,
     cycle: Option<AiracCycle>,
     partition_id: u64,
+    source_format: Option<SourceFormat>,
     partitions: HashMap<u64, NavigationData>,
     errors: Vec<Error>,
 }
@@ -122,6 +127,15 @@ impl NavigationData {
 
     pub fn cycle(&self) -> Option<&AiracCycle> {
         self.cycle.as_ref()
+    }
+
+    /// Returns the [format] from which the navigation data was created.
+    ///
+    /// Returns `None` if the navigation data was created from multiple sources.
+    ///
+    /// [format]: SourceFormat
+    pub fn source_format(&self) -> Option<SourceFormat> {
+        self.source_format
     }
 
     /// Returns the identifier of the navigation data.
