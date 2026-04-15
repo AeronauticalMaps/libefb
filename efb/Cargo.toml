@@ -40,7 +40,7 @@ rstar = "0.12.2"
 rusqlite = { version = "0.39.0", features = ["bundled"], optional = true }
 rusqlite_migration = { version = "2.5.0", optional = true }
 serde = { version = "1.0.219", features = ["derive", "rc"], optional = true  }
-time = { version = "0.3.36", features = ["wasm-bindgen"] }
+time = { version = "0.3.47", features = ["wasm-bindgen"] }
 world_magnetic_model = "0.2.0"
 
 [features]
