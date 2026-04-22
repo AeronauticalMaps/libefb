@@ -15,7 +15,7 @@
 
 [package]
 name = "efb"
-version = "0.7.0"
+version = "0.7.1"
 edition = "2021"
 authors = ["Joe Pearson"]
 license = "Apache-2.0"
