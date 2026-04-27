@@ -52,7 +52,7 @@ impl NavAid {
 }
 
 impl Fix for NavAid {
-    fn ident(&self) -> String {
+    fn ident(&self) -> &str {
         match self {
             Self::Airport(arpt) => arpt.ident(),
             Self::Waypoint(wp) => wp.ident(),

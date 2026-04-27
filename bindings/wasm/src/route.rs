@@ -34,12 +34,12 @@ pub struct JsLeg {
 impl JsLeg {
     #[wasm_bindgen(getter)]
     pub fn from(&self) -> String {
-        self.inner.from().ident()
+        self.inner.from().ident().to_string()
     }
 
     #[wasm_bindgen(getter)]
     pub fn to(&self) -> String {
-        self.inner.to().ident()
+        self.inner.to().ident().to_string()
     }
 
     #[wasm_bindgen(getter)]

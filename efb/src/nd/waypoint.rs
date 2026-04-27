@@ -69,8 +69,8 @@ impl Waypoint {
 }
 
 impl Fix for Waypoint {
-    fn ident(&self) -> String {
-        self.fix_ident.clone()
+    fn ident(&self) -> &str {
+        &self.fix_ident
     }
 
     fn coordinate(&self) -> Point<f64> {

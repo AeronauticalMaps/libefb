@@ -88,7 +88,7 @@ impl NavigationDataBuilder {
 
     pub fn add_airport(&mut self, arpt: Airport) {
         add_navaid!(self, arpt);
-        self.airports.insert(arpt.ident(), arpt);
+        self.airports.insert(arpt.ident().to_string(), arpt);
     }
 
     pub fn add_runway(&mut self, ident: String, rwy: Runway) {

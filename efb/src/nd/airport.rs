@@ -36,8 +36,8 @@ pub struct Airport {
 }
 
 impl Fix for Airport {
-    fn ident(&self) -> String {
-        self.icao_ident.clone()
+    fn ident(&self) -> &str {
+        &self.icao_ident
     }
 
     fn coordinate(&self) -> Point<f64> {

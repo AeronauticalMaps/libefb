@@ -18,7 +18,7 @@ use geo::Point;
 
 /// A fix location with coordinates.
 pub trait Fix: Sized {
-    fn ident(&self) -> String;
+    fn ident(&self) -> &str;
 
     fn coordinate(&self) -> Point<f64>;
 

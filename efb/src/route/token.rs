@@ -471,7 +471,7 @@ impl Lexer {
                             arpt.ident()
                         );
                         WordKind::Err(Error::UnknownRunwayInRoute {
-                            arpt: arpt.ident(),
+                            arpt: arpt.ident().to_string(),
                             rwy: rwy_designator.to_string(),
                         })
                     }
