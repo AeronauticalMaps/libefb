@@ -275,6 +275,96 @@ impl NavigationData {
         result
     }
 
+    /// Filters navigation aids by identifier prefix.
+    ///
+    /// Returns all navigation aids whose [ident] starts with the given prefix,
+    /// including navaids from appended [partitions]. The match is
+    /// case-sensitive.
+    ///
+    /// See [`filter_inbetween`] for a spatially constrained variant.
+    ///
+    /// [ident]: Fix::ident
+    /// [partitions]: Self::append
+    /// [`filter_inbetween`]: Self::filter_inbetween
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use efb::nd::{NavigationData, Fix};
+    /// # fn search(nd: &NavigationData) {
+    /// let matches: Vec<_> = nd.filter("EDD").collect();
+    /// for navaid in &matches {
+    ///     println!("{}", navaid.ident());
+    /// }
+    /// # }
+    /// ```
+    pub fn filter<'a>(&'a self, prefix: &'a str) -> impl Iterator<Item = NavAid> + 'a {
+        self.navaids()
+            .filter(move |navaid| navaid.ident().starts_with(prefix))
+    }
+
+    /// Filters navigation aids by prefix between two points.
+    ///
+    /// Returns all navigation aids within an axis-aligned bounding box between
+    /// `a` and `b` whose [ident] starts with `prefix`. The two reference fixes
+    /// themselves are excluded from the results.
+    ///
+    /// Terminal waypoints associated with `a` and `b` are included in
+    /// the search.
+    ///
+    /// See [`filter`] for an unbounded variant.
+    ///
+    /// [ident]: Fix::ident
+    /// [`filter`]: Self::filter
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use efb::nd::{NavigationData, Fix};
+    /// # fn search(nd: &NavigationData) -> Option<()> {
+    /// let ham = nd.find("EDDH")?;
+    /// let muc = nd.find("EDDM")?;
+    ///
+    /// let matches: Vec<_> = nd.filter_inbetween("EDD", &ham, &muc).collect();
+    /// for navaid in &matches {
+    ///     println!("{}", navaid.ident());
+    /// }
+    /// # Some(())
+    /// # }
+    /// ```
+    pub fn filter_inbetween<'a>(
+        &'a self,
+        prefix: &'a str,
+        a: &'a NavAid,
+        b: &'a NavAid,
+    ) -> impl Iterator<Item = NavAid> + 'a {
+        let point_a = a.coordinate();
+        let point_b = b.coordinate();
+
+        // TODO: Offset BBox by few NM to get larger enclosing area.
+        let min_x = point_a.x().min(point_b.x());
+        let max_x = point_a.x().max(point_b.x());
+        let min_y = point_a.y().min(point_b.y());
+        let max_y = point_a.y().max(point_b.y());
+
+        let terminal_waypoints = self
+            .terminal_waypoints(a.ident())
+            .chain(self.terminal_waypoints(b.ident()))
+            .map(|wp| NavAid::Waypoint(Rc::clone(wp)));
+
+        self.navaids()
+            .chain(terminal_waypoints)
+            .filter(move |navaid| {
+                let c = navaid.coordinate();
+                (navaid != a && navaid != b)
+                    && c.x() >= min_x
+                    && c.x() <= max_x
+                    && c.y() >= min_y
+                    && c.y() <= max_y
+                    && navaid.ident().starts_with(prefix)
+            })
+    }
+
     /// Appends other navigation data.
     ///
     /// The other navigation data can be [removed] using it's [partition ID].
@@ -356,6 +446,12 @@ impl NavigationData {
         &self.errors
     }
 
+    fn navaids(&self) -> impl Iterator<Item = NavAid> + '_ {
+        self.airports()
+            .map(|arpt| NavAid::Airport(Rc::clone(arpt)))
+            .chain(self.waypoints().map(|wp| NavAid::Waypoint(Rc::clone(wp))))
+    }
+
     pub(crate) fn airports(&self) -> impl Iterator<Item = &Rc<Airport>> {
         self.airports.iter().chain(
             self.partitions
@@ -403,28 +499,34 @@ mod tests {
 
     use super::*;
 
+    // records with airports EDDB, EDDF, EDDH, EDDK, EDDM, EDDW and TMA Bremen A
+    const RECORDS: &[u8] = br#"
+SEURP EDDBEDA        0        N N52210733E013294581E003000156                   P    MWGE    BERLIN-BRANDENBURG            472082603
+SEURP EDDEEDA        0        N N50584732E010572918E002001034                   P    MWGE    ERFURT-WEIMAR                 399672603
+SEURP EDDFEDA        0        N N50004700E008313700E003000363                   P    MWGE    FRANKFURT MAIN                240442603
+SEURP EDDHEDA        0        N N53374900E009591762E002000053                   P    MWGE    HAMBURG                       360322603
+SEURP EDDKEDA        0        N N50515730E007083388E002000300                   P    MWGE    KOLN/BONN                     186262603
+SEURP EDDMEDA        0        N N48211362E011470991E003001487                   P    MWGE    MUNCHEN                       424672603
+SEURP EDDNEDA        0        N N49295532E011044083E003001044                   P    MWGE    NURNBERG                      408622603
+SEURP EDDWEDA        0        N N53025064E008471229E002000014                   P    MWGE    BREMEN                        248572603
+SEURUCEDKED54A      00100B    G N53060400E008583000                              01500MFL065MTMA BREMEN A                  254082603
+SEURUCEDKED54A      00110     G N53061000E009044500                                                                        254092603
+SEURUCEDKED54A      00120     G N52581300E009050400                                                                        254102603
+SEURUCEDKED54A      00130     G N52580800E008585600                                                                        254112603
+SEURUCEDKED54A      00140     GEN53060400E008583000                                                                        254122603
+"#;
+
+    fn navigation_data() -> NavigationData {
+        NavigationData::try_from_arinc424(RECORDS).expect("ARINC records should parse")
+    }
+
     #[test]
     fn airspace_at_point() {
-        let mut builder = NavigationData::builder();
+        // check points in- and outside of TMA Bremen A
         let inside = coord!(53.03759, 9.00533);
         let outside = coord!(53.04892, 8.90907);
 
-        builder.add_airspace(Airspace {
-            name: String::from("TMA BREMEN A"),
-            airspace_type: AirspaceType::CTA,
-            classification: Some(AirspaceClassification::D),
-            ceiling: VerticalDistance::Fl(65),
-            floor: VerticalDistance::Msl(1500),
-            polygon: polygon![
-                (53.10111, 8.974999),
-                (53.102776, 9.079166),
-                (52.97028, 9.084444),
-                (52.96889, 8.982222),
-                (53.10111, 8.974999)
-            ],
-        });
-
-        let nd = builder.build();
+        let nd = navigation_data();
         let nearby_inside = nd.at(&inside, Length::nm(1.0));
         let nearby_outside = nd.at(&outside, Length::nm(1.0));
 
@@ -483,5 +585,46 @@ mod tests {
         // Large radius - should find everything
         let nearby = nd.at(&center, Length::nm(100.0));
         assert_eq!(nearby.navaids.len(), 3);
+    }
+
+    #[test]
+    fn filter_by_prefix() {
+        let nd = navigation_data();
+
+        let mut results: Vec<_> = nd.filter("EDD").collect();
+        results.sort_by(|a, b| a.ident().cmp(&b.ident()));
+        assert_eq!(results.len(), 8);
+        assert_eq!(results[0].ident(), "EDDB");
+        assert_eq!(results[1].ident(), "EDDE");
+        assert_eq!(results[2].ident(), "EDDF");
+        assert_eq!(results[3].ident(), "EDDH");
+
+        assert_eq!(nd.filter("LFPG").count(), 0);
+        assert_eq!(nd.filter("EDDH").count(), 1);
+    }
+
+    #[test]
+    fn filter_across_partitions() {
+        let mut nd = navigation_data();
+        let partition = NavigationData::try_from_arinc424(b"SEURP EDDSEDA        0        N N48412356E009131907E002001276                   P    MWGE    STUTTGART                     295502603").expect("ARINC record should parse");
+        nd.append(partition);
+
+        let results: Vec<_> = nd.filter("EDD").collect();
+        assert_eq!(results.len(), 9);
+    }
+
+    #[test]
+    fn filter_inbetween_spatial() {
+        let nd = navigation_data();
+        let ham = nd.find("EDDH").expect("EDDH should be in test data");
+        let muc = nd.find("EDDM").expect("EDDM should be in test data");
+
+        let mut results: Vec<_> = nd.filter_inbetween("EDD", &ham, &muc).collect();
+        results.sort_by(|a, b| a.ident().cmp(&b.ident()));
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].ident(), "EDDE");
+        assert_eq!(results[1].ident(), "EDDN");
+        assert_eq!(nd.filter_inbetween("LEM", &ham, &muc).count(), 0);
     }
 }
