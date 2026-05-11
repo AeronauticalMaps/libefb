@@ -69,6 +69,12 @@ impl Token {
     }
 }
 
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.raw)
+    }
+}
+
 /// Semantic token representing a resolved route element.
 ///
 /// Tokens contain fully resolved references to navigation data objects.
