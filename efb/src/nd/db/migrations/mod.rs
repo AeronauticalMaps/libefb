@@ -20,6 +20,7 @@ use crate::error::{Error, Result};
 
 const INITIAL: &str = include_str!("V001__Initial_navigation_data.sql");
 
+#[allow(unused)]
 pub(super) const SCHEMA_VERSION: u32 = 1;
 
 /// Brings the database up to [`SCHEMA_VERSION`].
