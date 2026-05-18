@@ -1,6 +1,6 @@
 ---
-name: commit
-description: Analyze staged git changes and create a commit with a structured message following project conventions
+name: draft-commit
+description: Analyze staged git changes and draft a commit with a structured message following project conventions
 disable-model-invocation: true
 allowed-tools: Bash(git *)
 ---
