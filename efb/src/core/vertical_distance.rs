@@ -174,9 +174,21 @@ impl fmt::Display for VerticalDistance {
     }
 }
 
+/// Orders vertical distances by their effective altitude.
+///
+/// `Gnd` is always the least and `Unlimited` is always the greatest
+/// value. Variants that share a common datum (`Fl`, `Msl`, `Altitude`,
+/// `PressureAltitude`) are compared by converting to MSL assuming the values
+/// are at [STD] pressure. `Agl` values are only comparable among themselves
+/// since they lack a fixed sea-level reference.
+///
 /// # Panics
 ///
-/// Explain why and when we panic...
+/// Panics when comparing `Agl` against a datum-referenced variant (`Fl`, `Msl`,
+/// `Altitude`, or `PressureAltitude`), because AGL cannot be converted to a
+/// common reference without a ground elevation.
+///
+/// [STD]: Pressure::STD
 impl Ord for VerticalDistance {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
@@ -195,11 +207,11 @@ impl Ord for VerticalDistance {
             (Self::PressureAltitude(v), Self::PressureAltitude(o)) => v.cmp(o),
 
             _ => {
-                fn to_msl(vd: &VerticalDistance) -> u16 {
+                fn to_msl(vd: &VerticalDistance) -> i32 {
                     match vd {
-                        VerticalDistance::Fl(v) => v * 100,
-                        VerticalDistance::Msl(v) => *v,
-                        VerticalDistance::Altitude(v) => *v,
+                        VerticalDistance::Fl(v) => (*v as i32) * 100 ,
+                        VerticalDistance::Msl(v) | VerticalDistance::Altitude(v) => *v as i32,
+                        VerticalDistance::PressureAltitude(v) => *v as i32,
                         _ => panic!(
                             "We can't compare {vd} here, since it doesn't reference to common datum."
                         ),
