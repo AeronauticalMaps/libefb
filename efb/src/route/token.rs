@@ -272,11 +272,11 @@ impl Tokens {
         nd: &NavigationData,
     ) -> (Option<NavAid>, Option<NavAid>) {
         match (current, next) {
-            (Some(a), None) => (nd.find_terminal_waypoint(&a.ident(), ident), None),
-            (None, Some(b)) => (None, nd.find_terminal_waypoint(&b.ident(), ident)),
+            (Some(a), None) => (nd.find_terminal_waypoint(a.ident(), ident), None),
+            (None, Some(b)) => (None, nd.find_terminal_waypoint(b.ident(), ident)),
             (Some(a), Some(b)) => (
-                nd.find_terminal_waypoint(&a.ident(), ident),
-                nd.find_terminal_waypoint(&b.ident(), ident),
+                nd.find_terminal_waypoint(a.ident(), ident),
+                nd.find_terminal_waypoint(b.ident(), ident),
             ),
             (None, None) => (None, None),
         }
