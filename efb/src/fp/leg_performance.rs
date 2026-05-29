@@ -45,17 +45,17 @@ impl<'a> LegPerformance<'a> {
     }
 
     /// The cruise performance, if available.
-    pub fn cruise(&self) -> Option<&Performance> {
+    pub fn cruise(&self) -> Option<&'a Performance> {
         self.cruise
     }
 
     /// The climb performance, if available.
-    pub fn climb(&self) -> Option<&ClimbDescentPerformance> {
+    pub fn climb(&self) -> Option<&'a ClimbDescentPerformance> {
         self.climb
     }
 
     /// The descent performance, if available.
-    pub fn descent(&self) -> Option<&ClimbDescentPerformance> {
+    pub fn descent(&self) -> Option<&'a ClimbDescentPerformance> {
         self.descent
     }
 }
