@@ -14,7 +14,7 @@
 // limitations under the License.
 
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use super::index::{AirspaceIndex, NavAidIndex};
 use super::*;
@@ -26,8 +26,8 @@ use super::*;
 pub struct NavigationDataBuilder {
     airports: HashMap<String, Airport>,
     runways: HashMap<String, Vec<Runway>>,
-    airspaces: Vec<Rc<Airspace>>,
-    waypoints: Vec<Rc<Waypoint>>,
+    airspaces: Vec<Arc<Airspace>>,
+    waypoints: Vec<Arc<Waypoint>>,
     terminal_waypoints: TerminalWaypoints,
     locations: HashSet<LocationIndicator>,
     cycle: Option<AiracCycle>,
@@ -64,8 +64,8 @@ impl NavigationDataBuilder {
         // Build spatial index for airspaces
         let airspace_index = AirspaceIndex::new(self.airspaces.iter());
 
-        // Convert airports to Rc and collect
-        let airports: Vec<Rc<Airport>> = self.airports.into_values().map(Rc::new).collect();
+        // Convert airports to Arc and collect
+        let airports: Vec<Arc<Airport>> = self.airports.into_values().map(Arc::new).collect();
 
         // Build spatial index for point-based navaids
         let navaid_index = NavAidIndex::new(airports.iter(), self.waypoints.iter());
@@ -100,19 +100,19 @@ impl NavigationDataBuilder {
     }
 
     pub fn add_airspace(&mut self, airspace: Airspace) {
-        self.airspaces.push(Rc::new(airspace));
+        self.airspaces.push(Arc::new(airspace));
     }
 
     pub fn add_waypoint(&mut self, wp: Waypoint) {
         add_navaid!(self, wp);
         match &wp.region {
-            Region::Enroute => self.waypoints.push(Rc::new(wp)),
+            Region::Enroute => self.waypoints.push(Arc::new(wp)),
             Region::TerminalArea(ident) => {
                 let ident = str::from_utf8(ident).expect("ident should be valid UTF-8");
                 self.terminal_waypoints
                     .entry(ident.to_string())
                     .or_default()
-                    .push(Rc::new(wp));
+                    .push(Arc::new(wp));
             }
         }
     }

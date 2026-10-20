@@ -15,7 +15,7 @@
 
 //! Spatial indexing for efficient airspace and navaid queries.
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -37,16 +37,16 @@ const NM_TO_DEG: f64 = 1.0 / 60.0;
 #[derive(Clone, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct AirspaceIndex {
-    tree: RTree<GeomWithData<Rectangle<Point<f64>>, Rc<Airspace>>>,
+    tree: RTree<GeomWithData<Rectangle<Point<f64>>, Arc<Airspace>>>,
 }
 
 impl AirspaceIndex {
     /// Creates an index from an iterator of airspaces.
-    pub fn new<'a>(airspaces: impl Iterator<Item = &'a Rc<Airspace>>) -> Self {
+    pub fn new<'a>(airspaces: impl Iterator<Item = &'a Arc<Airspace>>) -> Self {
         let entries = airspaces
             .map(|a| {
                 let rect = Rectangle::from_aabb(a.polygon.envelope());
-                GeomWithData::new(rect, Rc::clone(a))
+                GeomWithData::new(rect, Arc::clone(a))
             })
             .collect();
 
@@ -56,7 +56,7 @@ impl AirspaceIndex {
     }
 
     /// Returns airspaces whose bounding boxes contain the point.
-    pub fn candidates_at(&self, lon: f64, lat: f64) -> impl Iterator<Item = &Rc<Airspace>> + '_ {
+    pub fn candidates_at(&self, lon: f64, lat: f64) -> impl Iterator<Item = &Arc<Airspace>> + '_ {
         let point_envelope = AABB::from_point(Point::new(lon, lat));
         self.tree
             .locate_in_envelope_intersecting(&point_envelope)
@@ -67,7 +67,7 @@ impl AirspaceIndex {
     pub fn candidates_intersecting(
         &self,
         envelope: &AABB<Point<f64>>,
-    ) -> impl Iterator<Item = &Rc<Airspace>> + '_ {
+    ) -> impl Iterator<Item = &Arc<Airspace>> + '_ {
         self.tree
             .locate_in_envelope_intersecting(envelope)
             .map(|entry| &entry.data)
@@ -87,22 +87,22 @@ pub struct NavAidIndex {
 impl NavAidIndex {
     /// Creates an index from iterators of airports and waypoints.
     pub fn new<'a>(
-        airports: impl Iterator<Item = &'a Rc<Airport>>,
-        waypoints: impl Iterator<Item = &'a Rc<Waypoint>>,
+        airports: impl Iterator<Item = &'a Arc<Airport>>,
+        waypoints: impl Iterator<Item = &'a Arc<Waypoint>>,
     ) -> Self {
         let mut entries = Vec::new();
 
         for airport in airports {
             entries.push(GeomWithData::new(
                 airport.coordinate,
-                NavAid::Airport(Rc::clone(airport)),
+                NavAid::Airport(Arc::clone(airport)),
             ));
         }
 
         for waypoint in waypoints {
             entries.push(GeomWithData::new(
                 waypoint.coordinate,
-                NavAid::Waypoint(Rc::clone(waypoint)),
+                NavAid::Waypoint(Arc::clone(waypoint)),
             ));
         }
 
@@ -154,13 +154,13 @@ mod tests {
     use crate::nd::{AirspaceClassification, AirspaceType};
     use crate::VerticalDistance;
 
-    fn test_airspace(name: &str, coords: &[(f64, f64)]) -> Rc<Airspace> {
+    fn test_airspace(name: &str, coords: &[(f64, f64)]) -> Arc<Airspace> {
         let exterior: Vec<geo::Coord<f64>> = coords
             .iter()
             .map(|&(lat, lon)| geo::Coord { x: lon, y: lat })
             .collect();
 
-        Rc::new(Airspace {
+        Arc::new(Airspace {
             name: name.to_string(),
             airspace_type: AirspaceType::CTA,
             classification: Some(AirspaceClassification::D),
@@ -170,8 +170,8 @@ mod tests {
         })
     }
 
-    fn test_airport(ident: &str, lat: f64, lon: f64) -> Rc<Airport> {
-        Rc::new(Airport {
+    fn test_airport(ident: &str, lat: f64, lon: f64) -> Arc<Airport> {
+        Arc::new(Airport {
             icao_ident: ident.to_string(),
             iata_designator: String::new(),
             name: ident.to_string(),
@@ -184,9 +184,9 @@ mod tests {
         })
     }
 
-    fn test_waypoint(ident: &str, lat: f64, lon: f64) -> Rc<Waypoint> {
+    fn test_waypoint(ident: &str, lat: f64, lon: f64) -> Arc<Waypoint> {
         use crate::nd::waypoint::{Region, WaypointUsage};
-        Rc::new(Waypoint {
+        Arc::new(Waypoint {
             fix_ident: ident.to_string(),
             desc: String::new(),
             usage: WaypointUsage::Unknown,
@@ -221,7 +221,7 @@ mod tests {
 
         let candidates: Vec<_> = index.candidates_at(9.5, 53.5).collect();
         assert_eq!(candidates.len(), 1);
-        assert!(Rc::ptr_eq(candidates[0], &airspaces[0]));
+        assert!(Arc::ptr_eq(candidates[0], &airspaces[0]));
     }
 
     #[test]
@@ -259,7 +259,7 @@ mod tests {
             test_airport("EDDH", 53.63, 9.99),  // Hamburg
             test_airport("EDHL", 53.81, 10.70), // Luebeck (~35 NM from Hamburg)
         ];
-        let waypoints: Vec<Rc<Waypoint>> = vec![];
+        let waypoints: Vec<Arc<Waypoint>> = vec![];
 
         let index = NavAidIndex::new(airports.iter(), waypoints.iter());
 
@@ -280,7 +280,7 @@ mod tests {
         //  53.6          .---WP2-.
         //  53.55        ( center  )  10 NM radius
         //  53.5          '-WP1---'
-        let airports: Vec<Rc<Airport>> = vec![];
+        let airports: Vec<Arc<Airport>> = vec![];
         let waypoints = vec![
             test_waypoint("WP1", 53.5, 9.5),
             test_waypoint("WP2", 53.6, 9.6),

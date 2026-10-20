@@ -14,7 +14,7 @@
 // limitations under the License.
 
 use std::fmt;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use log::{debug, trace, warn};
 
@@ -74,9 +74,9 @@ pub struct Route {
     legs: Vec<Leg>,
     speed: Option<Speed>,
     level: Option<VerticalDistance>,
-    origin: Option<Rc<Airport>>,
+    origin: Option<Arc<Airport>>,
     takeoff_rwy: Option<Runway>,
-    destination: Option<Rc<Airport>>,
+    destination: Option<Arc<Airport>>,
     landing_rwy: Option<Runway>,
     alternate: Option<NavAid>,
 }
@@ -123,7 +123,7 @@ impl Route {
                 }
 
                 TokenKind::Airport { arpt, rwy } => {
-                    let navaid = NavAid::Airport(Rc::clone(arpt));
+                    let navaid = NavAid::Airport(Arc::clone(arpt));
 
                     // Track for leg building
                     if from.is_none() {
@@ -139,7 +139,7 @@ impl Route {
                             arpt.ident(),
                             rwy.as_ref().map(|r| &r.designator)
                         );
-                        self.origin = Some(Rc::clone(arpt));
+                        self.origin = Some(Arc::clone(arpt));
                         self.takeoff_rwy = rwy.clone();
                     } else if Some(i) == destination_idx {
                         // Last airport = destination with optional landing runway
@@ -148,7 +148,7 @@ impl Route {
                             arpt.ident(),
                             rwy.as_ref().map(|r| &r.designator)
                         );
-                        self.destination = Some(Rc::clone(arpt));
+                        self.destination = Some(Arc::clone(arpt));
                         self.landing_rwy = rwy.clone();
                         builder.destination(&navaid);
                     }
@@ -245,8 +245,8 @@ impl Route {
     }
 
     /// Returns the origin airport if one is defined in the route.
-    pub fn origin(&self) -> Option<Rc<Airport>> {
-        self.origin.as_ref().map(Rc::clone)
+    pub fn origin(&self) -> Option<Arc<Airport>> {
+        self.origin.as_ref().map(Arc::clone)
     }
 
     /// Returns the takeoff runway if a defined in the route.
@@ -255,8 +255,8 @@ impl Route {
     }
 
     /// Returns  the destination airport if one is defined in the route.
-    pub fn destination(&self) -> Option<Rc<Airport>> {
-        self.destination.as_ref().map(Rc::clone)
+    pub fn destination(&self) -> Option<Arc<Airport>> {
+        self.destination.as_ref().map(Arc::clone)
     }
 
     /// Returns the landing runway if a defined in the route.

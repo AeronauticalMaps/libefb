@@ -17,7 +17,7 @@
 
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use log::{debug, trace, warn};
 
@@ -69,7 +69,7 @@ pub enum SourceFormat {
     OpenAir,
 }
 
-type TerminalWaypoints = HashMap<String, Vec<Rc<Waypoint>>>;
+type TerminalWaypoints = HashMap<String, Vec<Arc<Waypoint>>>;
 
 /// Results from a spatial query at a given point.
 ///
@@ -78,7 +78,7 @@ type TerminalWaypoints = HashMap<String, Vec<Rc<Waypoint>>>;
 #[derive(Clone, Debug, Default)]
 pub struct Nearby {
     /// Airspaces that contain the query point.
-    pub airspaces: Vec<Rc<Airspace>>,
+    pub airspaces: Vec<Arc<Airspace>>,
     /// Navaids within the search radius.
     pub navaids: Vec<NavAid>,
 }
@@ -98,13 +98,13 @@ impl Nearby {
 #[derive(Clone, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct NavigationData {
-    airports: Vec<Rc<Airport>>,
-    airspaces: Vec<Rc<Airspace>>,
+    airports: Vec<Arc<Airport>>,
+    airspaces: Vec<Arc<Airspace>>,
     #[cfg_attr(feature = "serde", serde(skip))]
     airspace_index: AirspaceIndex,
     #[cfg_attr(feature = "serde", serde(skip))]
     navaid_index: NavAidIndex,
-    waypoints: Vec<Rc<Waypoint>>,
+    waypoints: Vec<Arc<Waypoint>>,
     terminal_waypoints: TerminalWaypoints,
     locations: Vec<LocationIndicator>,
     cycle: Option<AiracCycle>,
@@ -201,7 +201,7 @@ impl NavigationData {
     pub(crate) fn candidate_airspaces_for_envelope(
         &self,
         envelope: &AABB<Point<f64>>,
-    ) -> Vec<Rc<Airspace>> {
+    ) -> Vec<Arc<Airspace>> {
         self.airspace_index
             .candidates_intersecting(envelope)
             .cloned()
@@ -230,11 +230,11 @@ impl NavigationData {
         let result = self
             .waypoints()
             .find(|&wp| wp.ident() == ident)
-            .map(|wp| NavAid::Waypoint(Rc::clone(wp)))
+            .map(|wp| NavAid::Waypoint(Arc::clone(wp)))
             .or(self
                 .airports()
                 .find(|&arpt| arpt.ident() == ident)
-                .map(|arpt| NavAid::Airport(Rc::clone(arpt))));
+                .map(|arpt| NavAid::Airport(Arc::clone(arpt))));
 
         match &result {
             Some(navaid) => trace!("found navaid for ident {:?}: {}", ident, navaid.ident()),
@@ -261,7 +261,7 @@ impl NavigationData {
         let result = self
             .terminal_waypoints(airport_ident)
             .find(|&wp| wp.fix_ident == fix_ident)
-            .map(|wp| NavAid::Waypoint(Rc::clone(wp)));
+            .map(|wp| NavAid::Waypoint(Arc::clone(wp)));
 
         match &result {
             Some(_) => trace!("found terminal waypoint {} at {}", fix_ident, airport_ident),
@@ -350,7 +350,7 @@ impl NavigationData {
         let terminal_waypoints = self
             .terminal_waypoints(a.ident())
             .chain(self.terminal_waypoints(b.ident()))
-            .map(|wp| NavAid::Waypoint(Rc::clone(wp)));
+            .map(|wp| NavAid::Waypoint(Arc::clone(wp)));
 
         self.navaids()
             .chain(terminal_waypoints)
@@ -448,11 +448,11 @@ impl NavigationData {
 
     fn navaids(&self) -> impl Iterator<Item = NavAid> + '_ {
         self.airports()
-            .map(|arpt| NavAid::Airport(Rc::clone(arpt)))
-            .chain(self.waypoints().map(|wp| NavAid::Waypoint(Rc::clone(wp))))
+            .map(|arpt| NavAid::Airport(Arc::clone(arpt)))
+            .chain(self.waypoints().map(|wp| NavAid::Waypoint(Arc::clone(wp))))
     }
 
-    pub(crate) fn airports(&self) -> impl Iterator<Item = &Rc<Airport>> {
+    pub(crate) fn airports(&self) -> impl Iterator<Item = &Arc<Airport>> {
         self.airports.iter().chain(
             self.partitions
                 .values()
@@ -460,7 +460,7 @@ impl NavigationData {
         )
     }
 
-    pub(crate) fn airspaces(&self) -> impl Iterator<Item = &Rc<Airspace>> {
+    pub(crate) fn airspaces(&self) -> impl Iterator<Item = &Arc<Airspace>> {
         self.airspaces.iter().chain(
             self.partitions
                 .values()
@@ -468,7 +468,7 @@ impl NavigationData {
         )
     }
 
-    pub(crate) fn waypoints(&self) -> impl Iterator<Item = &Rc<Waypoint>> {
+    pub(crate) fn waypoints(&self) -> impl Iterator<Item = &Arc<Waypoint>> {
         self.waypoints.iter().chain(
             self.partitions
                 .values()
@@ -479,7 +479,7 @@ impl NavigationData {
     pub(crate) fn terminal_waypoints<'a>(
         &'a self,
         ident: &'a str,
-    ) -> impl Iterator<Item = &'a Rc<Waypoint>> + 'a {
+    ) -> impl Iterator<Item = &'a Arc<Waypoint>> + 'a {
         self.terminal_waypoints
             .get(ident)
             .into_iter()
@@ -530,7 +530,7 @@ SEURUCEDKED54A      00140     GEN53060400E008583000                             
         let nearby_inside = nd.at(&inside, Length::nm(1.0));
         let nearby_outside = nd.at(&outside, Length::nm(1.0));
 
-        assert_eq!(nearby_inside.airspaces, vec![Rc::clone(&nd.airspaces[0])]);
+        assert_eq!(nearby_inside.airspaces, vec![Arc::clone(&nd.airspaces[0])]);
         assert!(nearby_outside.airspaces.is_empty());
     }
 

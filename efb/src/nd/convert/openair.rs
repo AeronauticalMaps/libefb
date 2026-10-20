@@ -281,7 +281,7 @@ impl FromStr for OpenAirVerticalDistance {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     use super::*;
     use crate::fc;
@@ -301,7 +301,7 @@ DP 53:06:04 N 8:58:30 E
 
         let nd = NavigationData::try_from_openair(record).expect("OpenAir should parse");
 
-        let tma_bremen_a = Rc::new(Airspace {
+        let tma_bremen_a = Arc::new(Airspace {
             name: String::from("TMA BREMEN A"),
             airspace_type: AirspaceType::CTA,
             classification: Some(AirspaceClassification::D),

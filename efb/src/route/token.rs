@@ -39,7 +39,7 @@
 
 use std::fmt;
 use std::ops::Range;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use log::{debug, trace, warn};
 
@@ -93,7 +93,7 @@ pub enum TokenKind {
     Wind(Wind),
     /// Airport with optional runway specification.
     Airport {
-        arpt: Rc<Airport>,
+        arpt: Arc<Airport>,
         rwy: Option<Runway>,
     },
     /// Navigation aid (waypoint, VOR, NDB, etc.) - but NOT airports.
@@ -139,7 +139,7 @@ impl Tokens {
 
     fn tokenize(words: Vec<Word>, nd: &NavigationData) -> Vec<Token> {
         let mut tokens: Vec<Token> = Vec::new();
-        let mut terminal: Option<Rc<Airport>> = None;
+        let mut terminal: Option<Arc<Airport>> = None;
 
         for (i, word) in words.iter().enumerate() {
             let kind = match &word.kind {
@@ -155,12 +155,12 @@ impl Tokens {
 
                 WordKind::Airport { arpt, rwy } => {
                     // Each airport sets a new terminal scope
-                    terminal = Some(Rc::clone(arpt));
+                    terminal = Some(Arc::clone(arpt));
 
                     if i == 0 {
                         // First airport always gets added
                         TokenKind::Airport {
-                            arpt: Rc::clone(arpt),
+                            arpt: Arc::clone(arpt),
                             rwy: rwy.clone(),
                         }
                     } else {
@@ -180,7 +180,7 @@ impl Tokens {
                                 }),
                             ) => continue,
                             _ => TokenKind::Airport {
-                                arpt: Rc::clone(arpt),
+                                arpt: Arc::clone(arpt),
                                 rwy: rwy.clone(),
                             },
                         }
@@ -266,8 +266,8 @@ impl Tokens {
     }
 
     fn resolve_in_terminal_areas(
-        current: Option<&Rc<Airport>>,
-        next: Option<&Rc<Airport>>,
+        current: Option<&Arc<Airport>>,
+        next: Option<&Arc<Airport>>,
         ident: &str,
         nd: &NavigationData,
     ) -> (Option<NavAid>, Option<NavAid>) {
@@ -283,7 +283,7 @@ impl Tokens {
     }
 
     /// Looks ahead in the word stream to find the next airport.
-    fn lookahead_terminal_area(words: &[Word]) -> Option<Rc<Airport>> {
+    fn lookahead_terminal_area(words: &[Word]) -> Option<Arc<Airport>> {
         for word in words {
             match &word.kind {
                 WordKind::Airport { arpt, .. } => return Some(arpt.clone()),
@@ -361,13 +361,13 @@ enum WordKind {
     LevelAt(VerticalDistance),
     Wind(Wind),
     Airport {
-        arpt: Rc<Airport>,
+        arpt: Arc<Airport>,
         rwy: Option<Runway>,
     },
     NavAid(NavAid),
     VFRWaypoint {
         ident: String,
-        wp: Option<Rc<Waypoint>>,
+        wp: Option<Arc<Waypoint>>,
     },
     Err(Error),
 }
@@ -528,7 +528,7 @@ SEURPCEDAHED W     ED0    V     N53505381E013552347                             
             }
         }
 
-        fn airport(&self, ident: &str) -> Rc<Airport> {
+        fn airport(&self, ident: &str) -> Arc<Airport> {
             match self.nd.find(ident) {
                 Some(NavAid::Airport(arpt)) => arpt,
                 _ => panic!("should find airport {ident}"),

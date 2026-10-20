@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Filter navigation aids by prefix and between two fixes
 
+### Changed
+
+- Make FMS thread safe
+
 ## [0.7.1] - 2026-04-22
 
 ### Fixed

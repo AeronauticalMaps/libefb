@@ -14,7 +14,7 @@
 // limitations under the License.
 
 use std::fmt;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -31,8 +31,8 @@ use super::Waypoint;
 #[derive(Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum NavAid {
-    Airport(Rc<Airport>),
-    Waypoint(Rc<Waypoint>),
+    Airport(Arc<Airport>),
+    Waypoint(Arc<Waypoint>),
 }
 
 impl NavAid {

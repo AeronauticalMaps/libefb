@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use geo::{
     Contains, Distance, Geodesic, Intersects, LineIntersection, LineLocatePoint, LineString, Point,
@@ -38,7 +38,7 @@ use super::{Leg, Route};
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct AirspaceIntersection {
-    airspace: Rc<Airspace>,
+    airspace: Arc<Airspace>,
     entry_distance: Length,
     exit_distance: Length,
     entry_point: Point<f64>,
@@ -218,7 +218,7 @@ impl VerticalProfile {
 
             // Compute entry/exit intersections (may produce multiple for re-entrant routes)
             intersections.extend(Self::compute_intersections(
-                Rc::clone(airspace),
+                Arc::clone(airspace),
                 &route_line,
                 &segment_lengths,
                 total_length,
@@ -241,7 +241,7 @@ impl VerticalProfile {
     }
 
     fn compute_intersections(
-        airspace: Rc<Airspace>,
+        airspace: Arc<Airspace>,
         route_line: &LineString<f64>,
         segment_lengths: &[Length],
         total_length: Length,
@@ -301,7 +301,7 @@ impl VerticalProfile {
             let (exit_dist, exit_coord) = transitions[i + 1];
 
             intersections.push(AirspaceIntersection {
-                airspace: Rc::clone(&airspace),
+                airspace: Arc::clone(&airspace),
                 // the leg distance is in NM too
                 entry_distance: entry_dist.convert_to(LengthUnit::NauticalMiles),
                 exit_distance: exit_dist.convert_to(LengthUnit::NauticalMiles),
@@ -591,13 +591,13 @@ mod tests {
     use super::*;
     use crate::nd::{AirspaceClassification, AirspaceType};
 
-    fn test_airspace(name: &str, coords: &[(f64, f64)]) -> Rc<Airspace> {
+    fn test_airspace(name: &str, coords: &[(f64, f64)]) -> Arc<Airspace> {
         let exterior: Vec<geo::Coord<f64>> = coords
             .iter()
             .map(|&(lat, lon)| geo::Coord { x: lon, y: lat })
             .collect();
 
-        Rc::new(Airspace {
+        Arc::new(Airspace {
             name: name.to_string(),
             airspace_type: AirspaceType::CTA,
             classification: Some(AirspaceClassification::D),
