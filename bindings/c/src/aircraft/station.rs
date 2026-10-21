@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::ffi::{CString, c_char};
+use std::ffi::{c_char, CString};
 use std::ptr::null_mut;
 
 use efb::aircraft::Station;
