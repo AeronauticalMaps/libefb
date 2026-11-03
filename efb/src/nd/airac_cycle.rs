@@ -143,6 +143,23 @@ impl fmt::Display for AiracCycle {
     }
 }
 
+/// Converts a date into the AIRAC cycle that is effective on that date.
+///
+/// The cycle's year holds the last two digits of the year, as the YYCC
+/// identifier does.
+impl From<NaiveDate> for AiracCycle {
+    fn from(date: NaiveDate) -> Self {
+        let cycles_since_ref = (date - REFERENCE_DATE).num_days().div_euclid(28);
+        let effective_date = REFERENCE_DATE + Duration::days(cycles_since_ref * 28);
+
+        // the first cycle of a year starts within the first 28 days
+        let cycle = effective_date.ordinal0() / 28 + 1;
+        let year = effective_date.year().rem_euclid(100) as u8;
+
+        Self::new(year, cycle as u8)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,6 +187,21 @@ mod tests {
             cycle.valid_for_date(outdated_date),
             Some(CycleValidity::Expired)
         );
+    }
+
+    #[test]
+    fn derives_cycle_from_date() {
+        let date = |y, m, d| NaiveDate::from_ymd_opt(y, m, d).expect("date should be valid");
+
+        assert_eq!(AiracCycle::from(date(2025, 9, 3)), AiracCycle::new(25, 8));
+        assert_eq!(AiracCycle::from(date(2025, 9, 4)), AiracCycle::new(25, 9));
+        assert_eq!(AiracCycle::from(date(2026, 10, 29)), AiracCycle::new(26, 11));
+        assert_eq!(AiracCycle::from(date(2026, 11, 25)), AiracCycle::new(26, 11));
+        assert_eq!(AiracCycle::from(date(2026, 11, 26)), AiracCycle::new(26, 12));
+        assert_eq!(AiracCycle::from(date(2026, 1, 1)), AiracCycle::new(25, 13));
+        assert_eq!(AiracCycle::from(date(2020, 12, 31)), AiracCycle::new(20, 14));
+        assert_eq!(AiracCycle::from(date(1999, 12, 31)).year(), 99);
+        assert_eq!(AiracCycle::from(date(2100, 6, 15)).year(), 0);
     }
 
     #[test]
