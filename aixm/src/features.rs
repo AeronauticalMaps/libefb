@@ -26,9 +26,11 @@ use crate::Error;
 
 mod airport_heliport;
 mod designated_point;
+mod navaid;
 
 pub use airport_heliport::AirportHeliport;
 pub use designated_point::DesignatedPoint;
+pub use navaid::{Navaid, NavaidComponent, NavaidEquipment, DME, NDB, TACAN, VOR};
 
 const EPSG_4326: &str = "urn:ogc:def:crs:EPSG::4326";
 
@@ -105,7 +107,8 @@ impl Point {
 }
 
 /// A value with its unit of measurement `U`, e.g. a `ValDistanceType`
-/// with a [`UomDistanceType`](crate::UomDistanceType).
+/// with a [`UomDistanceType`](crate::UomDistanceType) or a
+/// `ValFrequencyType` with a [`UomFrequencyType`](crate::UomFrequencyType).
 #[derive(Clone, PartialEq, Debug)]
 pub struct Measure<U> {
     /// The value in the unit of measurement.

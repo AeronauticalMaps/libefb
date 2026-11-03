@@ -92,6 +92,52 @@ code_list! {
 }
 
 code_list! {
+    /// The service a navaid provides (CodeNavaidServiceType).
+    CodeNavaidServiceType {
+        /// A VOR.
+        VOR = "VOR",
+        /// A DME.
+        DME = "DME",
+        /// An NDB.
+        NDB = "NDB",
+        /// A TACAN.
+        TACAN = "TACAN",
+        /// A VOR with a DME.
+        VOR_DME = "VOR_DME",
+        /// A VOR with a TACAN.
+        VORTAC = "VORTAC",
+        /// An instrument landing system.
+        ILS = "ILS",
+        /// An instrument landing system with a DME.
+        ILS_DME = "ILS_DME",
+        /// A localizer.
+        LOC = "LOC",
+        /// A marker beacon.
+        MKR = "MKR",
+    }
+}
+
+code_list! {
+    /// The type of a VOR (CodeVORType).
+    CodeVORType {
+        /// A conventional VOR.
+        VOR = "VOR",
+        /// A Doppler VOR.
+        DVOR = "DVOR",
+    }
+}
+
+code_list! {
+    /// The use of an NDB (CodeNDBUsageType).
+    CodeNDBUsageType {
+        /// An NDB used en route.
+        ENR = "ENR",
+        /// A locator.
+        L = "L",
+    }
+}
+
+code_list! {
     /// The purpose of a note (CodeNotePurposeType).
     CodeNotePurposeType {
         /// A remark.
@@ -116,6 +162,16 @@ code_list! {
         M = "M",
         /// Feet.
         FT = "FT",
+    }
+}
+
+code_list! {
+    /// The unit of a frequency (UomFrequencyType).
+    UomFrequencyType {
+        /// Kilohertz.
+        KHZ = "KHZ",
+        /// Megahertz.
+        MHZ = "MHZ",
     }
 }
 

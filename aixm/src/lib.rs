@@ -25,7 +25,13 @@ mod message;
 mod stream;
 mod timeslice;
 
-pub use codes::{CodeDesignatedPointType, CodeNotePurposeType, UomDistanceType};
+pub use codes::{
+    CodeDesignatedPointType, CodeNDBUsageType, CodeNavaidServiceType, CodeNotePurposeType,
+    CodeVORType, UomDistanceType, UomFrequencyType,
+};
 pub use error::Error;
-pub use features::{AirportHeliport, DesignatedPoint, Measure, Note, Point, Reference};
+pub use features::{
+    AirportHeliport, DesignatedPoint, Measure, Navaid, NavaidComponent, NavaidEquipment, Note,
+    Point, Reference, DME, NDB, TACAN, VOR,
+};
 pub use message::{read_message, Message, Version};
