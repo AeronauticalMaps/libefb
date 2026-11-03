@@ -405,6 +405,7 @@ dependencies = [
 name = "efb"
 version = "0.7.1"
 dependencies = [
+ "aixm",
  "arinc424",
  "chrono",
  "geo",
