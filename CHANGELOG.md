@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Filter navigation aids by prefix and between two fixes
 - Read waypoints and VRPs from AIXM 5.x
+- Read airports from AIXM 5.x
 
 ### Changed
 

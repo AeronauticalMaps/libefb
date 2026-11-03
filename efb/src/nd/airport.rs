@@ -25,6 +25,9 @@ use super::*;
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Airport {
     pub(crate) icao_ident: String,
+    // FIXME: The IATA designator and the name may be absent, e.g. in
+    // AIXM, and should be `Option`. The `airports` table needs a
+    // rebuild for it, which cascades to the runways.
     pub(crate) iata_designator: String,
     pub(crate) name: String,
     pub(crate) coordinate: Point<f64>,
