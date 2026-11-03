@@ -25,9 +25,11 @@ use crate::Error;
 
 mod airport_heliport;
 mod designated_point;
+mod navaid;
 
 pub use airport_heliport::AirportHeliport;
 pub use designated_point::DesignatedPoint;
+pub use navaid::{Navaid, NavaidComponent, NavaidEquipment, DME, NDB, TACAN, VOR};
 
 const EPSG_4326: &str = "urn:ogc:def:crs:EPSG::4326";
 

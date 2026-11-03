@@ -25,5 +25,8 @@ mod stream;
 mod timeslice;
 
 pub use error::Error;
-pub use features::{AirportHeliport, DesignatedPoint, Measure, Note, Point, Reference};
+pub use features::{
+    AirportHeliport, DesignatedPoint, Measure, Navaid, NavaidComponent, NavaidEquipment, Note,
+    Point, Reference, DME, NDB, TACAN, VOR,
+};
 pub use message::{read_message, Message, Version};

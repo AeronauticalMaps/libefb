@@ -22,7 +22,10 @@ use quick_xml::events::Event;
 use quick_xml::name::{Namespace, ResolveResult};
 use quick_xml::NsReader;
 
-use crate::features::{read_feature, AirportHeliport, DesignatedPoint, TimeSlice};
+use crate::features::{
+    read_feature, AirportHeliport, DesignatedPoint, Navaid, NavaidEquipment, Reference, TimeSlice,
+    DME, NDB, TACAN, VOR,
+};
 use crate::stream::skip;
 use crate::timeslice::ValidTime;
 use crate::Error;
@@ -63,6 +66,8 @@ impl fmt::Display for Version {
 enum Feature {
     AirportHeliport(AirportHeliport),
     DesignatedPoint(DesignatedPoint),
+    Navaid(Navaid),
+    NavaidEquipment(NavaidEquipment),
 }
 
 /// An AIXM 5.x message (`AIXMBasicMessage`).
@@ -100,6 +105,23 @@ impl Message {
             Feature::DesignatedPoint(point) => Some(point),
             _ => None,
         })
+    }
+
+    /// Returns the navaids of the message.
+    pub fn navaids(&self) -> impl Iterator<Item = &Navaid> {
+        self.features.values().filter_map(|feature| match feature {
+            Feature::Navaid(navaid) => Some(navaid),
+            _ => None,
+        })
+    }
+
+    /// Returns the navaid equipment that `reference` points to, e.g. the
+    /// equipment of a navaid's component.
+    pub fn navaid_equipment(&self, reference: &Reference) -> Option<&NavaidEquipment> {
+        match self.features.get(&reference.uuid) {
+            Some(Feature::NavaidEquipment(equipment)) => Some(equipment),
+            _ => None,
+        }
     }
 
     /// Returns the errors of the records that could not be read.
@@ -269,6 +291,11 @@ fn read_member<R: BufRead>(
                 let member = match element.local_name().as_ref() {
                     "AirportHeliport" => read_as(reader, date, Feature::AirportHeliport),
                     "DesignatedPoint" => read_as(reader, date, Feature::DesignatedPoint),
+                    "Navaid" => read_as(reader, date, Feature::Navaid),
+                    "VOR" => read_as(reader, date, |f| equipment(NavaidEquipment::VOR(f))),
+                    "DME" => read_as(reader, date, |f| equipment(NavaidEquipment::DME(f))),
+                    "NDB" => read_as(reader, date, |f| equipment(NavaidEquipment::NDB(f))),
+                    "TACAN" => read_as(reader, date, |f| equipment(NavaidEquipment::TACAN(f))),
                     _ => {
                         skip(reader, &element)?;
                         continue;
@@ -300,6 +327,10 @@ fn read_as<T: TimeSlice, R: BufRead>(
 ) -> Result<Option<(String, Feature)>, Error> {
     let member = read_feature::<T, _>(reader, date)?;
     Ok(member.map(|(identifier, time_slice)| (identifier, into_feature(time_slice))))
+}
+
+fn equipment(equipment: NavaidEquipment) -> Feature {
+    Feature::NavaidEquipment(equipment)
 }
 
 #[cfg(test)]
@@ -340,7 +371,8 @@ mod tests {
                 xmlns:aixm="http://www.aixm.aero/schema/5.1.1"
                 xmlns:gco="http://www.isotc211.org/2005/gco"
                 xmlns:gmd="http://www.isotc211.org/2005/gmd"
-                xmlns:gml="http://www.opengis.net/gml/3.2">
+                xmlns:gml="http://www.opengis.net/gml/3.2"
+                xmlns:xlink="http://www.w3.org/1999/xlink">
                 {content}
             </message:AIXMBasicMessage>"#
         )
@@ -446,5 +478,106 @@ mod tests {
 
         assert_eq!(designators, [Some("VALID")]);
         assert!(matches!(message.errors(), [Error::InvalidRecord(_)]));
+    }
+
+    #[test]
+    fn resolves_equipment_of_navaid() {
+        let content = [
+            METADATA,
+            r#"<message:hasMember>
+                <aixm:Navaid gml:id="ID_NAVAID_449">
+                    <gml:identifier codeSpace="urn:uuid:">1d25c8cd-217e-4da8-8651-bd85211bbe7e</gml:identifier>
+                    <aixm:timeSlice>
+                        <aixm:NavaidTimeSlice gml:id="ID_NAVAID_TS_449">
+                            <gml:validTime>
+                                <gml:TimePeriod gml:id="ID_NAVAID_TS_VT_449">
+                                    <gml:beginPosition>2026-10-29T00:00:00Z</gml:beginPosition>
+                                    <gml:endPosition indeterminatePosition="before">2026-11-26T00:00:00Z</gml:endPosition>
+                                </gml:TimePeriod>
+                            </gml:validTime>
+                            <aixm:interpretation>BASELINE</aixm:interpretation>
+                            <aixm:type>VOR_DME</aixm:type>
+                            <aixm:designator>HAM</aixm:designator>
+                            <aixm:navaidEquipment>
+                                <aixm:NavaidComponent gml:id="ID_NAVAID_TS_COMP_1164">
+                                    <aixm:providesNavigableLocation>YES</aixm:providesNavigableLocation>
+                                    <aixm:theNavaidEquipment xlink:href="urn:uuid:ea3f76a6-724d-4802-b189-3777234faa1f"/>
+                                </aixm:NavaidComponent>
+                            </aixm:navaidEquipment>
+                            <aixm:navaidEquipment>
+                                <aixm:NavaidComponent gml:id="ID_NAVAID_TS_COMP_1165">
+                                    <aixm:providesNavigableLocation>NO</aixm:providesNavigableLocation>
+                                    <aixm:theNavaidEquipment xlink:href="urn:uuid:d0209481-44e3-43ad-aec8-be086d8e0f58"/>
+                                </aixm:NavaidComponent>
+                            </aixm:navaidEquipment>
+                        </aixm:NavaidTimeSlice>
+                    </aixm:timeSlice>
+                </aixm:Navaid>
+            </message:hasMember>
+            <message:hasMember>
+                <aixm:VOR gml:id="ID_VOR_408">
+                    <gml:identifier codeSpace="urn:uuid:">ea3f76a6-724d-4802-b189-3777234faa1f</gml:identifier>
+                    <aixm:timeSlice>
+                        <aixm:VORTimeSlice gml:id="ID_VOR_TS_408">
+                            <gml:validTime>
+                                <gml:TimePeriod gml:id="ID_VOR_TS_VT_408">
+                                    <gml:beginPosition>2026-10-29T00:00:00Z</gml:beginPosition>
+                                    <gml:endPosition indeterminatePosition="before">2026-11-26T00:00:00Z</gml:endPosition>
+                                </gml:TimePeriod>
+                            </gml:validTime>
+                            <aixm:interpretation>BASELINE</aixm:interpretation>
+                            <aixm:designator>HAM</aixm:designator>
+                            <aixm:name>HAMBURG</aixm:name>
+                            <aixm:location>
+                                <aixm:ElevatedPoint gml:id="ID_VOR_TS_EPT_408" srsName="urn:ogc:def:crs:EPSG::4326">
+                                    <gml:pos>53.685575338 10.204997112</gml:pos>
+                                    <aixm:elevation uom="FT">185.3675</aixm:elevation>
+                                </aixm:ElevatedPoint>
+                            </aixm:location>
+                            <aixm:type>DVOR</aixm:type>
+                            <aixm:frequency uom="MHZ">113.1</aixm:frequency>
+                            <aixm:zeroBearingDirection>MAG</aixm:zeroBearingDirection>
+                        </aixm:VORTimeSlice>
+                    </aixm:timeSlice>
+                </aixm:VOR>
+            </message:hasMember>
+            <message:hasMember>
+                <aixm:DME gml:id="id.d0209481-44e3-43ad-aec8-be086d8e0f58">
+                    <gml:identifier codeSpace="urn:uuid:">d0209481-44e3-43ad-aec8-be086d8e0f58</gml:identifier>
+                    <aixm:timeSlice>
+                        <aixm:DMETimeSlice gml:id="id.ts.d0209481-44e3-43ad-aec8-be086d8e0f58">
+                            <gml:validTime>
+                                <gml:TimePeriod gml:id="id.ts.vt.d0209481-44e3-43ad-aec8-be086d8e0f58">
+                                    <gml:beginPosition>2026-10-29T00:00:00Z</gml:beginPosition>
+                                    <gml:endPosition indeterminatePosition="before">2026-11-26T00:00:00Z</gml:endPosition>
+                                </gml:TimePeriod>
+                            </gml:validTime>
+                            <aixm:interpretation>BASELINE</aixm:interpretation>
+                            <aixm:designator>HAM</aixm:designator>
+                            <aixm:channel>78X</aixm:channel>
+                            <aixm:ghostFrequency uom="MHZ">113.1</aixm:ghostFrequency>
+                        </aixm:DMETimeSlice>
+                    </aixm:timeSlice>
+                </aixm:DME>
+            </message:hasMember>"#,
+        ]
+        .concat();
+        let xml = message("http://www.aixm.aero/schema/5.1.1/message", &content);
+        let message = read_message(xml.as_bytes()).expect("message should be readable");
+
+        let navaid = message.navaids().next().expect("HAM should be a navaid");
+        let equipment: Vec<_> = navaid
+            .navaid_equipment
+            .iter()
+            .map(|component| message.navaid_equipment(&component.the_navaid_equipment))
+            .collect();
+
+        let [Some(NavaidEquipment::VOR(vor)), Some(NavaidEquipment::DME(dme))] =
+            equipment.as_slice()
+        else {
+            panic!("HAM should consist of a VOR and a DME");
+        };
+        assert_eq!(vor.kind.as_deref(), Some("DVOR"));
+        assert_eq!(dme.channel.as_deref(), Some("78X"));
     }
 }
