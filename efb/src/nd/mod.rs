@@ -67,6 +67,8 @@ pub enum SourceFormat {
     A424,
     /// OpenAir airspace format.
     OpenAir,
+    /// AIXM 5.x navigation data.
+    Aixm,
 }
 
 type TerminalWaypoints = HashMap<String, Vec<Arc<Waypoint>>>;

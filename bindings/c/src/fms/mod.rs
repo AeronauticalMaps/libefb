@@ -68,6 +68,8 @@ pub unsafe extern "C" fn efb_fms_nd_read(fms: &mut EfbFMS, s: *const c_char, fmt
             //       OpenAir is parsed from an byte array too.
             SourceFormat::A424 => NavigationData::try_from_arinc424(s.as_bytes()),
             SourceFormat::OpenAir => NavigationData::try_from_openair(s),
+            // TODO: Read AIXM once the bindings support it.
+            SourceFormat::Aixm => return,
         };
 
         if let Ok(new_nd) = new_nd {

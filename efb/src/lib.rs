@@ -68,6 +68,7 @@
 //! ## A
 //!
 //! - **AFM** Aircraft Flight Manual
+//! - **AIXM** Aeronautical Information Exchange Model
 //! - **ARINC** Aeronautical Radio Incorporated
 //!
 //! ## E
