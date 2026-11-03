@@ -15,13 +15,11 @@
 
 use std::io::BufRead;
 
-use chrono::{DateTime, Utc};
-use quick_xml::events::{BytesStart, Event};
+use quick_xml::events::BytesStart;
 use quick_xml::NsReader;
 
-use super::{keep_record_error, Point};
-use crate::stream::{attribute, read_optional_text, skip};
-use crate::timeslice::{select_valid, TimeSliceMetadata};
+use super::{Measure, Point, TimeSlice};
+use crate::stream::{read_optional_text, skip};
 use crate::Error;
 
 /// An aerodrome or heliport (UML class `AirportHeliport`).
@@ -38,189 +36,39 @@ pub struct AirportHeliport {
     /// The aerodrome reference point (`ARP`).
     pub arp: Option<Point>,
     /// The highest point of the landing area (`fieldElevation`).
-    pub field_elevation: Option<Elevation>,
+    pub field_elevation: Option<Measure>,
 }
 
-/// A vertical distance (`ValDistanceVerticalType`).
-#[derive(Clone, PartialEq, Debug)]
-pub struct Elevation {
-    /// The value in the unit of measurement.
-    pub value: f64,
-    /// The unit of measurement (`uom`), e.g. FT or M.
-    pub uom: String,
-}
+impl TimeSlice for AirportHeliport {
+    const FEATURE: &'static str = "AirportHeliport";
 
-impl Elevation {
-    /// Reads the vertical distance `element` up to its end tag. Returns `None`
-    /// if the element has no value.
-    fn read<R: BufRead>(
+    fn read_property<R: BufRead>(
+        &mut self,
         reader: &mut NsReader<R>,
         element: &BytesStart,
-    ) -> Result<Option<Self>, Error> {
-        let uom = attribute(element, "uom")?;
-
-        let Some(text) = read_optional_text(reader, element)? else {
-            return Ok(None);
-        };
-
-        let value = text
-            .parse()
-            .map_err(|_| Error::InvalidRecord(format!("{text:?} is not a vertical distance")))?;
-
-        let uom = uom.ok_or_else(|| {
-            Error::InvalidRecord(format!("vertical distance {text} has no uom"))
-        })?;
-
-        Ok(Some(Self { value, uom }))
-    }
-}
-
-/// Reads an `aixm:AirportHeliport` up to its end tag and returns its
-/// identifier with the time slice that is valid on `date`, or `None` if no
-/// time slice is valid. The start tag must be the last event read.
-///
-/// An [`Error::InvalidRecord`] is returned only after the whole element is
-/// read, so the reader can continue with the next feature.
-pub(crate) fn read_airport_heliport<R: BufRead>(
-    reader: &mut NsReader<R>,
-    date: DateTime<Utc>,
-) -> Result<Option<(String, AirportHeliport)>, Error> {
-    let mut buf = Vec::new();
-    let mut identifier = None;
-    let mut time_slices = Vec::new();
-    let mut record_error = None;
-
-    loop {
-        buf.clear();
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(element) => match element.local_name().as_ref() {
-                "identifier" => identifier = read_optional_text(reader, &element)?,
-                "timeSlice" => {
-                    if let Some(time_slice) =
-                        keep_record_error(read_time_slice(reader), &mut record_error)?
-                    {
-                        time_slices.push(time_slice);
-                    }
-                }
-                _ => skip(reader, &element)?,
-            },
-            Event::End(_) => break,
-            Event::Eof => {
-                return Err(Error::InvalidXml(
-                    "AirportHeliport is not closed".to_string(),
-                ))
+    ) -> Result<(), Error> {
+        match element.local_name().as_ref() {
+            "designator" => self.designator = read_optional_text(reader, element)?,
+            "locationIndicatorICAO" => {
+                self.location_indicator_icao = read_optional_text(reader, element)?
             }
-            _ => {}
+            "designatorIATA" => self.designator_iata = read_optional_text(reader, element)?,
+            "name" => self.name = read_optional_text(reader, element)?,
+            "ARP" => self.arp = Point::read_location(reader, "ARP")?,
+            "fieldElevation" => self.field_elevation = Measure::read(reader, element)?,
+            _ => skip(reader, element)?,
         }
+
+        Ok(())
     }
-
-    let identifier = identifier.ok_or_else(|| {
-        Error::InvalidRecord("AirportHeliport has no gml:identifier".to_string())
-    })?;
-
-    if let Some(message) = record_error {
-        return Err(Error::InvalidRecord(format!(
-            "AirportHeliport {identifier}: {message}"
-        )));
-    }
-
-    Ok(select_valid(time_slices, date).map(|airport| (identifier, airport)))
-}
-
-/// Reads an `aixm:timeSlice` up to its end tag.
-fn read_time_slice<R: BufRead>(
-    reader: &mut NsReader<R>,
-) -> Result<(TimeSliceMetadata, AirportHeliport), Error> {
-    let mut buf = Vec::new();
-    let mut time_slice = None;
-    let mut record_error = None;
-
-    loop {
-        buf.clear();
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(element) => match element.local_name().as_ref() {
-                "AirportHeliportTimeSlice" => {
-                    time_slice = keep_record_error(read_properties(reader), &mut record_error)?
-                }
-                _ => skip(reader, &element)?,
-            },
-            Event::End(_) => break,
-            Event::Eof => return Err(Error::InvalidXml("timeSlice is not closed".to_string())),
-            _ => {}
-        }
-    }
-
-    if let Some(message) = record_error {
-        return Err(Error::InvalidRecord(message));
-    }
-
-    time_slice.ok_or_else(|| {
-        Error::InvalidRecord("timeSlice has no AirportHeliportTimeSlice".to_string())
-    })
-}
-
-/// Reads the properties of an `aixm:AirportHeliportTimeSlice` up to its end
-/// tag.
-fn read_properties<R: BufRead>(
-    reader: &mut NsReader<R>,
-) -> Result<(TimeSliceMetadata, AirportHeliport), Error> {
-    let mut buf = Vec::new();
-    let mut metadata = TimeSliceMetadata::default();
-    let mut airport = AirportHeliport::default();
-    let mut record_error = None;
-
-    loop {
-        buf.clear();
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(element) => {
-                let result = read_property(reader, &element, &mut metadata, &mut airport);
-                keep_record_error(result, &mut record_error)?;
-            }
-            Event::End(_) => break,
-            Event::Eof => {
-                return Err(Error::InvalidXml(
-                    "AirportHeliportTimeSlice is not closed".to_string(),
-                ))
-            }
-            _ => {}
-        }
-    }
-
-    match record_error {
-        Some(message) => Err(Error::InvalidRecord(message)),
-        None => Ok((metadata, airport)),
-    }
-}
-
-/// Reads the property `element` of a time slice up to its end tag.
-fn read_property<R: BufRead>(
-    reader: &mut NsReader<R>,
-    element: &BytesStart,
-    metadata: &mut TimeSliceMetadata,
-    airport: &mut AirportHeliport,
-) -> Result<(), Error> {
-    if metadata.read_property(reader, element)? {
-        return Ok(());
-    }
-
-    match element.local_name().as_ref() {
-        "designator" => airport.designator = read_optional_text(reader, element)?,
-        "locationIndicatorICAO" => {
-            airport.location_indicator_icao = read_optional_text(reader, element)?
-        }
-        "designatorIATA" => airport.designator_iata = read_optional_text(reader, element)?,
-        "name" => airport.name = read_optional_text(reader, element)?,
-        "ARP" => airport.arp = Point::read_location(reader, "ARP")?,
-        "fieldElevation" => airport.field_elevation = Elevation::read(reader, element)?,
-        _ => skip(reader, element)?,
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::features::read_feature;
+    use chrono::{DateTime, Utc};
+    use quick_xml::events::Event;
 
     const EDDH: &str = r#"
         <aixm:AirportHeliport gml:id="ID_839296db-4c81-4cb0-a22f-bb9c035483eb-0"
@@ -297,7 +145,7 @@ mod tests {
             .expect("test date should be RFC 3339")
             .with_timezone(&Utc);
 
-        read_airport_heliport(&mut reader, date)
+        read_feature::<AirportHeliport, _>(&mut reader, date)
     }
 
     #[test]
@@ -315,7 +163,7 @@ mod tests {
                         latitude: 53.630387834,
                         longitude: 9.988227138,
                     }),
-                    field_elevation: Some(Elevation {
+                    field_elevation: Some(Measure {
                         value: 53.0,
                         uom: "FT".to_string(),
                     }),

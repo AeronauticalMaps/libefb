@@ -22,9 +22,7 @@ use quick_xml::events::Event;
 use quick_xml::name::{Namespace, ResolveResult};
 use quick_xml::NsReader;
 
-use crate::features::{
-    read_airport_heliport, read_designated_point, AirportHeliport, DesignatedPoint,
-};
+use crate::features::{read_feature, AirportHeliport, DesignatedPoint, TimeSlice};
 use crate::stream::skip;
 use crate::timeslice::ValidTime;
 use crate::Error;
@@ -269,12 +267,8 @@ fn read_member<R: BufRead>(
         match reader.read_event_into(&mut buf)? {
             Event::Start(element) => {
                 let member = match element.local_name().as_ref() {
-                    "AirportHeliport" => read_airport_heliport(reader, date).map(|member| {
-                        member.map(|(id, airport)| (id, Feature::AirportHeliport(airport)))
-                    }),
-                    "DesignatedPoint" => read_designated_point(reader, date).map(|member| {
-                        member.map(|(id, point)| (id, Feature::DesignatedPoint(point)))
-                    }),
+                    "AirportHeliport" => read_as(reader, date, Feature::AirportHeliport),
+                    "DesignatedPoint" => read_as(reader, date, Feature::DesignatedPoint),
                     _ => {
                         skip(reader, &element)?;
                         continue;
@@ -295,6 +289,17 @@ fn read_member<R: BufRead>(
             _ => {}
         }
     }
+}
+
+/// Reads the feature `T` and turns it into a [`Feature`] with
+/// `into_feature`.
+fn read_as<T: TimeSlice, R: BufRead>(
+    reader: &mut NsReader<R>,
+    date: DateTime<Utc>,
+    into_feature: impl FnOnce(T) -> Feature,
+) -> Result<Option<(String, Feature)>, Error> {
+    let member = read_feature::<T, _>(reader, date)?;
+    Ok(member.map(|(identifier, time_slice)| (identifier, into_feature(time_slice))))
 }
 
 #[cfg(test)]

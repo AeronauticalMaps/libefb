@@ -145,7 +145,7 @@ fn airport(arpt: &aixm::AirportHeliport, cycle: AiracCycle) -> Result<Airport, E
 
 /// Converts an elevation in feet or metres to a distance above mean sea level
 /// in feet.
-fn msl(elevation: &aixm::Elevation) -> Result<VerticalDistance, Error> {
+fn msl(elevation: &aixm::Measure) -> Result<VerticalDistance, Error> {
     let value = elevation.value as f32;
 
     let ft = match elevation.uom.as_str() {
@@ -487,7 +487,7 @@ mod tests {
 
     #[test]
     fn converts_elevation_in_metres_to_feet() {
-        let elevation = aixm::Elevation {
+        let elevation = aixm::Measure {
             value: 16.0,
             uom: "M".to_string(),
         };

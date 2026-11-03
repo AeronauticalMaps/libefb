@@ -15,13 +15,11 @@
 
 use std::io::BufRead;
 
-use chrono::{DateTime, Utc};
-use quick_xml::events::{BytesStart, Event};
+use quick_xml::events::BytesStart;
 use quick_xml::NsReader;
 
-use super::{keep_record_error, Note, Point, Reference};
+use super::{Note, Point, Reference, TimeSlice};
 use crate::stream::{read_optional_text, skip};
-use crate::timeslice::{select_valid, TimeSliceMetadata};
 use crate::Error;
 
 /// A point used in route and procedure design (UML class `DesignatedPoint`).
@@ -42,158 +40,46 @@ pub struct DesignatedPoint {
     pub annotation: Vec<Note>,
 }
 
-/// Reads an `aixm:DesignatedPoint` up to its end tag and returns its
-/// identifier with the time slice that is valid on `date`, or `None` if no
-/// time slice is valid. The start tag must be the last event read.
-///
-/// An [`Error::InvalidRecord`] is returned only after the whole element is
-/// read, so the reader can continue with the next feature.
-pub(crate) fn read_designated_point<R: BufRead>(
-    reader: &mut NsReader<R>,
-    date: DateTime<Utc>,
-) -> Result<Option<(String, DesignatedPoint)>, Error> {
-    let mut buf = Vec::new();
-    let mut identifier = None;
-    let mut time_slices = Vec::new();
-    let mut record_error = None;
+impl TimeSlice for DesignatedPoint {
+    const FEATURE: &'static str = "DesignatedPoint";
 
-    loop {
-        buf.clear();
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(element) => match element.local_name().as_ref() {
-                "identifier" => identifier = read_optional_text(reader, &element)?,
-                "timeSlice" => {
-                    if let Some(time_slice) =
-                        keep_record_error(read_time_slice(reader), &mut record_error)?
-                    {
-                        time_slices.push(time_slice);
-                    }
-                }
-                _ => skip(reader, &element)?,
-            },
-            Event::End(_) => break,
-            Event::Eof => {
-                return Err(Error::InvalidXml(
-                    "DesignatedPoint is not closed".to_string(),
-                ))
+    fn read_property<R: BufRead>(
+        &mut self,
+        reader: &mut NsReader<R>,
+        element: &BytesStart,
+    ) -> Result<(), Error> {
+        match element.local_name().as_ref() {
+            "designator" => self.designator = read_optional_text(reader, element)?,
+            "type" => self.kind = read_optional_text(reader, element)?,
+            "name" => self.name = read_optional_text(reader, element)?,
+            "location" => self.location = Point::read_location(reader, "location")?,
+            "airportHeliport" => {
+                let reference = Reference::from_element(element);
+                skip(reader, element)?;
+                self.airport_heliport = Some(reference?);
             }
-            _ => {}
+            "annotation" => self.annotation.push(Note::read_annotation(reader)?),
+            _ => skip(reader, element)?,
         }
+
+        Ok(())
     }
 
-    let identifier = identifier.ok_or_else(|| {
-        Error::InvalidRecord("DesignatedPoint has no gml:identifier".to_string())
-    })?;
-
-    if let Some(message) = record_error {
-        return Err(Error::InvalidRecord(format!(
-            "DesignatedPoint {identifier}: {message}"
-        )));
-    }
-
-    Ok(select_valid(time_slices, date).map(|point| (identifier, point)))
-}
-
-/// Reads an `aixm:timeSlice` up to its end tag.
-fn read_time_slice<R: BufRead>(
-    reader: &mut NsReader<R>,
-) -> Result<(TimeSliceMetadata, DesignatedPoint), Error> {
-    let mut buf = Vec::new();
-    let mut time_slice = None;
-    let mut record_error = None;
-
-    loop {
-        buf.clear();
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(element) => match element.local_name().as_ref() {
-                "DesignatedPointTimeSlice" => {
-                    time_slice = keep_record_error(read_properties(reader), &mut record_error)?
-                }
-                _ => skip(reader, &element)?,
-            },
-            Event::End(_) => break,
-            Event::Eof => return Err(Error::InvalidXml("timeSlice is not closed".to_string())),
-            _ => {}
+    fn read_empty_property(&mut self, element: &BytesStart) -> Result<(), Error> {
+        if element.local_name().as_ref() == "airportHeliport" {
+            self.airport_heliport = Some(Reference::from_element(element)?);
         }
+
+        Ok(())
     }
-
-    if let Some(message) = record_error {
-        return Err(Error::InvalidRecord(message));
-    }
-
-    time_slice.ok_or_else(|| {
-        Error::InvalidRecord("timeSlice has no DesignatedPointTimeSlice".to_string())
-    })
-}
-
-/// Reads the properties of an `aixm:DesignatedPointTimeSlice` up to its end
-/// tag.
-fn read_properties<R: BufRead>(
-    reader: &mut NsReader<R>,
-) -> Result<(TimeSliceMetadata, DesignatedPoint), Error> {
-    let mut buf = Vec::new();
-    let mut metadata = TimeSliceMetadata::default();
-    let mut point = DesignatedPoint::default();
-    let mut record_error = None;
-
-    loop {
-        buf.clear();
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(element) => {
-                let result = read_property(reader, &element, &mut metadata, &mut point);
-                keep_record_error(result, &mut record_error)?;
-            }
-            Event::Empty(element) if element.local_name().as_ref() == "airportHeliport" => {
-                let result = Reference::from_element(&element);
-                point.airport_heliport = keep_record_error(result, &mut record_error)?;
-            }
-            Event::End(_) => break,
-            Event::Eof => {
-                return Err(Error::InvalidXml(
-                    "DesignatedPointTimeSlice is not closed".to_string(),
-                ))
-            }
-            _ => {}
-        }
-    }
-
-    match record_error {
-        Some(message) => Err(Error::InvalidRecord(message)),
-        None => Ok((metadata, point)),
-    }
-}
-
-/// Reads the property `element` of a time slice up to its end tag.
-fn read_property<R: BufRead>(
-    reader: &mut NsReader<R>,
-    element: &BytesStart,
-    metadata: &mut TimeSliceMetadata,
-    point: &mut DesignatedPoint,
-) -> Result<(), Error> {
-    if metadata.read_property(reader, element)? {
-        return Ok(());
-    }
-
-    match element.local_name().as_ref() {
-        "designator" => point.designator = read_optional_text(reader, element)?,
-        "type" => point.kind = read_optional_text(reader, element)?,
-        "name" => point.name = read_optional_text(reader, element)?,
-        "location" => point.location = Point::read_location(reader, "location")?,
-        "airportHeliport" => {
-            let reference = Reference::from_element(element);
-            skip(reader, element)?;
-            point.airport_heliport = Some(reference?);
-        }
-        "annotation" => point.annotation.push(Note::read_annotation(reader)?),
-        _ => skip(reader, element)?,
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::features::read_feature;
+    use chrono::{DateTime, Utc};
+    use quick_xml::events::Event;
 
     const VRP: &str = r#"
         <aixm:DesignatedPoint gml:id="id.b1cea6c1"
@@ -261,7 +147,7 @@ mod tests {
             .expect("test date should be RFC 3339")
             .with_timezone(&Utc);
 
-        read_designated_point(&mut reader, date)
+        read_feature::<DesignatedPoint, _>(&mut reader, date)
     }
 
     #[test]

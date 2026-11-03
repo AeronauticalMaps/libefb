@@ -15,19 +15,19 @@
 
 use std::io::BufRead;
 
+use chrono::{DateTime, Utc};
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::NsReader;
 
-use crate::stream::{attribute, read_optional_text, read_text};
+use crate::stream::{attribute, read_optional_text, read_text, skip};
+use crate::timeslice::{select_valid, TimeSliceMetadata};
 use crate::Error;
 
 mod airport_heliport;
 mod designated_point;
 
-pub use airport_heliport::{AirportHeliport, Elevation};
+pub use airport_heliport::AirportHeliport;
 pub use designated_point::DesignatedPoint;
-pub(crate) use airport_heliport::read_airport_heliport;
-pub(crate) use designated_point::read_designated_point;
 
 const EPSG_4326: &str = "urn:ogc:def:crs:EPSG::4326";
 
@@ -94,6 +94,40 @@ impl Point {
     }
 }
 
+/// A value with its unit of measurement, e.g. a `ValDistanceVerticalType`
+/// or a `ValFrequencyType`.
+#[derive(Clone, PartialEq, Debug)]
+pub struct Measure {
+    /// The value in the unit of measurement.
+    pub value: f64,
+    /// The unit of measurement (`uom`), e.g. FT, M or MHZ.
+    pub uom: String,
+}
+
+impl Measure {
+    /// Reads the measure `element` up to its end tag. Returns `None` if the
+    /// element has no value.
+    fn read<R: BufRead>(
+        reader: &mut NsReader<R>,
+        element: &BytesStart,
+    ) -> Result<Option<Self>, Error> {
+        let uom = attribute(element, "uom")?;
+
+        let Some(text) = read_optional_text(reader, element)? else {
+            return Ok(None);
+        };
+
+        let value = text
+            .parse()
+            .map_err(|_| Error::InvalidRecord(format!("{text:?} is not a measure")))?;
+
+        let uom =
+            uom.ok_or_else(|| Error::InvalidRecord(format!("measure {text} has no uom")))?;
+
+        Ok(Some(Self { value, uom }))
+    }
+}
+
 /// An `xlink` reference to another feature.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Reference {
@@ -153,6 +187,151 @@ impl Note {
         }
 
         Ok(note)
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// Feature Reader
+/////////////////////////////////////////////////////////////////////////////
+
+/// The properties of a feature's time slice, e.g. of a
+/// `DesignatedPointTimeSlice`.
+pub(crate) trait TimeSlice: Default {
+    /// The local name of the feature, e.g. "DesignatedPoint".
+    const FEATURE: &'static str;
+
+    /// Reads the property `element` up to its end tag. The start tag of
+    /// `element` must be the last event read.
+    fn read_property<R: BufRead>(
+        &mut self,
+        reader: &mut NsReader<R>,
+        element: &BytesStart,
+    ) -> Result<(), Error>;
+
+    /// Reads the empty property `element`, e.g. an xlink reference.
+    fn read_empty_property(&mut self, _element: &BytesStart) -> Result<(), Error> {
+        Ok(())
+    }
+}
+
+/// Reads the feature `T` up to its end tag and returns its identifier with
+/// the time slice that is valid on `date`, or `None` if no time slice is
+/// valid. The start tag must be the last event read.
+///
+/// An [`Error::InvalidRecord`] is returned only after the whole element is
+/// read, so the reader can continue with the next feature.
+pub(crate) fn read_feature<T: TimeSlice, R: BufRead>(
+    reader: &mut NsReader<R>,
+    date: DateTime<Utc>,
+) -> Result<Option<(String, T)>, Error> {
+    let mut buf = Vec::new();
+    let mut identifier = None;
+    let mut time_slices = Vec::new();
+    let mut record_error = None;
+
+    loop {
+        buf.clear();
+        match reader.read_event_into(&mut buf)? {
+            Event::Start(element) => match element.local_name().as_ref() {
+                "identifier" => identifier = read_optional_text(reader, &element)?,
+                "timeSlice" => {
+                    if let Some(time_slice) =
+                        keep_record_error(read_time_slice(reader), &mut record_error)?
+                    {
+                        time_slices.push(time_slice);
+                    }
+                }
+                _ => skip(reader, &element)?,
+            },
+            Event::End(_) => break,
+            Event::Eof => return Err(Error::InvalidXml(format!("{} is not closed", T::FEATURE))),
+            _ => {}
+        }
+    }
+
+    let identifier = identifier.ok_or_else(|| {
+        Error::InvalidRecord(format!("{} has no gml:identifier", T::FEATURE))
+    })?;
+
+    if let Some(message) = record_error {
+        return Err(Error::InvalidRecord(format!(
+            "{} {identifier}: {message}",
+            T::FEATURE
+        )));
+    }
+
+    Ok(select_valid(time_slices, date).map(|time_slice| (identifier, time_slice)))
+}
+
+/// Reads an `aixm:timeSlice` up to its end tag.
+fn read_time_slice<T: TimeSlice, R: BufRead>(
+    reader: &mut NsReader<R>,
+) -> Result<(TimeSliceMetadata, T), Error> {
+    let mut buf = Vec::new();
+    let mut time_slice = None;
+    let mut record_error = None;
+
+    loop {
+        buf.clear();
+        match reader.read_event_into(&mut buf)? {
+            Event::Start(element)
+                if element.local_name().as_ref().strip_suffix("TimeSlice") == Some(T::FEATURE) =>
+            {
+                time_slice = keep_record_error(read_properties(reader), &mut record_error)?
+            }
+            Event::Start(element) => skip(reader, &element)?,
+            Event::End(_) => break,
+            Event::Eof => return Err(Error::InvalidXml("timeSlice is not closed".to_string())),
+            _ => {}
+        }
+    }
+
+    if let Some(message) = record_error {
+        return Err(Error::InvalidRecord(message));
+    }
+
+    time_slice.ok_or_else(|| {
+        Error::InvalidRecord(format!("timeSlice has no {}TimeSlice", T::FEATURE))
+    })
+}
+
+/// Reads the properties of a feature's time slice up to its end tag.
+fn read_properties<T: TimeSlice, R: BufRead>(
+    reader: &mut NsReader<R>,
+) -> Result<(TimeSliceMetadata, T), Error> {
+    let mut buf = Vec::new();
+    let mut metadata = TimeSliceMetadata::default();
+    let mut time_slice = T::default();
+    let mut record_error = None;
+
+    loop {
+        buf.clear();
+        match reader.read_event_into(&mut buf)? {
+            Event::Start(element) => {
+                let result = match metadata.read_property(reader, &element) {
+                    Ok(false) => time_slice.read_property(reader, &element),
+                    other => other.map(|_| ()),
+                };
+                keep_record_error(result, &mut record_error)?;
+            }
+            Event::Empty(element) => {
+                let result = time_slice.read_empty_property(&element);
+                keep_record_error(result, &mut record_error)?;
+            }
+            Event::End(_) => break,
+            Event::Eof => {
+                return Err(Error::InvalidXml(format!(
+                    "{}TimeSlice is not closed",
+                    T::FEATURE
+                )))
+            }
+            _ => {}
+        }
+    }
+
+    match record_error {
+        Some(message) => Err(Error::InvalidRecord(message)),
+        None => Ok((metadata, time_slice)),
     }
 }
 
