@@ -22,7 +22,9 @@ use quick_xml::events::Event;
 use quick_xml::name::{Namespace, ResolveResult};
 use quick_xml::NsReader;
 
-use crate::features::{read_designated_point, DesignatedPoint};
+use crate::features::{
+    read_airport_heliport, read_designated_point, AirportHeliport, DesignatedPoint,
+};
 use crate::stream::skip;
 use crate::timeslice::ValidTime;
 use crate::Error;
@@ -61,6 +63,7 @@ impl fmt::Display for Version {
 
 #[derive(Clone, Debug)]
 enum Feature {
+    AirportHeliport(AirportHeliport),
     DesignatedPoint(DesignatedPoint),
 }
 
@@ -85,10 +88,19 @@ impl Message {
         self.effective_date
     }
 
+    /// Returns the aerodromes and heliports of the message.
+    pub fn airport_heliports(&self) -> impl Iterator<Item = &AirportHeliport> {
+        self.features.values().filter_map(|feature| match feature {
+            Feature::AirportHeliport(airport) => Some(airport),
+            _ => None,
+        })
+    }
+
     /// Returns the designated points of the message.
     pub fn designated_points(&self) -> impl Iterator<Item = &DesignatedPoint> {
-        self.features.values().map(|feature| match feature {
-            Feature::DesignatedPoint(point) => point,
+        self.features.values().filter_map(|feature| match feature {
+            Feature::DesignatedPoint(point) => Some(point),
+            _ => None,
         })
     }
 
@@ -257,6 +269,9 @@ fn read_member<R: BufRead>(
         match reader.read_event_into(&mut buf)? {
             Event::Start(element) => {
                 let member = match element.local_name().as_ref() {
+                    "AirportHeliport" => read_airport_heliport(reader, date).map(|member| {
+                        member.map(|(id, airport)| (id, Feature::AirportHeliport(airport)))
+                    }),
                     "DesignatedPoint" => read_designated_point(reader, date).map(|member| {
                         member.map(|(id, point)| (id, Feature::DesignatedPoint(point)))
                     }),

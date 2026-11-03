@@ -12,9 +12,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     println!(
-        "{} effective {}: {} designated points, {} errors",
+        "{} effective {}: {} airports, {} designated points, {} errors",
         message.version(),
         message.effective_date(),
+        message.airport_heliports().count(),
         message.designated_points().count(),
         message.errors().len()
     );

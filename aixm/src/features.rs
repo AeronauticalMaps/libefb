@@ -21,14 +21,18 @@ use quick_xml::NsReader;
 use crate::stream::{attribute, read_optional_text, read_text};
 use crate::Error;
 
+mod airport_heliport;
 mod designated_point;
 
+pub use airport_heliport::{AirportHeliport, Elevation};
 pub use designated_point::DesignatedPoint;
+pub(crate) use airport_heliport::read_airport_heliport;
 pub(crate) use designated_point::read_designated_point;
 
 const EPSG_4326: &str = "urn:ogc:def:crs:EPSG::4326";
 
-/// A position in EPSG:4326 (`gml:pos` of an `aixm:Point`).
+/// A position in EPSG:4326 (`gml:pos` of an `aixm:Point` or
+/// `aixm:ElevatedPoint`).
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct Point {
     /// The latitude in degrees.
@@ -38,9 +42,13 @@ pub struct Point {
 }
 
 impl Point {
-    /// Reads an `aixm:location` up to its end tag. Returns `None` if the
-    /// location has no position.
-    fn read_location<R: BufRead>(reader: &mut NsReader<R>) -> Result<Option<Self>, Error> {
+    /// Reads the property `element` with an `aixm:Point` or
+    /// `aixm:ElevatedPoint` up to its end tag. Returns `None` if the point
+    /// has no position.
+    fn read_location<R: BufRead>(
+        reader: &mut NsReader<R>,
+        element: &str,
+    ) -> Result<Option<Self>, Error> {
         let mut buf = Vec::new();
         let mut srs_name = None;
         let mut pos = None;
@@ -48,13 +56,13 @@ impl Point {
         loop {
             buf.clear();
             match reader.read_event_into(&mut buf)? {
-                Event::Start(element) => match element.local_name().as_ref() {
-                    "Point" => srs_name = attribute(&element, "srsName")?,
-                    "pos" => pos = read_optional_text(reader, &element)?,
+                Event::Start(start) => match start.local_name().as_ref() {
+                    "Point" | "ElevatedPoint" => srs_name = attribute(&start, "srsName")?,
+                    "pos" => pos = read_optional_text(reader, &start)?,
                     _ => {}
                 },
-                Event::End(element) if element.local_name().as_ref() == "location" => break,
-                Event::Eof => return Err(Error::InvalidXml("location is not closed".to_string())),
+                Event::End(end) if end.local_name().as_ref() == element => break,
+                Event::Eof => return Err(Error::InvalidXml(format!("{element} is not closed"))),
                 _ => {}
             }
         }

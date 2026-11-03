@@ -11,3 +11,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Streaming reader for AIXM 5.1, 5.1.1 and 5.2 messages
 - Designated points
+- Aerodromes and heliports

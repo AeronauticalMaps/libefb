@@ -25,5 +25,5 @@ mod stream;
 mod timeslice;
 
 pub use error::Error;
-pub use features::{DesignatedPoint, Note, Point, Reference};
+pub use features::{AirportHeliport, DesignatedPoint, Elevation, Note, Point, Reference};
 pub use message::{read_message, Message, Version};

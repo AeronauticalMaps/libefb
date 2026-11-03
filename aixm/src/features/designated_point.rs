@@ -178,7 +178,7 @@ fn read_property<R: BufRead>(
         "designator" => point.designator = read_optional_text(reader, element)?,
         "type" => point.kind = read_optional_text(reader, element)?,
         "name" => point.name = read_optional_text(reader, element)?,
-        "location" => point.location = Point::read_location(reader)?,
+        "location" => point.location = Point::read_location(reader, "location")?,
         "airportHeliport" => {
             let reference = Reference::from_element(element);
             skip(reader, element)?;
