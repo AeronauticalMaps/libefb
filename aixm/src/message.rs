@@ -21,7 +21,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use quick_xml::events::Event;
 use quick_xml::name::{Namespace, ResolveResult};
 
-use crate::features::{read_feature, DesignatedPoint, TimeSlice};
+use crate::features::{read_feature, AirportHeliport, DesignatedPoint, TimeSlice};
 use crate::stream::Stream;
 use crate::timeslice::ValidTime;
 use crate::Error;
@@ -60,6 +60,7 @@ impl fmt::Display for Version {
 
 #[derive(Clone, Debug)]
 enum Feature {
+    AirportHeliport(AirportHeliport),
     DesignatedPoint(DesignatedPoint),
 }
 
@@ -82,6 +83,17 @@ impl Message {
     /// begin of the temporal extent in the message metadata.
     pub fn effective_date(&self) -> NaiveDate {
         self.effective_date
+    }
+
+    /// Returns the aerodromes and heliports of the message with their
+    /// identifier, which other features refer to.
+    pub fn airport_heliports(&self) -> impl Iterator<Item = (&str, &AirportHeliport)> {
+        self.features
+            .iter()
+            .filter_map(|(identifier, feature)| match feature {
+                Feature::AirportHeliport(airport) => Some((identifier.as_str(), airport)),
+                _ => None,
+            })
     }
 
     /// Returns the designated points of the message.
@@ -257,6 +269,7 @@ fn read_member<R: BufRead>(
         match stream.read_event_into(&mut buf)? {
             Event::Start(element) => {
                 let member = match element.local_name().as_ref() {
+                    "AirportHeliport" => read_as(stream, date, Feature::AirportHeliport),
                     "DesignatedPoint" => read_as(stream, date, Feature::DesignatedPoint),
                     _ => {
                         stream.skip(&element)?;

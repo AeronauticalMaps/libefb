@@ -101,6 +101,24 @@ code_list! {
     }
 }
 
+/////////////////////////////////////////////////////////////////////////////
+// Units of Measurement
+/////////////////////////////////////////////////////////////////////////////
+
+code_list! {
+    /// The unit of a distance or an elevation (UomDistanceType).
+    UomDistanceType {
+        /// Nautical miles.
+        NM = "NM",
+        /// Kilometres.
+        KM = "KM",
+        /// Metres.
+        M = "M",
+        /// Feet.
+        FT = "FT",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

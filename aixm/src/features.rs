@@ -19,13 +19,15 @@ use std::io::BufRead;
 use chrono::{DateTime, Utc};
 use quick_xml::events::{BytesStart, Event};
 
-use crate::codes::{code, CodeNotePurposeType};
+use crate::codes::{code, Code, CodeNotePurposeType};
 use crate::stream::{attribute, owned, Stream};
 use crate::timeslice::{select_valid, TimeSliceMetadata};
 use crate::Error;
 
+mod airport_heliport;
 mod designated_point;
 
+pub use airport_heliport::AirportHeliport;
 pub use designated_point::DesignatedPoint;
 
 const EPSG_4326: &str = "urn:ogc:def:crs:EPSG::4326";
@@ -99,6 +101,44 @@ impl Point {
             }),
             _ => Err(Error::InvalidRecord(format!("{pos:?} is not a position"))),
         }
+    }
+}
+
+/// A value with its unit of measurement `U`, e.g. a `ValDistanceType`
+/// with a [`UomDistanceType`](crate::UomDistanceType).
+#[derive(Clone, PartialEq, Debug)]
+pub struct Measure<U> {
+    /// The value in the unit of measurement.
+    pub value: f64,
+    /// The unit of measurement (`uom`), e.g. FT, M or MHZ.
+    pub uom: U,
+}
+
+impl<U> Measure<U> {
+    /// Reads the measure `element` up to its end tag. Returns `None` if the
+    /// element has no value.
+    fn read<R: BufRead>(
+        stream: &mut Stream<R>,
+        element: &BytesStart,
+    ) -> Result<Option<Self>, Error>
+    where
+        U: Code,
+    {
+        let uom = attribute(element, "uom")?.map(|uom| U::from_code(&uom));
+
+        let value = stream.read_optional_text(element, |text| {
+            text.parse::<f64>()
+                .map_err(|_| Error::InvalidRecord(format!("{text:?} is not a measure")))
+        })?;
+
+        let Some(value) = value else {
+            return Ok(None);
+        };
+
+        let uom =
+            uom.ok_or_else(|| Error::InvalidRecord(format!("measure {value} has no uom")))?;
+
+        Ok(Some(Self { value, uom }))
     }
 }
 

@@ -25,7 +25,7 @@ mod message;
 mod stream;
 mod timeslice;
 
-pub use codes::{CodeDesignatedPointType, CodeNotePurposeType};
+pub use codes::{CodeDesignatedPointType, CodeNotePurposeType, UomDistanceType};
 pub use error::Error;
-pub use features::{DesignatedPoint, Note, Point, Reference};
+pub use features::{AirportHeliport, DesignatedPoint, Measure, Note, Point, Reference};
 pub use message::{read_message, Message, Version};
