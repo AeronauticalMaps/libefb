@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Read waypoints and VRPs from AIXM 5.x
 - Read airports from AIXM 5.x
 - Notes on unknown inputs of the runway analysis
+- Read the displaced threshold of runways from ARINC 424
 
 ### Changed
 

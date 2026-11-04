@@ -52,7 +52,11 @@ impl<'a> TryFrom<records::Runway<'a>> for Runway {
             tora: None,
             toda: None,
             lda: None,
-            displaced_threshold: None,
+            displaced_threshold: rwy
+                .dsplcd_thr
+                .map(|thr| thr.as_u16())
+                .transpose()?
+                .map(|ft| Length::ft(f32::from(ft))),
             surface: None,
             slope: rwy.rwy_grad.map(|grad| grad.as_decimal()).transpose()?,
             // FIXME: Use proper elevation!
@@ -80,5 +84,22 @@ impl<'a> TryFrom<records::Waypoint<'a>> for Waypoint {
             location: wp.icao_code().try_into().ok(),
             cycle: Some(wp.cycle.try_into()?),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const KJFK_RWY_04L: &[u8] = b"SUSAP KJFKK6GRW04L   0120790440 N40372318W073470505         -0028300012046057200IIHIQ1                                     305541709";
+
+    #[test]
+    fn converts_displaced_threshold_of_runway() {
+        let record = records::Runway::try_from(KJFK_RWY_04L).expect("runway should parse");
+        let rwy = Runway::try_from(record).expect("runway should convert");
+
+        assert_eq!(rwy.displaced_threshold, Some(Length::ft(460.0)));
+        assert_eq!(rwy.lda, None);
+        assert_eq!(rwy.lda_or_length(), Length::ft(12079.0 - 460.0));
     }
 }
