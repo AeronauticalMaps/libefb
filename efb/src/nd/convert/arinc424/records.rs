@@ -49,16 +49,12 @@ impl<'a> TryFrom<records::Runway<'a>> for Runway {
             designator: rwy.runway_id.designator()?.to_string(),
             bearing: rwy.rwy_brg.into(),
             length,
-            tora: length,
-            toda: length,
-            lda: length,
-            // FIXME: Use proper surface!
-            surface: RunwaySurface::Asphalt,
-            slope: rwy
-                .rwy_grad
-                .map(|grad| grad.as_decimal())
-                .transpose()?
-                .unwrap_or_default(),
+            tora: None,
+            toda: None,
+            lda: None,
+            displaced_threshold: None,
+            surface: None,
+            slope: rwy.rwy_grad.map(|grad| grad.as_decimal()).transpose()?,
             // FIXME: Use proper elevation!
             elev: VerticalDistance::Gnd,
         })

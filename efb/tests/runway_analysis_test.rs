@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -113,11 +113,12 @@ fn rwy_analysis() -> RunwayAnalysis {
         designator: String::from("27"),
         bearing: Angle::t(270.0),
         length: Length::ft(3600.0),
-        tora: Length::ft(2900.0),
-        toda: Length::ft(2900.0),
-        lda: Length::ft(2900.0),
-        surface: RunwaySurface::Grass,
-        slope: 0.0,
+        tora: Some(Length::ft(2900.0)),
+        toda: Some(Length::ft(2900.0)),
+        lda: Some(Length::ft(2900.0)),
+        displaced_threshold: None,
+        surface: Some(RunwaySurface::Grass),
+        slope: Some(0.0),
         elev: VerticalDistance::Gnd,
     };
 

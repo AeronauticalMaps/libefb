@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Make FMS thread safe
+- Runway surface, slope and declared distances are optional, and a
+  runway gets its displaced threshold
 
 ## [0.7.1] - 2026-04-22
 

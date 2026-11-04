@@ -69,9 +69,9 @@ impl<'t> PreparedWrites<'t> {
             runway: tx.prepare(
                 "INSERT INTO runways \
                  (airport_id, designator, bearing_degrees, length_meters, \
-                  tora_meters, toda_meters, lda_meters, surface, slope_percent, \
-                  elev_kind, elev_value) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                  tora_meters, toda_meters, lda_meters, displaced_threshold_meters, \
+                  surface, slope_percent, elev_kind, elev_value) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             )?,
             waypoint: tx.prepare(
                 "INSERT OR REPLACE INTO waypoints \
@@ -153,11 +153,12 @@ fn write_runway(stmt: &mut Statement<'_>, airport_id: i64, r: &Runway) -> Result
         &r.designator,
         *r.bearing.convert_to(AngleUnit::TrueNorth).value() as f64,
         r.length.to_si() as f64,
-        r.tora.to_si() as f64,
-        r.toda.to_si() as f64,
-        r.lda.to_si() as f64,
+        r.tora.map(|tora| tora.to_si() as f64),
+        r.toda.map(|toda| toda.to_si() as f64),
+        r.lda.map(|lda| lda.to_si() as f64),
+        r.displaced_threshold.map(|dthr| dthr.to_si() as f64),
         r.surface,
-        r.slope as f64,
+        r.slope.map(f64::from),
         vd_kind(&r.elev),
         vd_value(&r.elev),
     ])?;

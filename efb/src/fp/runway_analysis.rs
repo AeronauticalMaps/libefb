@@ -43,6 +43,8 @@ pub struct RunwayAnalysis {
     clear_obstacle: Length,
     margin: Length,
     pct_margin: f32,
+    // TODO: Add RWY analysis notes that hint if TORA, LDG or surface were considered.
+    // notes: RunwayAnalysisNotes
 }
 
 impl RunwayAnalysis {
@@ -65,8 +67,9 @@ impl RunwayAnalysis {
         let clear_obstacle = *min_distance.clear_obstacle()
             * factors.map_or(1.0, |f| f.clear_obstacle_factor(&influences));
 
-        let margin = rwy.tora - ground_roll;
-        let pct_margin = margin / rwy.tora;
+        let tora = rwy.tora_or_length();
+        let margin = tora - ground_roll;
+        let pct_margin = margin / tora;
 
         debug!(
             "takeoff analysis rwy {}: ground_roll={:?}, margin={:?} ({:.0}%)",
@@ -112,8 +115,9 @@ impl RunwayAnalysis {
         let clear_obstacle = *min_distance.clear_obstacle()
             * factors.map_or(1.0, |f| f.clear_obstacle_factor(&influences));
 
-        let margin = rwy.lda - ground_roll;
-        let pct_margin = margin / rwy.lda;
+        let lda = rwy.lda_or_length();
+        let margin = lda - ground_roll;
+        let pct_margin = margin / lda;
 
         debug!(
             "landing analysis rwy {}: ground_roll={:?}, margin={:?} ({:.0}%)",
