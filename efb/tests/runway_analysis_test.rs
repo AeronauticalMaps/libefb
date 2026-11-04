@@ -18,12 +18,29 @@ use std::str::FromStr;
 
 use efb::aircraft::{LoadedStation, Station};
 use efb::fp::{
-    AlteringFactor, FactorOfEffect, MassAndBalance, RunwayAnalysis, TakeoffLandingPerformance,
+    AlteringFactor, FactorOfEffect, MassAndBalance, RunwayAnalysis, RunwayAnalysisNote,
+    TakeoffLandingPerformance,
 };
 use efb::nd::{Runway, RunwayConditionCode, RunwaySurface};
 use efb::{VerticalDistance, Wind};
 
 use efb::measurements::*;
+
+/// The fictitious grass runway 27 of the runway analysis.
+fn west_grass_rwy() -> Runway {
+    Runway {
+        designator: String::from("27"),
+        bearing: Angle::t(270.0),
+        length: Length::ft(3600.0),
+        tora: Some(Length::ft(2900.0)),
+        toda: Some(Length::ft(2900.0)),
+        lda: Some(Length::ft(2900.0)),
+        displaced_threshold: None,
+        surface: Some(RunwaySurface::Grass),
+        slope: Some(0.0),
+        elev: VerticalDistance::Gnd,
+    }
+}
 
 /// Runway analysis to test.
 ///
@@ -56,7 +73,7 @@ use efb::measurements::*;
 ///
 /// With a TORA of 2900ft we have a margin of 1898.2223ft which is 65% of the
 /// available length.
-fn rwy_analysis() -> RunwayAnalysis {
+fn rwy_analysis(rwy: Runway) -> RunwayAnalysis {
     let perf = TakeoffLandingPerformance::builder(vec![
         (
             VerticalDistance::PressureAltitude(0),
@@ -109,19 +126,6 @@ fn rwy_analysis() -> RunwayAnalysis {
     ])
     .build();
 
-    let west_grass_rwy = Runway {
-        designator: String::from("27"),
-        bearing: Angle::t(270.0),
-        length: Length::ft(3600.0),
-        tora: Some(Length::ft(2900.0)),
-        toda: Some(Length::ft(2900.0)),
-        lda: Some(Length::ft(2900.0)),
-        displaced_threshold: None,
-        surface: Some(RunwaySurface::Grass),
-        slope: Some(0.0),
-        elev: VerticalDistance::Gnd,
-    };
-
     // the mass and balance is irrelevant for this test since we don't have any
     // mass factors
     let mb = MassAndBalance::new(&vec![LoadedStation {
@@ -131,7 +135,7 @@ fn rwy_analysis() -> RunwayAnalysis {
     }]);
 
     RunwayAnalysis::takeoff(
-        &west_grass_rwy,
+        &rwy,
         RunwayConditionCode::Six,
         &Wind::from_str("27010KT").unwrap(),
         Temperature::c(20.0),
@@ -143,14 +147,14 @@ fn rwy_analysis() -> RunwayAnalysis {
 
 #[test]
 fn wind_components() {
-    let rwy_analysis = rwy_analysis();
+    let rwy_analysis = rwy_analysis(west_grass_rwy());
     assert_eq!(rwy_analysis.headwind(), &Speed::kt(10.0));
     assert_eq!(rwy_analysis.crosswind(), &Speed::kt(0.0));
 }
 
 #[test]
 fn ground_roll_and_distance_to_clear_obstacle() {
-    let rwy_analysis = rwy_analysis();
+    let rwy_analysis = rwy_analysis(west_grass_rwy());
 
     assert!(
         *(*rwy_analysis.ground_roll() - Length::ft(1001.7777)).value() <= f32::EPSILON,
@@ -167,7 +171,30 @@ fn ground_roll_and_distance_to_clear_obstacle() {
 
 #[test]
 fn ground_roll_margin() {
-    let rwy_analysis = rwy_analysis();
+    let rwy_analysis = rwy_analysis(west_grass_rwy());
     assert!(*(*rwy_analysis.margin() - Length::ft(1898.2223)).value() <= f32::EPSILON);
     assert_eq!((rwy_analysis.pct_margin() * 100.0).round(), 65.0);
+}
+
+#[test]
+fn has_no_notes_with_known_inputs() {
+    let rwy_analysis = rwy_analysis(west_grass_rwy());
+    assert!(rwy_analysis.notes().is_empty());
+}
+
+#[test]
+fn notes_estimated_tora_and_unknown_surface() {
+    let rwy = Runway {
+        tora: None,
+        surface: None,
+        ..west_grass_rwy()
+    };
+
+    assert_eq!(
+        rwy_analysis(rwy).notes(),
+        [
+            RunwayAnalysisNote::ToraEstimated,
+            RunwayAnalysisNote::SurfaceUnknown
+        ]
+    );
 }

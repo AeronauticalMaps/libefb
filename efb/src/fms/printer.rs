@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -257,6 +257,10 @@ impl Printer {
             rwy_analysis.pct_margin(),
             self.line_length - 12
         )?;
+
+        for note in rwy_analysis.notes() {
+            writeln!(buffer, "{note}")?;
+        }
 
         writeln!(buffer)?;
 

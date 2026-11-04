@@ -14,6 +14,7 @@
 // limitations under the License.
 
 use std::cmp::{Ordering, PartialOrd};
+use std::fmt;
 
 use log::{debug, warn};
 
@@ -35,7 +36,7 @@ use super::{AlteringFactors, Influences, MassAndBalance, TakeoffLandingPerforman
 /// [`takeoff`]: RunwayAnalysis::takeoff
 /// [`landing`]: RunwayAnalysis::landing
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Copy, Clone, PartialEq, Debug, Default)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct RunwayAnalysis {
     headwind: Speed,
     crosswind: Speed,
@@ -43,8 +44,34 @@ pub struct RunwayAnalysis {
     clear_obstacle: Length,
     margin: Length,
     pct_margin: f32,
-    // TODO: Add RWY analysis notes that hint if TORA, LDG or surface were considered.
-    // notes: RunwayAnalysisNotes
+    notes: Vec<RunwayAnalysisNote>,
+}
+
+/// An input of a runway analysis that is unknown, so that the analysis is an
+/// estimate biased by it.
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum RunwayAnalysisNote {
+    /// The TORA is unknown and estimated by the runway length.
+    ToraEstimated,
+    /// The LDA is unknown and estimated by the runway length less the
+    /// displaced threshold.
+    LdaEstimated,
+    /// The surface is unknown, and only factors for any surface apply.
+    SurfaceUnknown,
+    /// The slope is unknown and not corrected.
+    SlopeUnknown,
+}
+
+impl fmt::Display for RunwayAnalysisNote {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ToraEstimated => write!(f, "TORA ESTIMATED FROM RWY LENGTH"),
+            Self::LdaEstimated => write!(f, "LDA ESTIMATED FROM RWY LENGTH"),
+            Self::SurfaceUnknown => write!(f, "SURFACE UNKNOWN"),
+            Self::SlopeUnknown => write!(f, "SLOPE UNKNOWN"),
+        }
+    }
 }
 
 impl RunwayAnalysis {
@@ -71,12 +98,27 @@ impl RunwayAnalysis {
         let margin = tora - ground_roll;
         let pct_margin = margin / tora;
 
+        let mut notes = Vec::new();
+
+        if rwy.tora.is_none() {
+            notes.push(RunwayAnalysisNote::ToraEstimated);
+        }
+
+        if rwy.surface.is_none() {
+            notes.push(RunwayAnalysisNote::SurfaceUnknown);
+        }
+
+        if rwy.slope.is_none() {
+            notes.push(RunwayAnalysisNote::SlopeUnknown);
+        }
+
         debug!(
-            "takeoff analysis rwy {}: ground_roll={:?}, margin={:?} ({:.0}%)",
+            "takeoff analysis rwy {}: ground_roll={:?}, margin={:?} ({:.0}%), notes={:?}",
             rwy.designator,
             ground_roll,
             margin,
-            pct_margin * 100.0
+            pct_margin * 100.0,
+            notes
         );
 
         if pct_margin < 0.0 {
@@ -93,6 +135,7 @@ impl RunwayAnalysis {
             clear_obstacle,
             margin,
             pct_margin,
+            notes,
         }
     }
 
@@ -119,12 +162,27 @@ impl RunwayAnalysis {
         let margin = lda - ground_roll;
         let pct_margin = margin / lda;
 
+        let mut notes = Vec::new();
+
+        if rwy.lda.is_none() {
+            notes.push(RunwayAnalysisNote::LdaEstimated);
+        }
+
+        if rwy.surface.is_none() {
+            notes.push(RunwayAnalysisNote::SurfaceUnknown);
+        }
+
+        if rwy.slope.is_none() {
+            notes.push(RunwayAnalysisNote::SlopeUnknown);
+        }
+
         debug!(
-            "landing analysis rwy {}: ground_roll={:?}, margin={:?} ({:.0}%)",
+            "landing analysis rwy {}: ground_roll={:?}, margin={:?} ({:.0}%), notes={:?}",
             rwy.designator,
             ground_roll,
             margin,
-            pct_margin * 100.0
+            pct_margin * 100.0,
+            notes
         );
 
         if pct_margin < 0.0 {
@@ -141,6 +199,7 @@ impl RunwayAnalysis {
             clear_obstacle,
             margin,
             pct_margin,
+            notes,
         }
     }
 
@@ -172,6 +231,11 @@ impl RunwayAnalysis {
     /// Returns the margin in percent.
     pub fn pct_margin(&self) -> &f32 {
         &self.pct_margin
+    }
+
+    /// Returns the inputs that are unknown and bias the analysis.
+    pub fn notes(&self) -> &[RunwayAnalysisNote] {
+        &self.notes
     }
 }
 
