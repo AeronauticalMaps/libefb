@@ -36,6 +36,9 @@ pub struct Runway<'a> {
     pub threshould_latitude: Latitude<'a>,
     pub threshould_longitude: Longitude<'a>,
     pub rwy_grad: Option<RwyGrad<'a>>,
+    /// 5.69 Displaced Threshold Distance (DSPLCD THR) in feet.
+    #[arinc424(field = 72)]
+    pub dsplcd_thr: Option<Numeric<'a, 4>>,
     #[arinc424(field = 124)]
     pub frn: FileRecordNumber<'a>,
     pub cycle: Cycle<'a>,
@@ -62,6 +65,7 @@ mod tests {
         assert_eq!(rwy.runway_length.as_u32(), Ok(12079u32));
         assert_eq!(rwy.rwy_brg, RwyBrg::MagneticNorth(44.0));
         assert_eq!(rwy.threshould_source, None);
+        assert_eq!(rwy.dsplcd_thr.map(|thr| thr.as_u16()), Some(Ok(460)));
         assert_eq!(rwy.frn.as_u32(), Ok(30554));
         assert_eq!(rwy.cycle.year(), Ok(17));
         assert_eq!(rwy.cycle.cycle(), Ok(9));
