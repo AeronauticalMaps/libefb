@@ -84,6 +84,10 @@
 //!
 //! - **ISA** International Standard Atmosphere
 //!
+//! ## L
+//!
+//! - **LDA** Landing Distance Available
+//!
 //! ## M
 //!
 //! - **MSL** Mean Sea Level
@@ -105,6 +109,7 @@
 //!
 //! - **TOC** Top of Climb
 //! - **TOD** Top of Descent
+//! - **TORA** Take-Off Run Available
 //!
 //! ## V
 //!

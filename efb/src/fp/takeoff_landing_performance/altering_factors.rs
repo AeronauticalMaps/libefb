@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -116,20 +116,23 @@ impl AlteringFactor {
             }
             Self::IncreaseAltitude(f) => 1.0 + f.clone().factor(*influences.level()),
             Self::IncreaseRWYCC(map) => {
-                let rwycc_and_surface = (Some(*influences.rwycc()), Some(*influences.surface()));
+                let surface = influences.surface().copied();
+                let rwycc_and_surface = (Some(*influences.rwycc()), surface);
                 let rwycc_any_surface = (Some(*influences.rwycc()), None::<RunwaySurface>);
                 let any_rwycc_and_surface =
-                    (None::<RunwayConditionCode>, Some(*influences.surface()));
+                    surface.map(|surface| (None::<RunwayConditionCode>, Some(surface)));
 
                 let f = map
                     .get(&rwycc_and_surface)
                     .or_else(|| map.get(&rwycc_any_surface))
-                    .or_else(|| map.get(&any_rwycc_and_surface))
+                    .or_else(|| any_rwycc_and_surface.and_then(|key| map.get(&key)))
                     .unwrap_or(&0.0);
 
                 1.0 + f
             }
-            Self::RunwaySlope(f) => 1.0 + f.clone().factor(*influences.slope()),
+            Self::RunwaySlope(f) => influences
+                .slope()
+                .map_or(1.0, |slope| 1.0 + f.clone().factor(*slope)),
             Self::Mass(f) => 1.0 + f.clone().factor(*influences.mass()),
         }
     }

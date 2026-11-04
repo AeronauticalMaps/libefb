@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -84,15 +84,79 @@ pub struct Runway {
     pub bearing: Angle,
     pub length: Length,
     /// Takeoff Run Available - length available for ground run during takeoff.
-    pub tora: Length,
+    pub tora: Option<Length>,
     /// Takeoff Distance Available - length available for takeoff including clearway.
-    pub toda: Length,
+    pub toda: Option<Length>,
     /// Landing Distance Available - length available for landing ground roll.
-    pub lda: Length,
-    pub surface: RunwaySurface,
+    pub lda: Option<Length>,
+    /// The distance of the threshold from the beginning of the runway.
+    pub displaced_threshold: Option<Length>,
+    pub surface: Option<RunwaySurface>,
     /// Runway gradient as percentage (positive = upslope, negative = downslope).
-    pub slope: f32,
+    pub slope: Option<f32>,
     pub elev: VerticalDistance,
+}
+
+impl Runway {
+    /// Returns the TORA, or the runway length if the TORA is unknown.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use efb::measurements::{Angle, Length};
+    /// use efb::nd::Runway;
+    /// use efb::VerticalDistance;
+    ///
+    /// let rwy = Runway {
+    ///     designator: String::from("20"),
+    ///     bearing: Angle::m(202.0),
+    ///     length: Length::m(1040.0),
+    ///     tora: None,
+    ///     toda: None,
+    ///     lda: None,
+    ///     displaced_threshold: None,
+    ///     surface: None,
+    ///     slope: None,
+    ///     elev: VerticalDistance::Gnd,
+    /// };
+    ///
+    /// assert_eq!(rwy.tora_or_length(), Length::m(1040.0));
+    /// ```
+    pub fn tora_or_length(&self) -> Length {
+        self.tora.unwrap_or(self.length)
+    }
+
+    /// Returns the LDA, or the runway length less the displaced threshold if
+    /// the LDA is unknown. An unknown displaced threshold counts as none.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use efb::measurements::{Angle, Length};
+    /// use efb::nd::Runway;
+    /// use efb::VerticalDistance;
+    ///
+    /// let rwy = Runway {
+    ///     designator: String::from("20"),
+    ///     bearing: Angle::m(202.0),
+    ///     length: Length::m(1040.0),
+    ///     tora: None,
+    ///     toda: None,
+    ///     lda: None,
+    ///     displaced_threshold: Some(Length::m(140.0)),
+    ///     surface: None,
+    ///     slope: None,
+    ///     elev: VerticalDistance::Gnd,
+    /// };
+    ///
+    /// assert_eq!(rwy.lda_or_length(), Length::m(900.0));
+    /// ```
+    pub fn lda_or_length(&self) -> Length {
+        self.lda.unwrap_or(match self.displaced_threshold {
+            Some(displaced_threshold) => self.length - displaced_threshold,
+            None => self.length,
+        })
+    }
 }
 
 impl Hash for Runway {
@@ -103,8 +167,9 @@ impl Hash for Runway {
         self.tora.hash(state);
         self.toda.hash(state);
         self.lda.hash(state);
+        self.displaced_threshold.hash(state);
         self.surface.hash(state);
-        self.slope.to_bits().hash(state);
+        self.slope.map(f32::to_bits).hash(state);
         self.elev.hash(state);
     }
 }

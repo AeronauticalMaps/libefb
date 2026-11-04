@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2024 Joe Pearson
+// Copyright 2024, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,11 +26,12 @@ fn west_grass_rwy(elev: VerticalDistance) -> Runway {
         designator: String::from("27"),
         bearing: Angle::t(270.0),
         length: Length::m(1100.0),
-        tora: Length::m(900.0),
-        toda: Length::m(900.0),
-        lda: Length::m(900.0),
-        surface: RunwaySurface::Grass,
-        slope: 0.0,
+        tora: Some(Length::m(900.0)),
+        toda: Some(Length::m(900.0)),
+        lda: Some(Length::m(900.0)),
+        displaced_threshold: None,
+        surface: Some(RunwaySurface::Grass),
+        slope: Some(0.0),
         elev,
     }
 }

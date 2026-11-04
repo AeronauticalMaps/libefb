@@ -19,9 +19,10 @@ use rusqlite_migration::{Migrations, M};
 use crate::error::{Error, Result};
 
 const INITIAL: &str = include_str!("V001__Initial_navigation_data.sql");
+const OPTIONAL_RUNWAY_DATA: &str = include_str!("V002__Optional_runway_data.sql");
 
 #[allow(unused)]
-pub(super) const SCHEMA_VERSION: u32 = 1;
+pub(super) const SCHEMA_VERSION: u32 = 2;
 
 /// Brings the database up to [`SCHEMA_VERSION`].
 ///
@@ -49,7 +50,7 @@ pub(super) fn migrate(conn: &mut Connection) -> Result<()> {
 fn migrations() -> Migrations<'static> {
     // Adding a future migration: append a new `M::up(...)`, bump
     // `SCHEMA_VERSION`, and drop the matching `XXX.sql` file in this module.
-    Migrations::new(vec![M::up(INITIAL)])
+    Migrations::new(vec![M::up(INITIAL), M::up(OPTIONAL_RUNWAY_DATA)])
 }
 
 #[cfg(test)]

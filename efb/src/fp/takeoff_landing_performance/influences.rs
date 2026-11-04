@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025 Joe Pearson
+// Copyright 2025, 2026 Joe Pearson
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,9 +23,9 @@ pub struct Influences {
     mass: Mass,
     headwind: Speed,
     temperature: Temperature,
-    slope: f32,
+    slope: Option<f32>,
     level: VerticalDistance,
-    surface: RunwaySurface,
+    surface: Option<RunwaySurface>,
     rwycc: RunwayConditionCode,
 }
 
@@ -65,12 +65,12 @@ impl Influences {
         &self.level
     }
 
-    pub fn slope(&self) -> &f32 {
-        &self.slope
+    pub fn slope(&self) -> Option<&f32> {
+        self.slope.as_ref()
     }
 
-    pub fn surface(&self) -> &RunwaySurface {
-        &self.surface
+    pub fn surface(&self) -> Option<&RunwaySurface> {
+        self.surface.as_ref()
     }
 
     pub fn rwycc(&self) -> &RunwayConditionCode {
