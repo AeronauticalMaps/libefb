@@ -23,8 +23,8 @@ use quick_xml::name::{Namespace, ResolveResult};
 use quick_xml::NsReader;
 
 use crate::features::{
-    read_feature, AirportHeliport, DesignatedPoint, Navaid, NavaidEquipment, Reference, TimeSlice,
-    DME, NDB, TACAN, VOR,
+    read_feature, AirportHeliport, DesignatedPoint, Navaid, NavaidEquipment, Reference, Runway,
+    RunwayCentrelinePoint, RunwayDirection, TimeSlice,
 };
 use crate::stream::skip;
 use crate::timeslice::ValidTime;
@@ -68,6 +68,9 @@ enum Feature {
     DesignatedPoint(DesignatedPoint),
     Navaid(Navaid),
     NavaidEquipment(NavaidEquipment),
+    Runway(Runway),
+    RunwayDirection(RunwayDirection),
+    RunwayCentrelinePoint(RunwayCentrelinePoint),
 }
 
 /// An AIXM 5.x message (`AIXMBasicMessage`).
@@ -122,6 +125,34 @@ impl Message {
             Some(Feature::NavaidEquipment(equipment)) => Some(equipment),
             _ => None,
         }
+    }
+
+    /// Returns the runway that `reference` points to, e.g. the runway a
+    /// runway direction is used on.
+    pub fn runway(&self, reference: &Reference) -> Option<&Runway> {
+        match self.features.get(&reference.uuid) {
+            Some(Feature::Runway(runway)) => Some(runway),
+            _ => None,
+        }
+    }
+
+    /// Returns the runway directions of the message with their identifier,
+    /// which the centreline points refer to.
+    pub fn runway_directions(&self) -> impl Iterator<Item = (&str, &RunwayDirection)> {
+        self.features
+            .iter()
+            .filter_map(|(identifier, feature)| match feature {
+                Feature::RunwayDirection(direction) => Some((identifier.as_str(), direction)),
+                _ => None,
+            })
+    }
+
+    /// Returns the runway centreline points of the message.
+    pub fn runway_centreline_points(&self) -> impl Iterator<Item = &RunwayCentrelinePoint> {
+        self.features.values().filter_map(|feature| match feature {
+            Feature::RunwayCentrelinePoint(point) => Some(point),
+            _ => None,
+        })
     }
 
     /// Returns the errors of the records that could not be read.
@@ -296,6 +327,11 @@ fn read_member<R: BufRead>(
                     "DME" => read_as(reader, date, |f| equipment(NavaidEquipment::DME(f))),
                     "NDB" => read_as(reader, date, |f| equipment(NavaidEquipment::NDB(f))),
                     "TACAN" => read_as(reader, date, |f| equipment(NavaidEquipment::TACAN(f))),
+                    "Runway" => read_as(reader, date, Feature::Runway),
+                    "RunwayDirection" => read_as(reader, date, Feature::RunwayDirection),
+                    "RunwayCentrelinePoint" => {
+                        read_as(reader, date, Feature::RunwayCentrelinePoint)
+                    }
                     _ => {
                         skip(reader, &element)?;
                         continue;

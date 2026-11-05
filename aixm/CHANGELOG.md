@@ -13,3 +13,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Designated points
 - Aerodromes and heliports
 - Navaids with their VOR, DME, NDB and TACAN equipment
+- Runways with their directions and declared distances
