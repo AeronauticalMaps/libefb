@@ -27,10 +27,12 @@ use crate::Error;
 mod airport_heliport;
 mod designated_point;
 mod navaid;
+mod runway;
 
 pub use airport_heliport::AirportHeliport;
 pub use designated_point::DesignatedPoint;
 pub use navaid::{Navaid, NavaidComponent, NavaidEquipment, DME, NDB, TACAN, VOR};
+pub use runway::{Runway, RunwayCentrelinePoint, RunwayDeclaredDistance, RunwayDirection};
 
 const EPSG_4326: &str = "urn:ogc:def:crs:EPSG::4326";
 
@@ -143,6 +145,13 @@ impl<U> Measure<U> {
 
         Ok(Some(Self { value, uom }))
     }
+}
+
+/// Parses an angle in degrees, e.g. a ValBearingType or a
+/// ValMagneticVariationType, which have no unit of measurement.
+fn degrees(text: &str) -> Result<f64, Error> {
+    text.parse()
+        .map_err(|_| Error::InvalidRecord(format!("{text:?} is not in degrees")))
 }
 
 /// An `xlink` reference to another feature.

@@ -26,12 +26,14 @@ mod stream;
 mod timeslice;
 
 pub use codes::{
-    CodeDesignatedPointType, CodeNDBUsageType, CodeNavaidServiceType, CodeNotePurposeType,
+    CodeDeclaredDistanceType, CodeDesignatedPointType, CodeNDBUsageType, CodeNavaidServiceType,
+    CodeNotePurposeType, CodeRunwayPointRoleType, CodeRunwayType, CodeSurfaceCompositionType,
     CodeVORType, UomDistanceType, UomFrequencyType,
 };
 pub use error::Error;
 pub use features::{
     AirportHeliport, DesignatedPoint, Measure, Navaid, NavaidComponent, NavaidEquipment, Note,
-    Point, Reference, DME, NDB, TACAN, VOR,
+    Point, Reference, Runway, RunwayCentrelinePoint, RunwayDeclaredDistance, RunwayDirection, DME,
+    NDB, TACAN, VOR,
 };
 pub use message::{read_message, Message, Version};

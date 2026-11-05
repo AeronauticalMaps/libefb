@@ -92,6 +92,63 @@ code_list! {
 }
 
 code_list! {
+    /// The type of a runway (CodeRunwayType).
+    CodeRunwayType {
+        /// A runway.
+        RWY = "RWY",
+        /// A final approach and take-off area of helicopters.
+        FATO = "FATO",
+    }
+}
+
+code_list! {
+    /// The role of a point on the centreline of a runway
+    /// (CodeRunwayPointRoleType).
+    CodeRunwayPointRoleType {
+        /// The threshold.
+        THR = "THR",
+        /// The displaced threshold.
+        DISTHR = "DISTHR",
+        /// The midpoint of the runway.
+        MID = "MID",
+        /// The end of the runway.
+        END = "END",
+        /// The start of the take-off run.
+        START_RUN = "START_RUN",
+    }
+}
+
+code_list! {
+    /// The type of a declared distance (CodeDeclaredDistanceType).
+    CodeDeclaredDistanceType {
+        /// The take-off run available.
+        TORA = "TORA",
+        /// The take-off distance available.
+        TODA = "TODA",
+        /// The accelerate-stop distance available.
+        ASDA = "ASDA",
+        /// The landing distance available.
+        LDA = "LDA",
+        /// The distance of a displaced threshold.
+        DTHR = "DTHR",
+    }
+}
+
+code_list! {
+    /// The composition of a surface (CodeSurfaceCompositionType).
+    CodeSurfaceCompositionType {
+        /// Asphalt.
+        ASPH = "ASPH",
+        /// Concrete.
+        CONC = "CONC",
+        /// Concrete and asphalt.
+        CONC_ASPH = "CONC_ASPH",
+        /// Grass.
+        GRASS = "GRASS",
+    }
+}
+
+code_list! {
     /// The service a navaid provides (CodeNavaidServiceType).
     CodeNavaidServiceType {
         /// A VOR.
