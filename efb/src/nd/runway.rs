@@ -94,6 +94,8 @@ pub struct Runway {
     pub surface: Option<RunwaySurface>,
     /// Runway gradient as percentage (positive = upslope, negative = downslope).
     pub slope: Option<f32>,
+    // FIXME: The elevation may be absent and should be `Option`; the
+    // runway analysis falls back to the airport's field elevation.
     pub elev: VerticalDistance,
 }
 
