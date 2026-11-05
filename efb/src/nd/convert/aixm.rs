@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use log::{debug, info, trace, warn};
 
@@ -31,67 +31,91 @@ const PHONETIC_ALPHABET: [&str; 26] = [
 ];
 
 impl NavigationData {
-    /// Creates navigation data from an AIXM 5.x message.
+    /// Creates navigation data from AIXM 5.x messages.
     ///
-    /// The features are taken over as they are valid on the message's
-    /// effective date, and the AIRAC cycle is the one effective on that date.
-    /// Aerodromes become airports with their ICAO location indicator as
-    /// ident. Designated points that belong to an aerodrome become terminal
-    /// waypoints of that aerodrome. Visual reporting points get an ident that
-    /// is derived from their name, e.g. "EDDV NOVEMBER 1" becomes "N1" in the
-    /// terminal area of EDDV.
+    /// All messages go into one partition, so a feature may refer to a
+    /// feature of another message, e.g. a runway to its aerodrome. The
+    /// features of each message are taken over as they are valid on the
+    /// message's effective date, and the AIRAC cycle is the one effective on
+    /// that date. Aerodromes become airports with their ICAO location
+    /// indicator as ident. Designated points that belong to an aerodrome
+    /// become terminal waypoints of that aerodrome. Visual reporting points
+    /// get an ident that is derived from their name, e.g. "EDDV NOVEMBER 1"
+    /// becomes "N1" in the terminal area of EDDV.
     ///
     /// # Errors
     ///
-    /// Returns an error if the message can't be read. Invalid records don't
+    /// Returns an error if a message can't be read. Invalid records don't
     /// fail the navigation data but are listed in its errors.
-    pub fn try_from_aixm(data: &[u8]) -> Result<Self, Error> {
-        info!("loading navigation data from AIXM ({} bytes)", data.len());
+    pub fn try_from_aixm(data: &[&[u8]]) -> Result<Self, Error> {
+        info!(
+            "loading navigation data from {} AIXM message(s) ({} bytes)",
+            data.len(),
+            data.iter().map(|message| message.len()).sum::<usize>()
+        );
 
-        let message = aixm::read_message(data).map_err(|e| Error::InvalidAixm(e.to_string()))?;
-        let cycle = AiracCycle::from(message.effective_date());
-        debug!("{} effective in AIRAC cycle {}", message.version(), cycle);
+        let messages = data
+            .iter()
+            .map(|message| aixm::read_message(*message))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| Error::InvalidAixm(e.to_string()))?;
+
+        let aerodromes: HashMap<&str, &str> = messages
+            .iter()
+            .flat_map(|message| message.airport_heliports())
+            .filter_map(|(uuid, arpt)| Some((uuid, arpt.location_indicator_icao.as_deref()?)))
+            .collect();
 
         let mut builder = NavigationData::builder();
         let mut terminal_waypoints = HashSet::new();
         let mut airports = 0u32;
         let mut waypoints = 0u32;
 
-        for error in message.errors() {
-            warn!("skip record: {}", error);
-            builder.add_error(Error::InvalidAixm(error.to_string()));
-        }
+        for message in &messages {
+            let cycle = AiracCycle::from(message.effective_date());
+            debug!("{} effective in AIRAC cycle {}", message.version(), cycle);
 
-        for arpt in message.airport_heliports() {
-            match airport(arpt, cycle) {
-                Ok(arpt) => {
-                    trace!("loaded airport {}", arpt.icao_ident);
-                    builder.add_airport(arpt);
-                    airports += 1;
-                }
-                Err(e) => {
-                    warn!("skip record: {}", e);
-                    builder.add_error(e);
+            for error in message.errors() {
+                warn!("skip record: {}", error);
+                builder.add_error(Error::InvalidAixm(error.to_string()));
+            }
+
+            for (_, arpt) in message.airport_heliports() {
+                match airport(arpt, cycle) {
+                    Ok(arpt) => {
+                        trace!("loaded airport {}", arpt.icao_ident);
+                        builder.add_airport(arpt);
+                        airports += 1;
+                    }
+                    Err(e) => {
+                        warn!("skip record: {}", e);
+                        builder.add_error(e);
+                    }
                 }
             }
-        }
 
-        for point in message.designated_points() {
-            match waypoint(point, cycle) {
-                Ok(wp) => {
-                    if let Some(airport) = wp.terminal_area() {
-                        if !terminal_waypoints.insert((airport.to_string(), wp.fix_ident.clone())) {
-                            warn!("terminal waypoint {} at {} is not unique", wp.fix_ident, airport);
+            for point in message.designated_points() {
+                match waypoint(point, &aerodromes, cycle) {
+                    Ok(wp) => {
+                        if let Some(airport) = wp.terminal_area() {
+                            if !terminal_waypoints
+                                .insert((airport.to_string(), wp.fix_ident.clone()))
+                            {
+                                warn!(
+                                    "terminal waypoint {} at {} is not unique",
+                                    wp.fix_ident, airport
+                                );
+                            }
                         }
-                    }
 
-                    trace!("loaded waypoint {}", wp.fix_ident);
-                    builder.add_waypoint(wp);
-                    waypoints += 1;
-                }
-                Err(e) => {
-                    warn!("skip record: {}", e);
-                    builder.add_error(e);
+                        trace!("loaded waypoint {}", wp.fix_ident);
+                        builder.add_waypoint(wp);
+                        waypoints += 1;
+                    }
+                    Err(e) => {
+                        warn!("skip record: {}", e);
+                        builder.add_error(e);
+                    }
                 }
             }
         }
@@ -159,7 +183,11 @@ fn msl(elevation: &aixm::Measure) -> Result<VerticalDistance, Error> {
         .map_err(|_| Error::InvalidAixm(format!("elevation {ft} ft is out of range")))
 }
 
-fn waypoint(point: &aixm::DesignatedPoint, cycle: AiracCycle) -> Result<Waypoint, Error> {
+fn waypoint(
+    point: &aixm::DesignatedPoint,
+    aerodromes: &HashMap<&str, &str>,
+    cycle: AiracCycle,
+) -> Result<Waypoint, Error> {
     let designator = point
         .designator
         .as_deref()
@@ -169,7 +197,11 @@ fn waypoint(point: &aixm::DesignatedPoint, cycle: AiracCycle) -> Result<Waypoint
         Error::InvalidAixm(format!("designated point {designator} has no location"))
     })?;
 
-    let airport = point.airport_heliport.as_ref().map(icao_code).transpose()?;
+    let airport = point
+        .airport_heliport
+        .as_ref()
+        .map(|reference| aerodrome(aerodromes, reference))
+        .transpose()?;
     let is_vrp = is_vrp(point);
 
     let fix_ident = match (airport, point.name.as_deref()) {
@@ -188,17 +220,26 @@ fn waypoint(point: &aixm::DesignatedPoint, cycle: AiracCycle) -> Result<Waypoint
         coordinate: geo::Point::new(location.longitude, location.latitude),
         mag_var: None,
         region: match airport {
-            Some(airport) => Region::TerminalArea(
-                airport
-                    .as_bytes()
-                    .try_into()
-                    .expect("ICAO code should be 4 bytes long"),
-            ),
+            Some(airport) => Region::TerminalArea(airport.as_bytes().try_into().map_err(|_| {
+                Error::InvalidAixm(format!("{airport:?} is not an ICAO code"))
+            })?),
             None => Region::Enroute,
         },
         location: None,
         cycle: Some(cycle),
     })
+}
+
+/// Returns the ICAO code of the aerodrome that `reference` points to, or the
+/// one in its title if the aerodrome is in none of the messages.
+fn aerodrome<'a>(
+    aerodromes: &HashMap<&str, &'a str>,
+    reference: &'a aixm::Reference,
+) -> Result<&'a str, Error> {
+    match aerodromes.get(reference.uuid.as_str()) {
+        Some(&icao_code) => Ok(icao_code),
+        None => icao_code(reference),
+    }
 }
 
 /// Returns the ICAO code from the title of the reference to an aerodrome.
@@ -433,7 +474,7 @@ mod tests {
             designated_point("BROKEN", "BROKEN", "", ""),
         ]);
 
-        NavigationData::try_from_aixm(xml.as_bytes()).expect("AIXM should be readable")
+        NavigationData::try_from_aixm(&[xml.as_bytes()]).expect("AIXM should be readable")
     }
 
     #[test]
@@ -477,7 +518,7 @@ mod tests {
             r#"<aixm:fieldElevation xsi:nil="true" nilReason="unknown"/>"#,
         );
         let xml = message(&[edhf]);
-        let nd = NavigationData::try_from_aixm(xml.as_bytes()).expect("AIXM should be readable");
+        let nd = NavigationData::try_from_aixm(&[xml.as_bytes()]).expect("AIXM should be readable");
 
         let Some(NavAid::Airport(edhf)) = nd.find("EDHF") else {
             panic!("EDHF should be an airport");
@@ -509,6 +550,25 @@ mod tests {
             .map(|leg| (leg.from().ident(), leg.to().ident()))
             .collect();
         assert_eq!(idents, [("EDDH", "N1"), ("N1", "EDHF")]);
+    }
+
+    #[test]
+    fn resolves_aerodrome_of_vrp_in_other_message() {
+        let aerodromes = message(&[EDHF.to_string()]);
+        let points = message(&[designated_point(
+            "N",
+            "EDHF NOVEMBER 1",
+            &location("54.0 9.6"),
+            &vrp_at("ED0432").replace(
+                "urn:uuid:595049d5",
+                "urn:uuid:1463eef0-65d4-4b92-b357-1dd54b0b2e15",
+            ),
+        )]);
+
+        let nd = NavigationData::try_from_aixm(&[aerodromes.as_bytes(), points.as_bytes()])
+            .expect("AIXM should be readable");
+
+        assert!(nd.find_terminal_waypoint("EDHF", "N1").is_some());
     }
 
     #[test]

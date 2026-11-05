@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Read airports from AIXM 5.x
 - Notes on unknown inputs of the runway analysis
 - Read the displaced threshold of runways from ARINC 424
+- Read several AIXM 5.x messages into one partition
 
 ### Changed
 

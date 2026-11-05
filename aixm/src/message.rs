@@ -94,12 +94,15 @@ impl Message {
         self.effective_date
     }
 
-    /// Returns the aerodromes and heliports of the message.
-    pub fn airport_heliports(&self) -> impl Iterator<Item = &AirportHeliport> {
-        self.features.values().filter_map(|feature| match feature {
-            Feature::AirportHeliport(airport) => Some(airport),
-            _ => None,
-        })
+    /// Returns the aerodromes and heliports of the message with their
+    /// identifier, which other features refer to.
+    pub fn airport_heliports(&self) -> impl Iterator<Item = (&str, &AirportHeliport)> {
+        self.features
+            .iter()
+            .filter_map(|(identifier, feature)| match feature {
+                Feature::AirportHeliport(airport) => Some((identifier.as_str(), airport)),
+                _ => None,
+            })
     }
 
     /// Returns the designated points of the message.
