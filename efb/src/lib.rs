@@ -71,6 +71,10 @@
 //! - **AIXM** Aeronautical Information Exchange Model
 //! - **ARINC** Aeronautical Radio Incorporated
 //!
+//! ## D
+//!
+//! - **DTHR** Displaced Threshold
+//!
 //! ## E
 //!
 //! - **EFB** Electronic Flight Bag
@@ -78,6 +82,7 @@
 //!
 //! ## F
 //!
+//! - **FATO** Final Approach and Take-Off Area
 //! - **FMS** Flight Management System
 //!
 //! ## I
@@ -109,6 +114,7 @@
 //!
 //! - **TOC** Top of Climb
 //! - **TOD** Top of Descent
+//! - **TODA** Take-Off Distance Available
 //! - **TORA** Take-Off Run Available
 //!
 //! ## V

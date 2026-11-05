@@ -18,9 +18,10 @@ use std::collections::{HashMap, HashSet};
 use log::{debug, info, trace, warn};
 
 use crate::error::Error;
-use crate::measurements::{Length, LengthUnit};
+use crate::measurements::{Angle, Length, LengthUnit};
 use crate::nd::{
-    AiracCycle, Airport, NavigationData, Region, SourceFormat, Waypoint, WaypointUsage,
+    AiracCycle, Airport, NavigationData, Region, Runway, RunwaySurface, SourceFormat, Waypoint,
+    WaypointUsage,
 };
 use crate::VerticalDistance;
 
@@ -38,10 +39,11 @@ impl NavigationData {
     /// features of each message are taken over as they are valid on the
     /// message's effective date, and the AIRAC cycle is the one effective on
     /// that date. Aerodromes become airports with their ICAO location
-    /// indicator as ident. Designated points that belong to an aerodrome
-    /// become terminal waypoints of that aerodrome. Visual reporting points
-    /// get an ident that is derived from their name, e.g. "EDDV NOVEMBER 1"
-    /// becomes "N1" in the terminal area of EDDV.
+    /// indicator as ident, and runway directions become the runways of their
+    /// aerodrome. Designated points that belong to an aerodrome become
+    /// terminal waypoints of that aerodrome. Visual reporting points get an
+    /// ident that is derived from their name, e.g. "EDDV NOVEMBER 1" becomes
+    /// "N1" in the terminal area of EDDV.
     ///
     /// # Errors
     ///
@@ -66,9 +68,25 @@ impl NavigationData {
             .filter_map(|(uuid, arpt)| Some((uuid, arpt.location_indicator_icao.as_deref()?)))
             .collect();
 
+        let declared_distances: HashMap<&str, &[aixm::RunwayDeclaredDistance]> = messages
+            .iter()
+            .flat_map(|message| message.runway_centreline_points())
+            .filter(|point| {
+                matches!(point.role.as_deref(), Some("THR" | "DISTHR" | "OTHER:RDD"))
+            })
+            .filter(|point| !point.associated_declared_distance.is_empty())
+            .filter_map(|point| {
+                Some((
+                    point.on_runway.as_ref()?.uuid.as_str(),
+                    point.associated_declared_distance.as_slice(),
+                ))
+            })
+            .collect();
+
         let mut builder = NavigationData::builder();
         let mut terminal_waypoints = HashSet::new();
         let mut airports = 0u32;
+        let mut runways = 0u32;
         let mut waypoints = 0u32;
 
         for message in &messages {
@@ -87,6 +105,38 @@ impl NavigationData {
                         builder.add_airport(arpt);
                         airports += 1;
                     }
+                    Err(e) => {
+                        warn!("skip record: {}", e);
+                        builder.add_error(e);
+                    }
+                }
+            }
+
+            for (uuid, direction) in message.runway_directions() {
+                let used_runway = direction
+                    .used_runway
+                    .as_ref()
+                    .and_then(|reference| messages.iter().find_map(|other| other.runway(reference)));
+
+                let result = match used_runway {
+                    Some(rwy) => runway(
+                        direction,
+                        rwy,
+                        declared_distances.get(uuid).copied().unwrap_or_default(),
+                        &aerodromes,
+                    ),
+                    None => Err(Error::InvalidAixm(format!(
+                        "runway direction {uuid} has no runway"
+                    ))),
+                };
+
+                match result {
+                    Ok(Some((airport, rwy))) => {
+                        trace!("loaded runway {} at {}", rwy.designator, airport);
+                        builder.add_runway(airport.to_string(), rwy);
+                        runways += 1;
+                    }
+                    Ok(None) => trace!("skip FATO direction {}", uuid),
                     Err(e) => {
                         warn!("skip record: {}", e);
                         builder.add_error(e);
@@ -126,8 +176,8 @@ impl NavigationData {
             .build();
 
         info!(
-            "AIXM loading complete: {} airports, {} waypoints",
-            airports, waypoints
+            "AIXM loading complete: {} airports, {} runways, {} waypoints",
+            airports, runways, waypoints
         );
 
         if !nd.errors().is_empty() {
@@ -167,20 +217,97 @@ fn airport(arpt: &aixm::AirportHeliport, cycle: AiracCycle) -> Result<Airport, E
     })
 }
 
+impl TryFrom<&aixm::Measure> for Length {
+    type Error = Error;
+
+    fn try_from(measure: &aixm::Measure) -> Result<Self, Self::Error> {
+        let value = measure.value as f32;
+
+        match measure.uom.as_str() {
+            "M" => Ok(Length::m(value)),
+            "FT" => Ok(Length::ft(value)),
+            uom => Err(Error::InvalidAixm(format!("unsupported length unit {uom}"))),
+        }
+    }
+}
+
 /// Converts an elevation in feet or metres to a distance above mean sea level
 /// in feet.
 fn msl(elevation: &aixm::Measure) -> Result<VerticalDistance, Error> {
-    let value = elevation.value as f32;
-
-    let ft = match elevation.uom.as_str() {
-        "FT" => value,
-        "M" => *Length::m(value).convert_to(LengthUnit::Feet).value(),
-        uom => return Err(Error::InvalidAixm(format!("unsupported elevation unit {uom}"))),
-    };
+    let ft = *Length::try_from(elevation)?
+        .convert_to(LengthUnit::Feet)
+        .value();
 
     u16::try_from(ft.round() as i64)
         .map(VerticalDistance::Msl)
         .map_err(|_| Error::InvalidAixm(format!("elevation {ft} ft is out of range")))
+}
+
+/// Converts a runway direction with the distances declared from its
+/// threshold to a runway of its aerodrome. Returns `None` for a direction of
+/// a FATO.
+fn runway<'a>(
+    direction: &aixm::RunwayDirection,
+    rwy: &'a aixm::Runway,
+    distances: &[aixm::RunwayDeclaredDistance],
+    aerodromes: &HashMap<&str, &'a str>,
+) -> Result<Option<(&'a str, Runway)>, Error> {
+    if rwy.kind.as_deref() == Some("FATO") {
+        return Ok(None);
+    }
+
+    let designator = direction
+        .designator
+        .as_deref()
+        .ok_or_else(|| Error::InvalidAixm("runway direction has no designator".to_string()))?;
+
+    let airport = rwy
+        .associated_airport_heliport
+        .as_ref()
+        .ok_or_else(|| Error::InvalidAixm(format!("runway {designator} has no aerodrome")))?;
+    let airport = aerodrome(aerodromes, airport)?;
+
+    let bearing = direction.magnetic_bearing.ok_or_else(|| {
+        Error::InvalidAixm(format!("runway {designator} at {airport} has no magnetic bearing"))
+    })?;
+
+    let length = rwy.nominal_length.as_ref().ok_or_else(|| {
+        Error::InvalidAixm(format!("runway {designator} at {airport} has no length"))
+    })?;
+
+    Ok(Some((
+        airport,
+        Runway {
+            designator: designator.to_string(),
+            bearing: Angle::m(bearing as f32),
+            length: Length::try_from(length)?,
+            tora: declared(distances, "TORA")?,
+            toda: declared(distances, "TODA")?,
+            lda: declared(distances, "LDA")?,
+            displaced_threshold: declared(distances, "DTHR")?,
+            surface: match rwy.composition.as_deref() {
+                Some("ASPH" | "CONC_ASPH") => Some(RunwaySurface::Asphalt),
+                Some("CONC") => Some(RunwaySurface::Concrete),
+                Some("GRASS") => Some(RunwaySurface::Grass),
+                _ => None,
+            },
+            slope: None,
+            elev: VerticalDistance::Gnd,
+        },
+    )))
+}
+
+/// Returns the declared distance of `kind`, e.g. TORA, among `distances`.
+fn declared(
+    distances: &[aixm::RunwayDeclaredDistance],
+    kind: &str,
+) -> Result<Option<Length>, Error> {
+    distances
+        .iter()
+        .find(|declared| declared.kind.as_deref() == Some(kind))
+        .and_then(|declared| declared.distance.as_ref())
+        .map(Length::try_from)
+        .transpose()
 }
 
 fn waypoint(
@@ -382,6 +509,95 @@ mod tests {
             </aixm:AirportHeliport>
         </message:hasMember>"#;
 
+    const RWY_EDHF: &str = r#"
+        <message:hasMember>
+            <aixm:Runway gml:id="ID_e1ff5b8a-89c2-48df-9bfc-32e5616f239f">
+                <gml:identifier codeSpace="urn:uuid:">e1ff5b8a-89c2-48df-9bfc-32e5616f239f</gml:identifier>
+                <aixm:timeSlice>
+                    <aixm:RunwayTimeSlice gml:id="ID_TS_e1ff5b8a-89c2-48df-9bfc-32e5616f239f">
+                        <gml:validTime>
+                            <gml:TimePeriod gml:id="ID_TS_VT_TP_e1ff5b8a-89c2-48df-9bfc-32e5616f239f">
+                                <gml:beginPosition>2026-10-29T00:00:00Z</gml:beginPosition>
+                                <gml:endPosition>2026-11-25T23:59:59Z</gml:endPosition>
+                            </gml:TimePeriod>
+                        </gml:validTime>
+                        <aixm:interpretation>BASELINE</aixm:interpretation>
+                        <aixm:designator>02/20</aixm:designator>
+                        <aixm:type>RWY</aixm:type>
+                        <aixm:nominalLength uom="M">1040</aixm:nominalLength>
+                        <aixm:surfaceProperties>
+                            <aixm:SurfaceCharacteristics gml:id="ID_TS_SC_e1ff5b8a-89c2-48df-9bfc-32e5616f239f">
+                                <aixm:composition>GRASS</aixm:composition>
+                            </aixm:SurfaceCharacteristics>
+                        </aixm:surfaceProperties>
+                        <aixm:associatedAirportHeliport xlink:href="urn:uuid:1463eef0-65d4-4b92-b357-1dd54b0b2e15" xlink:title="EDHF"/>
+                    </aixm:RunwayTimeSlice>
+                </aixm:timeSlice>
+            </aixm:Runway>
+        </message:hasMember>"#;
+
+    const RWY_DIRECTION_EDHF_20: &str = r#"
+        <message:hasMember>
+            <aixm:RunwayDirection gml:id="ID_10a97dbb-16bf-4be6-8a33-630daa28915a">
+                <gml:identifier codeSpace="urn:uuid:">10a97dbb-16bf-4be6-8a33-630daa28915a</gml:identifier>
+                <aixm:timeSlice>
+                    <aixm:RunwayDirectionTimeSlice gml:id="ID_TS_10a97dbb-16bf-4be6-8a33-630daa28915a">
+                        <gml:validTime>
+                            <gml:TimePeriod gml:id="ID_TS_VT_TP_10a97dbb-16bf-4be6-8a33-630daa28915a">
+                                <gml:beginPosition>2026-10-29T00:00:00Z</gml:beginPosition>
+                                <gml:endPosition>2026-11-25T23:59:59Z</gml:endPosition>
+                            </gml:TimePeriod>
+                        </gml:validTime>
+                        <aixm:interpretation>BASELINE</aixm:interpretation>
+                        <aixm:designator>20</aixm:designator>
+                        <aixm:trueBearing>206</aixm:trueBearing>
+                        <aixm:magneticBearing>202</aixm:magneticBearing>
+                        <aixm:usedRunway xlink:href="urn:uuid:e1ff5b8a-89c2-48df-9bfc-32e5616f239f" xlink:title="02/20"/>
+                    </aixm:RunwayDirectionTimeSlice>
+                </aixm:timeSlice>
+            </aixm:RunwayDirection>
+        </message:hasMember>"#;
+
+    const THR_EDHF_20: &str = r#"
+        <message:hasMember>
+            <aixm:RunwayCentrelinePoint gml:id="ID_014f6782-7c8f-41f8-a0db-d861e7d1e522">
+                <gml:identifier codeSpace="urn:uuid:">014f6782-7c8f-41f8-a0db-d861e7d1e522</gml:identifier>
+                <aixm:timeSlice>
+                    <aixm:RunwayCentrelinePointTimeSlice gml:id="ID_TS_014f6782-7c8f-41f8-a0db-d861e7d1e522">
+                        <gml:validTime>
+                            <gml:TimePeriod gml:id="ID_TS_VT_TP_014f6782-7c8f-41f8-a0db-d861e7d1e522">
+                                <gml:beginPosition>2026-10-29T00:00:00Z</gml:beginPosition>
+                                <gml:endPosition>2026-11-25T23:59:59Z</gml:endPosition>
+                            </gml:TimePeriod>
+                        </gml:validTime>
+                        <aixm:interpretation>BASELINE</aixm:interpretation>
+                        <aixm:role>THR</aixm:role>
+                        <aixm:onRunway xlink:href="urn:uuid:10a97dbb-16bf-4be6-8a33-630daa28915a" xlink:title="20"/>
+                        <aixm:associatedDeclaredDistance>
+                            <aixm:RunwayDeclaredDistance gml:id="ID_TS_DD_3bcbbf50-caae-4bff-bb76-8f2efe1dffcf">
+                                <aixm:type>TORA</aixm:type>
+                                <aixm:declaredValue>
+                                    <aixm:RunwayDeclaredDistanceValue gml:id="ID_TS_DD_V_3bcbbf50-caae-4bff-bb76-8f2efe1dffcf">
+                                        <aixm:distance uom="M">1040</aixm:distance>
+                                    </aixm:RunwayDeclaredDistanceValue>
+                                </aixm:declaredValue>
+                            </aixm:RunwayDeclaredDistance>
+                        </aixm:associatedDeclaredDistance>
+                        <aixm:associatedDeclaredDistance>
+                            <aixm:RunwayDeclaredDistance gml:id="ID_TS_DD_099b721d-f4cd-44d4-b225-d0bb670a552d">
+                                <aixm:type>LDA</aixm:type>
+                                <aixm:declaredValue>
+                                    <aixm:RunwayDeclaredDistanceValue gml:id="ID_TS_DD_V_099b721d-f4cd-44d4-b225-d0bb670a552d">
+                                        <aixm:distance uom="M">1040</aixm:distance>
+                                    </aixm:RunwayDeclaredDistanceValue>
+                                </aixm:declaredValue>
+                            </aixm:RunwayDeclaredDistance>
+                        </aixm:associatedDeclaredDistance>
+                    </aixm:RunwayCentrelinePointTimeSlice>
+                </aixm:timeSlice>
+            </aixm:RunwayCentrelinePoint>
+        </message:hasMember>"#;
+
     fn designated_point(designator: &str, name: &str, location: &str, extra: &str) -> String {
         format!(
             r#"<message:hasMember>
@@ -569,6 +785,64 @@ mod tests {
             .expect("AIXM should be readable");
 
         assert!(nd.find_terminal_waypoint("EDHF", "N1").is_some());
+    }
+
+    /// Returns the runways of EDHF with the aerodrome in one message and
+    /// `runway_members` in another.
+    fn edhf_runways(runway_members: &[String]) -> Vec<Runway> {
+        let aerodromes = message(&[EDHF.to_string()]);
+        let runways = message(runway_members);
+
+        let nd = NavigationData::try_from_aixm(&[aerodromes.as_bytes(), runways.as_bytes()])
+            .expect("AIXM should be readable");
+        assert!(nd.errors().is_empty(), "{:?}", nd.errors());
+
+        let Some(NavAid::Airport(edhf)) = nd.find("EDHF") else {
+            panic!("EDHF should be an airport");
+        };
+        edhf.runways.clone()
+    }
+
+    #[test]
+    fn loads_runways_of_aerodrome_in_other_message() {
+        let runways = edhf_runways(&[
+            RWY_EDHF.to_string(),
+            RWY_DIRECTION_EDHF_20.to_string(),
+            THR_EDHF_20.to_string(),
+        ]);
+
+        assert_eq!(
+            runways,
+            [Runway {
+                designator: "20".to_string(),
+                bearing: Angle::m(202.0),
+                length: Length::m(1040.0),
+                tora: Some(Length::m(1040.0)),
+                toda: None,
+                lda: Some(Length::m(1040.0)),
+                displaced_threshold: None,
+                surface: Some(RunwaySurface::Grass),
+                slope: None,
+                elev: VerticalDistance::Gnd,
+            }]
+        );
+    }
+
+    #[test]
+    fn loads_runway_without_declared_distances() {
+        let runways = edhf_runways(&[RWY_EDHF.to_string(), RWY_DIRECTION_EDHF_20.to_string()]);
+
+        let [rwy] = runways.as_slice() else {
+            panic!("EDHF should have one runway");
+        };
+        assert_eq!((rwy.tora, rwy.lda), (None, None));
+    }
+
+    #[test]
+    fn skips_fato() {
+        let fato = RWY_EDHF.replace("<aixm:type>RWY</aixm:type>", "<aixm:type>FATO</aixm:type>");
+        let runways = edhf_runways(&[fato, RWY_DIRECTION_EDHF_20.to_string()]);
+        assert!(runways.is_empty());
     }
 
     #[test]
