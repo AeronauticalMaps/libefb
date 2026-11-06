@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Runway surface, slope and declared distances are optional, and a
   runway gets its displaced threshold
 
+### Fixed
+
+- Use the published magnetic variation of airports and waypoints
+
 ## [0.7.1] - 2026-04-22
 
 ### Fixed
