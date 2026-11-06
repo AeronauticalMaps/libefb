@@ -188,14 +188,7 @@ impl ToSql for MagneticVariation {
 
 impl FromSql for MagneticVariation {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        let d = value.as_f64()? as f32;
-        Ok(if d > 0.0 {
-            Self::East(d)
-        } else if d < 0.0 {
-            Self::West(-d)
-        } else {
-            Self::OrientedToTrueNorth
-        })
+        Ok((value.as_f64()? as f32).into())
     }
 }
 

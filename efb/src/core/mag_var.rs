@@ -76,10 +76,29 @@ impl From<Point<f64>> for MagneticVariation {
             Err(_) => todo!("implement TryFrom to handle unavailable variation!"),
         };
 
-        if mag_var.is_sign_negative() {
-            Self::West(mag_var.abs())
+        mag_var.into()
+    }
+}
+
+/// Converts a variation in degrees, east positive and west negative.
+///
+/// # Examples
+///
+/// ```
+/// use efb::MagneticVariation;
+///
+/// assert_eq!(MagneticVariation::from(4.22), MagneticVariation::East(4.22));
+/// assert_eq!(MagneticVariation::from(-1.5), MagneticVariation::West(1.5));
+/// assert_eq!(MagneticVariation::from(0.0), MagneticVariation::OrientedToTrueNorth);
+/// ```
+impl From<f32> for MagneticVariation {
+    fn from(degrees: f32) -> Self {
+        if degrees > 0.0 {
+            Self::East(degrees)
+        } else if degrees < 0.0 {
+            Self::West(-degrees)
         } else {
-            Self::East(mag_var)
+            Self::OrientedToTrueNorth
         }
     }
 }
