@@ -76,4 +76,8 @@ impl Fix for Waypoint {
     fn coordinate(&self) -> Point<f64> {
         self.coordinate
     }
+
+    fn mag_var(&self) -> MagneticVariation {
+        self.mag_var.unwrap_or_else(|| self.coordinate.into())
+    }
 }
