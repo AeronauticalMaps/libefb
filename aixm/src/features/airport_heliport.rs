@@ -17,7 +17,7 @@ use std::io::BufRead;
 
 use quick_xml::events::BytesStart;
 
-use super::{Measure, Point, TimeSlice};
+use super::{degrees, Measure, Point, TimeSlice};
 use crate::codes::UomDistanceType;
 use crate::stream::{owned, Stream};
 use crate::Error;
@@ -37,6 +37,9 @@ pub struct AirportHeliport {
     pub arp: Option<Point>,
     /// The highest point of the landing area (`fieldElevation`).
     pub field_elevation: Option<Measure<UomDistanceType>>,
+    /// The magnetic variation in degrees (`magneticVariation`), east
+    /// positive.
+    pub magnetic_variation: Option<f64>,
 }
 
 impl TimeSlice for AirportHeliport {
@@ -56,6 +59,9 @@ impl TimeSlice for AirportHeliport {
             "name" => self.name = stream.read_optional_text(element, owned)?,
             "ARP" => self.arp = Point::read_location(stream, "ARP")?,
             "fieldElevation" => self.field_elevation = Measure::read(stream, element)?,
+            "magneticVariation" => {
+                self.magnetic_variation = stream.read_optional_text(element, degrees)?
+            }
             _ => stream.skip(element)?,
         }
 
@@ -167,6 +173,7 @@ mod tests {
                         value: 53.0,
                         uom: UomDistanceType::FT,
                     }),
+                    magnetic_variation: Some(4.22),
                 }
             )))
         );
