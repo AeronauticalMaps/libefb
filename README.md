@@ -5,6 +5,8 @@ navigation. The lib is written in Rust and intended to be integrated
 into EFB applications via one of its language binding (see
 `bindings/`).
 
+Navigation data is read from ARINC 424, AIXM 5.x and OpenAir.
+
 > [!NOTE]
 > This library is still in the early stage of development with the
 > first milestone to allow a full pre-flight planning. For more,
@@ -90,7 +92,7 @@ flight planning by adding the following feature:
 - [x] Add runway analysis to planning
 - [x] Add measurement trait and refactor core types
 - [x] Add vertical flight profile to FMS
-- [ ] Add AIXM parser
+- [x] Add AIXM parser
 - [ ] Add book to outline how the FMS and planning is used from the
       user perspective
 - [ ] Add NOTAMS to FMS
