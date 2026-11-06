@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Read the displaced threshold of runways from ARINC 424
 - Read several AIXM 5.x messages into one partition
 - Read runways from AIXM 5.x
+- Read the magnetic variation of airports from AIXM 5.x
+- Convert a magnetic variation from signed degrees
 
 ### Changed
 

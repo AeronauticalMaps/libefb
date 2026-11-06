@@ -209,7 +209,7 @@ fn airport(arpt: &aixm::AirportHeliport, cycle: AiracCycle) -> Result<Airport, E
         iata_designator: arpt.designator_iata.clone().unwrap_or_default(),
         name: arpt.name.clone().unwrap_or_default(),
         coordinate: geo::Point::new(arp.longitude, arp.latitude),
-        mag_var: None,
+        mag_var: arpt.magnetic_variation.map(|degrees| (degrees as f32).into()),
         elevation,
         runways: Vec::new(),
         location: None,
@@ -423,6 +423,7 @@ mod tests {
     use super::*;
     use crate::nd::{Fix, NavAid};
     use crate::route::Route;
+    use crate::MagneticVariation;
 
     const EDDH: &str = r#"
         <message:hasMember>
@@ -725,6 +726,7 @@ mod tests {
         assert_eq!(eddh.elevation, VerticalDistance::Msl(53));
         assert_eq!(eddh.iata_designator, "HAM");
         assert_eq!(eddh.coordinate(), geo::Point::new(9.988227138, 53.630387834));
+        assert_eq!(eddh.mag_var(), MagneticVariation::East(4.22));
     }
 
     #[test]
