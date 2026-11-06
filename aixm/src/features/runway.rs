@@ -18,7 +18,7 @@ use std::io::BufRead;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::NsReader;
 
-use super::{keep_record_error, Measure, Reference, TimeSlice};
+use super::{degrees, keep_record_error, Measure, Reference, TimeSlice};
 use crate::stream::{read_optional_text, skip};
 use crate::Error;
 
@@ -161,11 +161,11 @@ impl TimeSlice for RunwayDirection {
             "designator" => self.designator = read_optional_text(reader, element)?,
             "trueBearing" => {
                 let text = read_optional_text(reader, element)?;
-                self.true_bearing = text.as_deref().map(bearing).transpose()?;
+                self.true_bearing = text.as_deref().map(degrees).transpose()?;
             }
             "magneticBearing" => {
                 let text = read_optional_text(reader, element)?;
-                self.magnetic_bearing = text.as_deref().map(bearing).transpose()?;
+                self.magnetic_bearing = text.as_deref().map(degrees).transpose()?;
             }
             "usedRunway" => {
                 let reference = Reference::from_element(element);
@@ -243,13 +243,6 @@ fn read_composition<R: BufRead>(reader: &mut NsReader<R>) -> Result<Option<Strin
     }
 
     Ok(composition)
-}
-
-/// Parses a ValBearingType, which is in degrees and has no unit of
-/// measurement.
-fn bearing(text: &str) -> Result<f64, Error> {
-    text.parse()
-        .map_err(|_| Error::InvalidRecord(format!("{text:?} is not a bearing")))
 }
 
 #[cfg(test)]

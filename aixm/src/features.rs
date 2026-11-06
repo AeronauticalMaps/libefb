@@ -132,6 +132,13 @@ impl Measure {
     }
 }
 
+/// Parses an angle in degrees, e.g. a ValBearingType or a
+/// ValMagneticVariationType, which have no unit of measurement.
+fn degrees(text: &str) -> Result<f64, Error> {
+    text.parse()
+        .map_err(|_| Error::InvalidRecord(format!("{text:?} is not in degrees")))
+}
+
 /// An `xlink` reference to another feature.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Reference {

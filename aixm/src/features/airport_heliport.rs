@@ -18,7 +18,7 @@ use std::io::BufRead;
 use quick_xml::events::BytesStart;
 use quick_xml::NsReader;
 
-use super::{Measure, Point, TimeSlice};
+use super::{degrees, Measure, Point, TimeSlice};
 use crate::stream::{read_optional_text, skip};
 use crate::Error;
 
@@ -37,6 +37,9 @@ pub struct AirportHeliport {
     pub arp: Option<Point>,
     /// The highest point of the landing area (`fieldElevation`).
     pub field_elevation: Option<Measure>,
+    /// The magnetic variation in degrees (`magneticVariation`), east
+    /// positive.
+    pub magnetic_variation: Option<f64>,
 }
 
 impl TimeSlice for AirportHeliport {
@@ -56,6 +59,10 @@ impl TimeSlice for AirportHeliport {
             "name" => self.name = read_optional_text(reader, element)?,
             "ARP" => self.arp = Point::read_location(reader, "ARP")?,
             "fieldElevation" => self.field_elevation = Measure::read(reader, element)?,
+            "magneticVariation" => {
+                let text = read_optional_text(reader, element)?;
+                self.magnetic_variation = text.as_deref().map(degrees).transpose()?;
+            }
             _ => skip(reader, element)?,
         }
 
@@ -167,6 +174,7 @@ mod tests {
                         value: 53.0,
                         uom: "FT".to_string(),
                     }),
+                    magnetic_variation: Some(4.22),
                 }
             )))
         );
