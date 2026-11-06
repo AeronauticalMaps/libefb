@@ -23,6 +23,7 @@ keywords = ["AIXM", "aeronautical", "aviation"]
 categories = ["aerospace", "parser-implementations"]
 homepage = "https://github.com/AeronauticalMaps/libefb"
 repository = "https://github.com/AeronauticalMaps/libefb"
+readme = "README.md"
 
 [dependencies]
 chrono = "0.4.42"
