@@ -120,7 +120,7 @@ impl NavigationData {
             .with_format(SourceFormat::A424)
             .build();
 
-        info!(
+        debug!(
             "ARINC 424 loading complete: {} waypoints, {} airports, {} runways, {} airspaces",
             counts.0, counts.1, counts.2, counts.3
         );

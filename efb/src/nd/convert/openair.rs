@@ -55,7 +55,7 @@ impl NavigationData {
             .with_source(s.as_bytes())
             .with_format(SourceFormat::OpenAir)
             .build();
-        info!("OpenAir loading complete: {} airspaces", count);
+        debug!("OpenAir loading complete: {} airspaces", count);
         debug!("OpenAir data partition ID: {}", nd.partition_id());
 
         Ok(nd)
