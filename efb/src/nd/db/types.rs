@@ -136,6 +136,7 @@ impl ToSql for SourceFormat {
         Ok(ToSqlOutput::Borrowed(ValueRef::Text(match self {
             Self::A424 => b"a424",
             Self::OpenAir => b"openair",
+            Self::Aixm => b"aixm",
         })))
     }
 }
@@ -145,6 +146,7 @@ impl FromSql for SourceFormat {
         match value.as_str()? {
             "a424" => Ok(Self::A424),
             "openair" => Ok(Self::OpenAir),
+            "aixm" => Ok(Self::Aixm),
             other => Err(FromSqlError::Other(
                 format!("unknown source_format: {other}").into(),
             )),
@@ -186,14 +188,7 @@ impl ToSql for MagneticVariation {
 
 impl FromSql for MagneticVariation {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        let d = value.as_f64()? as f32;
-        Ok(if d > 0.0 {
-            Self::East(d)
-        } else if d < 0.0 {
-            Self::West(-d)
-        } else {
-            Self::OrientedToTrueNorth
-        })
+        Ok((value.as_f64()? as f32).into())
     }
 }
 

@@ -66,17 +66,24 @@ impl AiracCycle {
 
     /// Calculates the effective date when this AIRAC cycle starts.
     ///
+    /// The cycle's two-digit year is read in the century that puts it
+    /// closest to today's UTC date.
+    ///
     /// Returns `None` if the calculated date is either to far in the future or
     /// past.
     pub fn effective_date(&self) -> Option<NaiveDate> {
+        self.effective_date_near(today())
+    }
+
+    fn effective_date_near(&self, today: NaiveDate) -> Option<NaiveDate> {
         // now we need to get the first Thursday of the year
-        let year = self.year as u16 + 2000u16; // TODO: Please update in the year 3000...
-        let first_thu = NaiveDate::from_weekday_of_month_opt(year as i32, 1, Weekday::Thu, 1)
+        let year = self.year_near(today.year());
+        let first_thu = NaiveDate::from_weekday_of_month_opt(year, 1, Weekday::Thu, 1)
             .expect("the year should be before before 262143 CE");
 
         // align with the 28-day AIRAC cycle pattern
         let days_since_ref = (first_thu - REFERENCE_DATE).num_days();
-        let cycle_offset = days_since_ref % 28;
+        let cycle_offset = days_since_ref.rem_euclid(28);
 
         let first_airac_of_year = if cycle_offset == 0 {
             first_thu
@@ -88,12 +95,24 @@ impl AiracCycle {
         let target_date = first_airac_of_year + Duration::days(28 * (self.cycle - 1) as i64);
 
         // verify the date makes sense (not too far into the future/past)
-        if target_date.year() as u16 == year
-            || (self.cycle == 1 && target_date.year() as u16 == year - 1)
-        {
+        if target_date.year() == year || (self.cycle == 1 && target_date.year() == year - 1) {
             Some(target_date)
         } else {
             None
+        }
+    }
+
+    /// The full year ending in the cycle's two digits that lies within
+    /// 50 years before and 49 years after `year`.
+    fn year_near(&self, year: i32) -> i32 {
+        let candidate = year - year.rem_euclid(100) + self.year as i32;
+
+        if candidate - year > 49 {
+            candidate - 100
+        } else if year - candidate > 50 {
+            candidate + 100
+        } else {
+            candidate
         }
     }
 
@@ -125,21 +144,39 @@ impl AiracCycle {
     ///
     /// Returns `None` if the effective date is invalid.
     pub fn now_valid(&self) -> Option<CycleValidity> {
-        let now = OffsetDateTime::now_utc().date();
-        let y = now.year();
-        let m: u8 = now.month().into();
-        let d = now.day();
-
-        let date =
-            NaiveDate::from_ymd_opt(y, m as u32, d as u32).expect("now should be a valid date");
-
-        self.valid_for_date(date)
+        self.valid_for_date(today())
     }
+}
+
+fn today() -> NaiveDate {
+    let now = OffsetDateTime::now_utc().date();
+    let y = now.year();
+    let m: u8 = now.month().into();
+    let d = now.day();
+
+    NaiveDate::from_ymd_opt(y, m as u32, d as u32).expect("now should be a valid date")
 }
 
 impl fmt::Display for AiracCycle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:02}{:02}", self.year, self.cycle)
+    }
+}
+
+/// Converts a date into the AIRAC cycle that is effective on that date.
+///
+/// The cycle's year holds the last two digits of the year, as the YYCC
+/// identifier does.
+impl From<NaiveDate> for AiracCycle {
+    fn from(date: NaiveDate) -> Self {
+        let cycles_since_ref = (date - REFERENCE_DATE).num_days().div_euclid(28);
+        let effective_date = REFERENCE_DATE + Duration::days(cycles_since_ref * 28);
+
+        // the first cycle of a year starts within the first 28 days
+        let cycle = effective_date.ordinal0() / 28 + 1;
+        let year = effective_date.year().rem_euclid(100) as u8;
+
+        Self::new(year, cycle as u8)
     }
 }
 
@@ -153,6 +190,26 @@ mod tests {
         let cycle = AiracCycle::new(25, 9);
         assert_eq!(cycle.effective_date(), NaiveDate::from_ymd_opt(2025, 09, 4));
         assert_eq!(cycle.end_date(), NaiveDate::from_ymd_opt(2025, 10, 1));
+
+        let cycle = AiracCycle::new(15, 1);
+        assert_eq!(cycle.effective_date(), NaiveDate::from_ymd_opt(2015, 1, 8));
+    }
+
+    #[test]
+    fn reads_year_in_century_closest_to_today() {
+        let date = |y, m, d| NaiveDate::from_ymd_opt(y, m, d).expect("date should be valid");
+        let year_near = |cycle: AiracCycle, today| {
+            cycle
+                .effective_date_near(today)
+                .map(|effective_date| effective_date.year())
+        };
+
+        assert_eq!(
+            AiracCycle::new(25, 9).effective_date_near(date(2026, 11, 12)),
+            Some(date(2025, 9, 4))
+        );
+        assert_eq!(year_near(AiracCycle::new(0, 1), date(2099, 12, 1)), Some(2100));
+        assert_eq!(year_near(AiracCycle::new(99, 13), date(2100, 1, 15)), Some(2099));
     }
 
     #[test]
@@ -170,6 +227,21 @@ mod tests {
             cycle.valid_for_date(outdated_date),
             Some(CycleValidity::Expired)
         );
+    }
+
+    #[test]
+    fn derives_cycle_from_date() {
+        let date = |y, m, d| NaiveDate::from_ymd_opt(y, m, d).expect("date should be valid");
+
+        assert_eq!(AiracCycle::from(date(2025, 9, 3)), AiracCycle::new(25, 8));
+        assert_eq!(AiracCycle::from(date(2025, 9, 4)), AiracCycle::new(25, 9));
+        assert_eq!(AiracCycle::from(date(2026, 10, 29)), AiracCycle::new(26, 11));
+        assert_eq!(AiracCycle::from(date(2026, 11, 25)), AiracCycle::new(26, 11));
+        assert_eq!(AiracCycle::from(date(2026, 11, 26)), AiracCycle::new(26, 12));
+        assert_eq!(AiracCycle::from(date(2026, 1, 1)), AiracCycle::new(25, 13));
+        assert_eq!(AiracCycle::from(date(2020, 12, 31)), AiracCycle::new(20, 14));
+        assert_eq!(AiracCycle::from(date(1999, 12, 31)).year(), 99);
+        assert_eq!(AiracCycle::from(date(2100, 6, 15)).year(), 0);
     }
 
     #[test]

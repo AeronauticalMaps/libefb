@@ -31,7 +31,7 @@ impl FixedField<'_> for MagVar {
     fn from_bytes(bytes: &'_ [u8]) -> Result<Self, Error> {
         let code = bytes[0];
         let deg = || -> Result<f32, Error> {
-            Ok(parse_numeric!(4, u32, &bytes[1..5])? as f32 / 100.0) // includes centidegree;
+            Ok(parse_numeric!(4, u32, &bytes[1..5])? as f32 / 10.0) // degrees and tenths
         };
 
         match code {
@@ -54,10 +54,10 @@ mod tests {
     #[test]
     fn parses_mag_var() {
         let mag_var = MagVar::from_bytes(b"E0140");
-        assert_eq!(mag_var, Ok(MagVar::East(1.4)));
+        assert_eq!(mag_var, Ok(MagVar::East(14.0)));
 
         let mag_var = MagVar::from_bytes(b"W0410");
-        assert_eq!(mag_var, Ok(MagVar::West(4.1)));
+        assert_eq!(mag_var, Ok(MagVar::West(41.0)));
 
         let mag_var = MagVar::from_bytes(b"T0000");
         assert_eq!(mag_var, Ok(MagVar::OrientedToTrueNorth));

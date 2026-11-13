@@ -66,7 +66,7 @@ mod tests {
         assert_eq!(arpt.cont_nr.as_str(), "0");
         assert_eq!(arpt.latitude.as_decimal(), Ok(40.63992777777778));
         assert_eq!(arpt.longitude.as_decimal(), Ok(-73.77869166666666));
-        assert_eq!(arpt.mag_var, Some(MagVar::West(1.3)));
+        assert_eq!(arpt.mag_var, Some(MagVar::West(13.0)));
         assert_eq!(arpt.mag_true_ind, MagTrueInd::Magnetic);
         assert_eq!(arpt.datum, Datum::NAR);
         assert_eq!(arpt.airport_name.as_str(), "JOHN F KENNEDY INTL");

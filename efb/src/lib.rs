@@ -68,7 +68,12 @@
 //! ## A
 //!
 //! - **AFM** Aircraft Flight Manual
+//! - **AIXM** Aeronautical Information Exchange Model
 //! - **ARINC** Aeronautical Radio Incorporated
+//!
+//! ## D
+//!
+//! - **DTHR** Displaced Threshold
 //!
 //! ## E
 //!
@@ -77,11 +82,16 @@
 //!
 //! ## F
 //!
+//! - **FATO** Final Approach and Take-Off Area
 //! - **FMS** Flight Management System
 //!
 //! ## I
 //!
 //! - **ISA** International Standard Atmosphere
+//!
+//! ## L
+//!
+//! - **LDA** Landing Distance Available
 //!
 //! ## M
 //!
@@ -104,6 +114,8 @@
 //!
 //! - **TOC** Top of Climb
 //! - **TOD** Top of Descent
+//! - **TODA** Take-Off Distance Available
+//! - **TORA** Take-Off Run Available
 //!
 //! ## V
 //!

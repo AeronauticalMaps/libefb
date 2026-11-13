@@ -69,6 +69,8 @@ typedef enum {
   A424,
   /// OpenAir airspace format.
   OpenAir,
+  /// AIXM 5.x navigation data.
+  Aixm,
 } EfbSourceFormat;
 
 /// Speed unit with _m/s_ as SI unit.

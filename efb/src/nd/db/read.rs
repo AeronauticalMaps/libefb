@@ -125,7 +125,7 @@ fn load_runways_by_airport(
 ) -> Result<HashMap<i64, Vec<Runway>>> {
     let mut stmt = conn.prepare(
         "SELECT r.airport_id, r.designator, r.bearing_degrees, r.length_meters, \
-                r.tora_meters, r.toda_meters, r.lda_meters, \
+                r.tora_meters, r.toda_meters, r.lda_meters, r.displaced_threshold_meters, \
                 r.surface, r.slope_percent, r.elev_kind, r.elev_value \
          FROM runways r \
          JOIN airports a ON a.id = r.airport_id \
@@ -139,13 +139,14 @@ fn load_runways_by_airport(
         let designator: String = row.get(1)?;
         let bearing_degrees: f64 = row.get(2)?;
         let length_meters: f64 = row.get(3)?;
-        let tora_meters: f64 = row.get(4)?;
-        let toda_meters: f64 = row.get(5)?;
-        let lda_meters: f64 = row.get(6)?;
-        let surface: RunwaySurface = row.get(7)?;
-        let slope_percent: f64 = row.get(8)?;
-        let elev_kind: String = row.get(9)?;
-        let elev_value: Option<i64> = row.get(10)?;
+        let tora_meters: Option<f64> = row.get(4)?;
+        let toda_meters: Option<f64> = row.get(5)?;
+        let lda_meters: Option<f64> = row.get(6)?;
+        let displaced_threshold_meters: Option<f64> = row.get(7)?;
+        let surface: Option<RunwaySurface> = row.get(8)?;
+        let slope_percent: Option<f64> = row.get(9)?;
+        let elev_kind: String = row.get(10)?;
+        let elev_value: Option<i64> = row.get(11)?;
 
         let elev = vd_from_row(&elev_kind, elev_value).ok_or_else(|| {
             Error::Database(format!(
@@ -157,11 +158,12 @@ fn load_runways_by_airport(
             designator,
             bearing: Angle::t(bearing_degrees as f32),
             length: Length::m(length_meters as f32),
-            tora: Length::m(tora_meters as f32),
-            toda: Length::m(toda_meters as f32),
-            lda: Length::m(lda_meters as f32),
+            tora: tora_meters.map(|m| Length::m(m as f32)),
+            toda: toda_meters.map(|m| Length::m(m as f32)),
+            lda: lda_meters.map(|m| Length::m(m as f32)),
+            displaced_threshold: displaced_threshold_meters.map(|m| Length::m(m as f32)),
             surface,
-            slope: slope_percent as f32,
+            slope: slope_percent.map(|slope| slope as f32),
             elev,
         });
     }

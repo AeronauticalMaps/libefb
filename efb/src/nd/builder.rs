@@ -124,7 +124,10 @@ impl NavigationDataBuilder {
         self.errors.push(e.into());
     }
 
-    pub fn with_source(mut self, data: &[u8]) -> Self {
+    pub fn with_source<T>(mut self, data: &T) -> Self
+    where
+        T: Hash + ?Sized,
+    {
         let mut hasher = DefaultHasher::new();
         data.hash(&mut hasher);
         self.partition_id = hasher.finish();

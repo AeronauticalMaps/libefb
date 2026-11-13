@@ -126,7 +126,7 @@ mod tests {
         assert_eq!(wp.waypoint_usage, WaypointUsage::HiLoAltitude);
         assert_eq!(wp.latitude.as_decimal(), Ok(32.69396388888889));
         assert_eq!(wp.longitude.as_decimal(), Ok(-78.05129444444444));
-        assert_eq!(wp.mag_var, Some(MagVar::West(0.93)));
+        assert_eq!(wp.mag_var, Some(MagVar::West(9.3)));
         assert_eq!(wp.datum, Datum::NAR);
         assert_eq!(wp.name_ind, None);
         assert_eq!(wp.name_desc.as_str(), "AAARG");

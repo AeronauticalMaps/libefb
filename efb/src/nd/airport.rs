@@ -25,6 +25,9 @@ use super::*;
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Airport {
     pub(crate) icao_ident: String,
+    // FIXME: The IATA designator and the name may be absent, e.g. in
+    // AIXM, and should be `Option`. The `airports` table needs a
+    // rebuild for it, which cascades to the runways.
     pub(crate) iata_designator: String,
     pub(crate) name: String,
     pub(crate) coordinate: Point<f64>,
@@ -42,5 +45,31 @@ impl Fix for Airport {
 
     fn coordinate(&self) -> Point<f64> {
         self.coordinate
+    }
+
+    fn mag_var(&self) -> MagneticVariation {
+        self.mag_var.unwrap_or_else(|| self.coordinate.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uses_published_mag_var() {
+        let eddh = Airport {
+            icao_ident: "EDDH".to_string(),
+            iata_designator: "HAM".to_string(),
+            name: "HAMBURG".to_string(),
+            coordinate: Point::new(9.988228, 53.630389), // (lon, lat)
+            mag_var: Some(MagneticVariation::East(4.22)),
+            elevation: VerticalDistance::Msl(53),
+            runways: Vec::new(),
+            location: None,
+            cycle: None,
+        };
+
+        assert_eq!(eddh.mag_var(), MagneticVariation::East(4.22));
     }
 }

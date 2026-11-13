@@ -10,10 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Filter navigation aids by prefix and between two fixes
+- Read waypoints and VRPs from AIXM 5.x
+- Read airports from AIXM 5.x
+- Notes on unknown inputs of the runway analysis
+- Read the displaced threshold of runways from ARINC 424
+- Read several AIXM 5.x messages into one partition
+- Read runways from AIXM 5.x
+- Read the magnetic variation of airports from AIXM 5.x
+- Convert a magnetic variation from signed degrees
 
 ### Changed
 
 - Make FMS thread safe
+- Runway surface, slope and declared distances are optional, and a
+  runway gets its displaced threshold
+
+### Fixed
+
+- Use the published magnetic variation of airports and waypoints
 
 ## [0.7.1] - 2026-04-22
 
