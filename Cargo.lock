@@ -104,7 +104,7 @@ dependencies = [
 
 [[package]]
 name = "arinc424"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "arinc424-derive",
  "criterion",
@@ -387,7 +387,7 @@ dependencies = [
 
 [[package]]
 name = "efb"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "aixm",
  "arinc424",

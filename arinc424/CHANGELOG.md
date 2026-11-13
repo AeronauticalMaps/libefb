@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [0.4.1] - 2026-11-13
 
 ### Added
 
@@ -77,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Waypoint record parsing
 - Field types for coordinates, identifiers, and navigation data
 
-[unreleased]: https://github.com/AeronauticalMaps/libefb/compare/arinc424-v0.4.0...HEAD
+[unreleased]: https://github.com/AeronauticalMaps/libefb/compare/arinc424-v0.4.1...HEAD
+[0.4.1]: https://github.com/AeronauticalMaps/libefb/compare/arinc424-v0.4.0...arinc424-v0.4.1
 [0.4.0]: https://github.com/AeronauticalMaps/libefb/compare/arinc424-v0.3.0...arinc424-v0.4.0
 [0.3.0]: https://github.com/AeronauticalMaps/libefb/releases/tag/arinc424-v0.3.0
