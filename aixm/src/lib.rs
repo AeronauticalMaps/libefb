@@ -100,4 +100,4 @@ pub use features::{
     Point, Reference, Runway, RunwayCentrelinePoint, RunwayDeclaredDistance, RunwayDirection, DME,
     NDB, TACAN, VOR,
 };
-pub use message::{read_message, Message, Version};
+pub use message::{peek_version, read_message, Message, Version};

@@ -253,6 +253,34 @@ pub fn read_message<R: BufRead>(reader: R) -> Result<Message, Error> {
     })
 }
 
+/// Reads the AIXM version of a message from the namespace of its root
+/// element.
+///
+/// Only the document up to the root element is read, which makes it a cheap
+/// test whether data is an AIXM message before it is read with
+/// [`read_message`].
+///
+/// # Errors
+///
+/// Returns an error if the document has no well-formed root element or if the
+/// root element's namespace is not a supported AIXM 5.x message namespace.
+///
+/// # Examples
+///
+/// ```
+/// use aixm::{peek_version, Version};
+///
+/// let xml = r#"<message:AIXMBasicMessage
+///     xmlns:message="http://www.aixm.aero/schema/5.2/message">"#;
+///
+/// assert_eq!(peek_version(xml.as_bytes()), Ok(Version::V5_2));
+/// ```
+pub fn peek_version<R: BufRead>(reader: R) -> Result<Version, Error> {
+    let mut stream = Stream::new(reader);
+    let (version, _) = read_root(&mut stream, &mut Vec::new())?;
+    Ok(version)
+}
+
 fn read_root<R: BufRead>(
     stream: &mut Stream<R>,
     buf: &mut Vec<u8>,
@@ -464,6 +492,22 @@ mod tests {
         let xml = message(namespace, METADATA);
         assert_eq!(
             read_message(xml.as_bytes()).map(|message| message.version()),
+            Err(Error::UnknownVersion(namespace.to_string()))
+        );
+    }
+
+    #[test]
+    fn peeks_version_of_message() {
+        let xml = message("http://www.aixm.aero/schema/5.1/message", METADATA);
+        assert_eq!(peek_version(xml.as_bytes()), Ok(Version::V5_1));
+    }
+
+    #[test]
+    fn peeks_unknown_version_of_other_xml() {
+        let namespace = "http://www.example.com/arinc424";
+        let xml = format!(r#"<?xml version="1.0"?><Arinc424 xmlns="{namespace}"/>"#);
+        assert_eq!(
+            peek_version(xml.as_bytes()),
             Err(Error::UnknownVersion(namespace.to_string()))
         );
     }
