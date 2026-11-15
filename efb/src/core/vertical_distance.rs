@@ -13,7 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::f32;
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::fmt;
 use std::ops::Div;
