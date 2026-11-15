@@ -23,8 +23,8 @@ use crate::error::{Error, Result};
 use crate::measurements::{Angle, Length};
 use crate::nd::{
     AiracCycle, Airport, Airspace, AirspaceClassification, AirspaceType, LocationIndicator,
-    NavigationData, NavigationDataBuilder, Region, Runway, RunwaySurface, SourceFormat, Waypoint,
-    WaypointUsage,
+    NavigationData, NavigationDataBuilder, Region, Runway, RunwaySurface, SourceFormat,
+    TerritoryLetters, Waypoint, WaypointUsage,
 };
 
 use super::encoding::vd_from_row;
@@ -74,15 +74,14 @@ fn load_airports(
 
     let mut stmt = conn.prepare(
         "SELECT id, icao_ident, iata_designator, name, lat, lon, \
-                mag_var_degrees, elevation_kind, elevation_value, \
-                location_indicator, airac_cycle \
+                mag_var_degrees, elevation_kind, elevation_value, airac_cycle \
          FROM airports WHERE partition_id = ?1",
     )?;
 
     let mut rows = stmt.query(params![partition_id])?;
     while let Some(row) = rows.next()? {
         let id: i64 = row.get(0)?;
-        let icao_ident: String = row.get(1)?;
+        let icao_ident: LocationIndicator = row.get(1)?;
         let iata_designator: String = row.get(2)?;
         let name: String = row.get(3)?;
         let lat: f64 = row.get(4)?;
@@ -90,8 +89,7 @@ fn load_airports(
         let mag_var: Option<MagneticVariation> = row.get(6)?;
         let elevation_kind: String = row.get(7)?;
         let elevation_value: Option<i64> = row.get(8)?;
-        let location: Option<LocationIndicator> = row.get(9)?;
-        let cycle: Option<AiracCycle> = row.get(10)?;
+        let cycle: Option<AiracCycle> = row.get(9)?;
 
         let elevation = vd_from_row(&elevation_kind, elevation_value).ok_or_else(|| {
             Error::Database(format!(
@@ -109,7 +107,6 @@ fn load_airports(
             mag_var,
             elevation,
             runways,
-            location,
             cycle,
         });
     }
@@ -178,7 +175,7 @@ fn load_waypoints(
     let mut stmt = conn.prepare(
         "SELECT fix_ident, description, usage, lat, lon, \
                 mag_var_degrees, terminal_airport_ident, \
-                location_indicator, airac_cycle \
+                territory, airac_cycle \
          FROM waypoints WHERE partition_id = ?1",
     )?;
 
@@ -191,7 +188,7 @@ fn load_waypoints(
         let lon: f64 = row.get(4)?;
         let mag_var: Option<MagneticVariation> = row.get(5)?;
         let region: Region = row.get(6)?;
-        let location: Option<LocationIndicator> = row.get(7)?;
+        let territory: Option<TerritoryLetters> = row.get(7)?;
         let cycle: Option<AiracCycle> = row.get(8)?;
         builder.add_waypoint(Waypoint {
             fix_ident,
@@ -200,7 +197,7 @@ fn load_waypoints(
             coordinate: Point::new(lon, lat),
             mag_var,
             region,
-            location,
+            territory,
             cycle,
         });
     }

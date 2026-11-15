@@ -31,7 +31,7 @@ ownership visible.
   `f32` for measurements, the smallest integer that holds the domain
   (`u16` for feet and flight levels).
 - **Inline** short codes of known length as byte arrays:
-  `LocationIndicator([u8; 2])`, `Region::TerminalArea([u8; 4])`.
+  `TerritoryLetters([u8; 2])`, `Region::TerminalArea([u8; 4])`.
 - **Share** large, immutable data with `Arc`. Airports, waypoints and
   airspaces live once in `NavigationData`; the route, the indexes and
   `NavAid` hold `Arc`s to them. Write `Arc::clone(&x)` so the reader

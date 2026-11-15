@@ -19,13 +19,13 @@ use std::sync::Arc;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+use crate::nd::TerritoryLetters;
 use crate::MagneticVariation;
 use geo::Point;
 
 use super::AiracCycle;
 use super::Airport;
 use super::Fix;
-use super::LocationIndicator;
 use super::Waypoint;
 
 #[derive(Clone, PartialEq, Debug)]
@@ -36,10 +36,11 @@ pub enum NavAid {
 }
 
 impl NavAid {
-    pub fn location(&self) -> Option<LocationIndicator> {
+    /// The country or territory of the navaid, if known.
+    pub fn territory(&self) -> Option<TerritoryLetters> {
         match self {
-            Self::Airport(arpt) => arpt.location,
-            Self::Waypoint(wp) => wp.location,
+            Self::Airport(arpt) => Some(arpt.icao_ident.territory()),
+            Self::Waypoint(wp) => wp.territory,
         }
     }
 

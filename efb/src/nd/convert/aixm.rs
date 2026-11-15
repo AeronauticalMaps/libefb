@@ -24,8 +24,8 @@ use log::{debug, info, trace, warn};
 use crate::error::Error;
 use crate::measurements::{Angle, Length, LengthUnit};
 use crate::nd::{
-    AiracCycle, Airport, NavigationData, Region, Runway, RunwaySurface, SourceFormat, Waypoint,
-    WaypointUsage,
+    AiracCycle, Airport, LocationIndicator, NavigationData, Region, Runway, RunwaySurface,
+    SourceFormat, Waypoint, WaypointUsage,
 };
 use crate::VerticalDistance;
 
@@ -205,7 +205,9 @@ fn airport(arpt: &aixm::AirportHeliport, cycle: AiracCycle) -> Result<Airport, E
     let designator = arpt.designator.as_deref().unwrap_or_default();
 
     let icao_ident = arpt.location_indicator_icao.as_deref().ok_or_else(|| {
-        Error::InvalidAixm(format!("aerodrome {designator} has no ICAO location indicator"))
+        Error::InvalidAixm(format!(
+            "aerodrome {designator} has no ICAO location indicator"
+        ))
     })?;
 
     let arp = arpt.arp.ok_or_else(|| {
@@ -218,14 +220,15 @@ fn airport(arpt: &aixm::AirportHeliport, cycle: AiracCycle) -> Result<Airport, E
     };
 
     Ok(Airport {
-        icao_ident: icao_ident.to_string(),
+        icao_ident: LocationIndicator::new(icao_ident)?,
         iata_designator: arpt.designator_iata.clone().unwrap_or_default(),
         name: arpt.name.clone().unwrap_or_default(),
         coordinate: geo::Point::new(arp.longitude, arp.latitude),
-        mag_var: arpt.magnetic_variation.map(|degrees| (degrees as f32).into()),
+        mag_var: arpt
+            .magnetic_variation
+            .map(|degrees| (degrees as f32).into()),
         elevation,
         runways: Vec::new(),
-        location: None,
         cycle: Some(cycle),
     })
 }
@@ -281,7 +284,9 @@ fn runway<'a>(
     let airport = aerodrome(aerodromes, airport)?;
 
     let bearing = direction.magnetic_bearing.ok_or_else(|| {
-        Error::InvalidAixm(format!("runway {designator} at {airport} has no magnetic bearing"))
+        Error::InvalidAixm(format!(
+            "runway {designator} at {airport} has no magnetic bearing"
+        ))
     })?;
 
     let length = rwy.nominal_length.as_ref().ok_or_else(|| {
@@ -362,12 +367,15 @@ fn waypoint(
         coordinate: geo::Point::new(location.longitude, location.latitude),
         mag_var: None,
         region: match airport {
-            Some(airport) => Region::TerminalArea(airport.as_bytes().try_into().map_err(|_| {
-                Error::InvalidAixm(format!("{airport:?} is not an ICAO code"))
-            })?),
+            Some(airport) => Region::TerminalArea(
+                airport
+                    .as_bytes()
+                    .try_into()
+                    .map_err(|_| Error::InvalidAixm(format!("{airport:?} is not an ICAO code")))?,
+            ),
             None => Region::Enroute,
         },
-        location: None,
+        territory: None,
         cycle: Some(cycle),
     })
 }
@@ -702,8 +710,18 @@ mod tests {
                 &location("53.80583333 10.0295833"),
                 &vrp_at("EDDH"),
             ),
-            designated_point("N", "EDDV NOVEMBER 1", &location("52.5 9.7"), &vrp_at("EDDV")),
-            designated_point("AUT", "EDTQ AUTOKINO", &location("48.9 9.3"), &vrp_at("EDTQ")),
+            designated_point(
+                "N",
+                "EDDV NOVEMBER 1",
+                &location("52.5 9.7"),
+                &vrp_at("EDDV"),
+            ),
+            designated_point(
+                "AUT",
+                "EDTQ AUTOKINO",
+                &location("48.9 9.3"),
+                &vrp_at("EDTQ"),
+            ),
             designated_point("GISDI", "GISDI", &location("51.27 8.81"), ""),
             designated_point("HELI1", "HELI 1", &location("53.6 10.0"), VRP_REMARK),
             designated_point("BROKEN", "BROKEN", "", ""),
@@ -743,8 +761,12 @@ mod tests {
         assert_eq!(eddh.name, "HAMBURG");
         assert_eq!(eddh.elevation, VerticalDistance::Msl(53));
         assert_eq!(eddh.iata_designator, "HAM");
-        assert_eq!(eddh.coordinate(), geo::Point::new(9.988227138, 53.630387834));
+        assert_eq!(
+            eddh.coordinate(),
+            geo::Point::new(9.988227138, 53.630387834)
+        );
         assert_eq!(eddh.mag_var(), MagneticVariation::East(4.22));
+        assert_eq!(eddh.icao_ident.territory().as_str(), "ED");
     }
 
     #[test]
@@ -869,7 +891,10 @@ mod tests {
         let [Error::InvalidAixm(error)] = nd.errors() else {
             panic!("the runway direction should be the only error");
         };
-        assert!(error.contains("e1ff5b8a-89c2-48df-9bfc-32e5616f239f"), "{error}");
+        assert!(
+            error.contains("e1ff5b8a-89c2-48df-9bfc-32e5616f239f"),
+            "{error}"
+        );
     }
 
     #[test]

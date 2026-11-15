@@ -13,12 +13,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::str::FromStr;
+
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 
 use crate::core::MagneticVariation;
 use crate::nd::{
     AiracCycle, AirspaceClassification, AirspaceType, LocationIndicator, Region, RunwaySurface,
-    SourceFormat, WaypointUsage,
+    SourceFormat, TerritoryLetters, WaypointUsage,
 };
 
 impl ToSql for AirspaceType {
@@ -166,6 +168,21 @@ impl FromSql for LocationIndicator {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         let s = value.as_str()?;
         LocationIndicator::new(s).map_err(|e| FromSqlError::Other(e.to_string().into()))
+    }
+}
+
+impl ToSql for TerritoryLetters {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::Borrowed(ValueRef::Text(
+            self.as_str().as_bytes(),
+        )))
+    }
+}
+
+impl FromSql for TerritoryLetters {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        let s = value.as_str()?;
+        TerritoryLetters::from_str(s).map_err(|e| FromSqlError::Other(e.to_string().into()))
     }
 }
 

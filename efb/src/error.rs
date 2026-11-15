@@ -65,12 +65,15 @@ pub enum Error {
     UnexpectedString,
     /// The value that should be returned is implausible.
     ImplausibleValue,
-    /// The location indicator should be a two-letter code according to ICAO
-    /// Document No. 7910.
-    UnknownLocationIndicator(String),
 
     // Errors that relate to navigation data:
     //
+    /// The location indicator should be four letters according to ICAO
+    /// Document No. 7910.
+    UnknownLocationIndicator(String),
+    /// The territory letters should be the first one or two letters of a
+    /// location indicator according to ICAO Document No. 7910.
+    UnknownTerritoryLetters(String),
     /// The requested identifier is not know.
     UnknownIdent(String),
     /// The RWYCC should be between 0 and 6.
@@ -133,11 +136,15 @@ impl fmt::Display for Error {
             Self::InvalidAixm(error) => write!(f, "invalid AIXM: {error}"),
             Self::UnexpectedString => write!(f, "unexpected string"),
             Self::ImplausibleValue => write!(f, "value seams implausuble"),
+
             Self::UnknownLocationIndicator(code) => write!(
                 f,
                 "location {code} should be according to ICAO document no. 7910"
             ),
-
+            Self::UnknownTerritoryLetters(code) => write!(
+                f,
+                "territory letters {code} should be according to ICAO document no. 7910"
+            ),
             Self::UnknownIdent(ident) => write!(f, "unknown ident {ident}"),
             Self::InvalidRWYCC => write!(f, "RWYCC should be between 0 and 6"),
 

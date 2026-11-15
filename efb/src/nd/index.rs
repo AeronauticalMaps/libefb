@@ -151,7 +151,7 @@ impl NavAidIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nd::{AirspaceClassification, AirspaceType};
+    use crate::nd::{AirspaceClassification, AirspaceType, LocationIndicator};
     use crate::VerticalDistance;
 
     fn test_airspace(name: &str, coords: &[(f64, f64)]) -> Arc<Airspace> {
@@ -172,14 +172,14 @@ mod tests {
 
     fn test_airport(ident: &str, lat: f64, lon: f64) -> Arc<Airport> {
         Arc::new(Airport {
-            icao_ident: ident.to_string(),
+            icao_ident: LocationIndicator::new(ident)
+                .expect("ident should be a location indicator"),
             iata_designator: String::new(),
             name: ident.to_string(),
             coordinate: Point::new(lon, lat),
             mag_var: None,
             elevation: VerticalDistance::Gnd,
             runways: vec![],
-            location: None,
             cycle: None,
         })
     }
@@ -193,7 +193,7 @@ mod tests {
             coordinate: Point::new(lon, lat),
             mag_var: None,
             region: Region::Enroute,
-            location: None,
+            territory: None,
             cycle: None,
         })
     }
@@ -266,7 +266,7 @@ mod tests {
         let center = Point::new(9.99, 53.63);
         let results: Vec<_> = index.within_radius(&center, Length::nm(10.0)).collect();
         assert_eq!(results.len(), 1);
-        assert!(matches!(results[0], NavAid::Airport(a) if a.icao_ident == "EDDH"));
+        assert!(matches!(results[0], NavAid::Airport(a) if a.icao_ident.as_str() == "EDDH"));
 
         let results: Vec<_> = index.within_radius(&center, Length::nm(50.0)).collect();
         assert_eq!(results.len(), 2);

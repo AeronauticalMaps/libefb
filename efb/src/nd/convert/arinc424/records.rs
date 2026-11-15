@@ -25,7 +25,7 @@ impl<'a> TryFrom<records::Airport<'a>> for Airport {
 
     fn try_from(arpt: records::Airport) -> Result<Self, Self::Error> {
         Ok(Airport {
-            icao_ident: arpt.arpt_ident.to_string(),
+            icao_ident: arpt.arpt_ident.try_into()?,
             iata_designator: arpt.iata.to_string(),
             name: arpt.airport_name.to_string(),
             coordinate: lat_lon_to_point(arpt.latitude, arpt.longitude)?,
@@ -33,7 +33,6 @@ impl<'a> TryFrom<records::Airport<'a>> for Airport {
             // TODO: Parse elevation and runways.
             elevation: VerticalDistance::Gnd,
             runways: Vec::new(),
-            location: Some(arpt.icao_code.try_into()?),
             cycle: Some(arpt.cycle.try_into()?),
         })
     }
@@ -81,7 +80,7 @@ impl<'a> TryFrom<records::Waypoint<'a>> for Waypoint {
             coordinate: lat_lon_to_point(wp.latitude, wp.longitude)?,
             region: wp.regn_code.into(),
             mag_var: wp.mag_var.map(Into::into),
-            location: wp.icao_code().try_into().ok(),
+            territory: wp.icao_code().try_into().ok(),
             cycle: Some(wp.cycle.try_into()?),
         })
     }

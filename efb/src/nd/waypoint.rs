@@ -50,7 +50,7 @@ pub struct Waypoint {
     pub(crate) coordinate: Point<f64>,
     pub(crate) mag_var: Option<MagneticVariation>,
     pub(crate) region: Region,
-    pub(crate) location: Option<LocationIndicator>,
+    pub(crate) territory: Option<TerritoryLetters>,
     pub(crate) cycle: Option<AiracCycle>,
 }
 

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [unreleased]
+
+### Added
+
+- Read the territory of airports from AIXM 5.x
+
+### Changed
+
+- The ICAO ident of an airport is a four-letter location indicator
+- Navaids have a territory instead of a location indicator
+
+### Fixed
+
+- The ICAO Code of ARINC 424 is no longer taken as location indicator
+
 ## [0.8.0] - 2026-11-13
 
 ### Added

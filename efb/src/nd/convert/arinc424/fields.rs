@@ -93,15 +93,31 @@ impl From<fields::RestrictiveType> for AirspaceType {
     }
 }
 
-impl<'a> TryFrom<fields::IcaoCode<'a>> for LocationIndicator {
+impl<'a> TryFrom<fields::ArptHeliIdent<'a>> for LocationIndicator {
+    type Error = arinc424::Error;
+
+    fn try_from(value: fields::ArptHeliIdent<'a>) -> Result<Self, Self::Error> {
+        let invalid = || arinc424::Error::InvalidVariant {
+            field: "ArptHeliIdent",
+            bytes: value.as_bytes().to_vec(),
+            expected: "valid location indicator",
+        };
+        let bytes: [u8; 4] = value.as_bytes().try_into().map_err(|_| invalid())?;
+        LocationIndicator::try_from(bytes).map_err(|_| invalid())
+    }
+}
+
+impl<'a> TryFrom<fields::IcaoCode<'a>> for TerritoryLetters {
     type Error = arinc424::Error;
 
     fn try_from(value: fields::IcaoCode<'a>) -> Result<Self, Self::Error> {
-        LocationIndicator::try_from(value.as_str()).map_err(|_| arinc424::Error::InvalidVariant {
+        let invalid = || arinc424::Error::InvalidVariant {
             field: "IcaoCode",
             bytes: value.as_bytes().to_vec(),
-            expected: "valid location identifier",
-        })
+            expected: "valid territory letters",
+        };
+        let bytes: [u8; 2] = value.as_bytes().try_into().map_err(|_| invalid())?;
+        TerritoryLetters::try_from(bytes).map_err(|_| invalid())
     }
 }
 

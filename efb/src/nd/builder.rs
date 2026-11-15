@@ -29,7 +29,7 @@ pub struct NavigationDataBuilder {
     airspaces: Vec<Arc<Airspace>>,
     waypoints: Vec<Arc<Waypoint>>,
     terminal_waypoints: TerminalWaypoints,
-    locations: HashSet<LocationIndicator>,
+    territories: HashSet<TerritoryLetters>,
     cycle: Option<AiracCycle>,
     partition_id: u64,
     source_format: Option<SourceFormat>,
@@ -37,9 +37,9 @@ pub struct NavigationDataBuilder {
 }
 
 macro_rules! add_navaid {
-    ($self:ident, $t:expr) => {
-        if let Some(l) = $t.location {
-            $self.locations.insert(l);
+    ($self:ident, $t:expr, $territory:expr) => {
+        if let Some(territory) = $territory {
+            $self.territories.insert(territory);
         }
 
         if let Some(c) = $t.cycle {
@@ -77,7 +77,7 @@ impl NavigationDataBuilder {
             navaid_index,
             waypoints: self.waypoints,
             terminal_waypoints: self.terminal_waypoints,
-            locations: self.locations.into_iter().collect(),
+            territories: self.territories.into_iter().collect(),
             cycle: self.cycle,
             partition_id: self.partition_id,
             source_format: self.source_format,
@@ -87,7 +87,7 @@ impl NavigationDataBuilder {
     }
 
     pub fn add_airport(&mut self, arpt: Airport) {
-        add_navaid!(self, arpt);
+        add_navaid!(self, arpt, Some(arpt.icao_ident.territory()));
         self.airports.insert(arpt.ident().to_string(), arpt);
     }
 
@@ -104,7 +104,7 @@ impl NavigationDataBuilder {
     }
 
     pub fn add_waypoint(&mut self, wp: Waypoint) {
-        add_navaid!(self, wp);
+        add_navaid!(self, wp, wp.territory);
         match &wp.region {
             Region::Enroute => self.waypoints.push(Arc::new(wp)),
             Region::TerminalArea(ident) => {

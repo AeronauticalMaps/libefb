@@ -62,9 +62,8 @@ impl<'t> PreparedWrites<'t> {
             airport: tx.prepare(
                 "INSERT OR REPLACE INTO airports \
                  (partition_id, icao_ident, iata_designator, name, lat, lon, \
-                  mag_var_degrees, elevation_kind, elevation_value, \
-                  location_indicator, airac_cycle) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                  mag_var_degrees, elevation_kind, elevation_value, airac_cycle) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             )?,
             runway: tx.prepare(
                 "INSERT INTO runways \
@@ -76,7 +75,7 @@ impl<'t> PreparedWrites<'t> {
             waypoint: tx.prepare(
                 "INSERT OR REPLACE INTO waypoints \
                  (partition_id, fix_ident, description, usage, lat, lon, \
-                  mag_var_degrees, terminal_airport_ident, location_indicator, airac_cycle) \
+                  mag_var_degrees, terminal_airport_ident, territory, airac_cycle) \
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             )?,
             airspace: tx.prepare(
@@ -141,7 +140,6 @@ fn write_airport(stmt: &mut Statement<'_>, partition_id: &str, a: &Airport) -> R
         a.mag_var.as_ref(),
         vd_kind(&a.elevation),
         vd_value(&a.elevation),
-        a.location.as_ref(),
         a.cycle.as_ref(),
     ])?;
     Ok(rowid)
@@ -175,7 +173,7 @@ fn write_waypoint(stmt: &mut Statement<'_>, partition_id: &str, w: &Waypoint) ->
         w.coordinate.x(),
         w.mag_var.as_ref(),
         w.region,
-        w.location.as_ref(),
+        w.territory.as_ref(),
         w.cycle.as_ref(),
     ])?;
     Ok(())

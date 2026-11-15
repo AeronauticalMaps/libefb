@@ -50,7 +50,7 @@ pub use airac_cycle::{AiracCycle, CycleValidity};
 pub use airport::Airport;
 pub use airspace::{Airspace, AirspaceClassification, AirspaceType};
 pub use fix::Fix;
-pub use location::LocationIndicator;
+pub use location::{LocationIndicator, TerritoryLetters};
 pub use navaid::NavAid;
 pub use runway::*;
 pub use waypoint::*;
@@ -108,7 +108,7 @@ pub struct NavigationData {
     navaid_index: NavAidIndex,
     waypoints: Vec<Arc<Waypoint>>,
     terminal_waypoints: TerminalWaypoints,
-    locations: Vec<LocationIndicator>,
+    territories: Vec<TerritoryLetters>,
     cycle: Option<AiracCycle>,
     partition_id: u64,
     source_format: Option<SourceFormat>,
@@ -126,8 +126,9 @@ impl NavigationData {
         NavigationDataBuilder::new()
     }
 
-    pub fn locations(&self) -> &[LocationIndicator] {
-        self.locations.as_slice()
+    /// The countries and territories covered by the navigation data.
+    pub fn territories(&self) -> &[TerritoryLetters] {
+        self.territories.as_slice()
     }
 
     pub fn cycle(&self) -> Option<&AiracCycle> {
@@ -542,14 +543,14 @@ SEURUCEDKED54A      00140     GEN53060400E008583000                             
 
         // Add an airport
         builder.add_airport(Airport {
-            icao_ident: "EDDH".to_string(),
+            icao_ident: LocationIndicator::new("EDDH")
+                .expect("EDDH should be a location indicator"),
             iata_designator: "HAM".to_string(),
             name: "Hamburg".to_string(),
             coordinate: Point::new(9.99, 53.63), // (lon, lat)
             mag_var: None,
             elevation: VerticalDistance::Gnd,
             runways: vec![],
-            location: None,
             cycle: None,
         });
 
@@ -561,7 +562,7 @@ SEURUCEDKED54A      00140     GEN53060400E008583000                             
             coordinate: Point::new(9.95, 53.60), // (lon, lat)
             mag_var: None,
             region: Region::Enroute,
-            location: None,
+            territory: None,
             cycle: None,
         });
 
@@ -573,7 +574,7 @@ SEURUCEDKED54A      00140     GEN53060400E008583000                             
             coordinate: Point::new(10.5, 54.5), // (lon, lat)
             mag_var: None,
             region: Region::Enroute,
-            location: None,
+            territory: None,
             cycle: None,
         });
 
