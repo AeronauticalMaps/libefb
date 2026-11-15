@@ -39,6 +39,19 @@ has a doc comment, with one `# Examples` section and `# Errors` or
 module gets one overview of its components. In `arinc424`, the doc
 comment cites the spec section the item implements.
 
+Write for the developer who searches the docs for how to use an item,
+in the tone of the existing docs: short, plain sentences with a
+pilot's example (`EDDH` for Hamburg), citing a spec instead of
+repeating its wording. Each fact sits where its reader looks for it:
+
+- A module overview names the document it implements (`ICAO Doc
+  7910`, `ARINC 424`, `AIXM 5.1`), its components and how they
+  relate, nothing more.
+- A doc comment says what the item is and how to call it.
+- A corner case is a comment beside the code that handles it.
+- A detail of a source format belongs to its parser or its
+  `nd/convert/` submodule, not to the domain type.
+
 ## Tests
 
 - Unit tests sit in a `#[cfg(test)] mod tests` at the end of the file
