@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Peek the version of a message without reading it as a whole
+- Airspaces with their class, vertical limits and contributing airspaces
+- Horizontal projection of airspace volumes with geodesics, straight
+  lines, arcs and circles
+- All airspace types of AIXM 5.1.1
+- Activities of airspaces, e.g. parachute jumping
 
 ## [0.1.0] - 2026-11-13
 

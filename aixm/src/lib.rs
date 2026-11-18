@@ -90,14 +90,17 @@ mod stream;
 mod timeslice;
 
 pub use codes::{
-    CodeDeclaredDistanceType, CodeDesignatedPointType, CodeNDBUsageType, CodeNavaidServiceType,
-    CodeNotePurposeType, CodeRunwayPointRoleType, CodeRunwayType, CodeSurfaceCompositionType,
-    CodeVORType, UomDistanceType, UomFrequencyType,
+    CodeAirspaceActivityType, CodeAirspaceAggregationType, CodeAirspaceClassificationType,
+    CodeAirspaceDependencyType, CodeAirspaceType, CodeDeclaredDistanceType,
+    CodeDesignatedPointType, CodeNDBUsageType, CodeNavaidServiceType, CodeNotePurposeType,
+    CodeRunwayPointRoleType, CodeRunwayType, CodeSurfaceCompositionType, CodeVORType,
+    CodeVerticalReferenceType, UomDistanceType, UomDistanceVerticalType, UomFrequencyType,
 };
 pub use error::Error;
 pub use features::{
-    AirportHeliport, DesignatedPoint, Measure, Navaid, NavaidComponent, NavaidEquipment, Note,
-    Point, Reference, Runway, RunwayCentrelinePoint, RunwayDeclaredDistance, RunwayDirection, DME,
-    NDB, TACAN, VOR,
+    AirportHeliport, Airspace, AirspaceActivation, AirspaceGeometryComponent, AirspaceLayerClass,
+    AirspaceVolume, AirspaceVolumeDependency, CurveSegment, DesignatedPoint, DistanceVertical,
+    Measure, Navaid, NavaidComponent, NavaidEquipment, Note, Point, Reference, Runway,
+    RunwayCentrelinePoint, RunwayDeclaredDistance, RunwayDirection, Surface, DME, NDB, TACAN, VOR,
 };
 pub use message::{peek_version, read_message, Message, Version};

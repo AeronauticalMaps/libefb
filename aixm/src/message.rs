@@ -22,8 +22,8 @@ use quick_xml::events::Event;
 use quick_xml::name::{Namespace, ResolveResult};
 
 use crate::features::{
-    read_feature, AirportHeliport, DesignatedPoint, Navaid, NavaidEquipment, Reference, Runway,
-    RunwayCentrelinePoint, RunwayDirection, TimeSlice,
+    read_feature, AirportHeliport, Airspace, DesignatedPoint, Navaid, NavaidEquipment, Reference,
+    Runway, RunwayCentrelinePoint, RunwayDirection, TimeSlice,
 };
 use crate::stream::Stream;
 use crate::timeslice::ValidTime;
@@ -64,6 +64,7 @@ impl fmt::Display for Version {
 #[derive(Clone, Debug)]
 enum Feature {
     AirportHeliport(AirportHeliport),
+    Airspace(Airspace),
     DesignatedPoint(DesignatedPoint),
     Navaid(Navaid),
     NavaidEquipment(NavaidEquipment),
@@ -102,6 +103,26 @@ impl Message {
                 Feature::AirportHeliport(airport) => Some((identifier.as_str(), airport)),
                 _ => None,
             })
+    }
+
+    /// Returns the airspaces of the message with their identifier, which
+    /// other airspaces refer to.
+    pub fn airspaces(&self) -> impl Iterator<Item = (&str, &Airspace)> {
+        self.features
+            .iter()
+            .filter_map(|(identifier, feature)| match feature {
+                Feature::Airspace(airspace) => Some((identifier.as_str(), airspace)),
+                _ => None,
+            })
+    }
+
+    /// Returns the airspace that `reference` points to, e.g. the airspace
+    /// a volume takes its geometry from.
+    pub fn airspace(&self, reference: &Reference) -> Option<&Airspace> {
+        match self.features.get(&reference.uuid) {
+            Some(Feature::Airspace(airspace)) => Some(airspace),
+            _ => None,
+        }
     }
 
     /// Returns the designated points of the message.
@@ -351,6 +372,7 @@ fn read_member<R: BufRead>(
             Event::Start(element) => {
                 let member = match element.local_name().as_ref() {
                     "AirportHeliport" => read_as(stream, date, Feature::AirportHeliport),
+                    "Airspace" => read_as(stream, date, Feature::Airspace),
                     "DesignatedPoint" => read_as(stream, date, Feature::DesignatedPoint),
                     "Navaid" => read_as(stream, date, Feature::Navaid),
                     "VOR" => read_as(stream, date, |f| equipment(NavaidEquipment::VOR(f))),

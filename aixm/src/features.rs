@@ -25,11 +25,16 @@ use crate::timeslice::{select_valid, TimeSliceMetadata};
 use crate::Error;
 
 mod airport_heliport;
+mod airspace;
 mod designated_point;
 mod navaid;
 mod runway;
 
 pub use airport_heliport::AirportHeliport;
+pub use airspace::{
+    Airspace, AirspaceActivation, AirspaceGeometryComponent, AirspaceLayerClass, AirspaceVolume,
+    AirspaceVolumeDependency, CurveSegment, DistanceVertical, Surface,
+};
 pub use designated_point::DesignatedPoint;
 pub use navaid::{Navaid, NavaidComponent, NavaidEquipment, DME, NDB, TACAN, VOR};
 pub use runway::{Runway, RunwayCentrelinePoint, RunwayDeclaredDistance, RunwayDirection};
@@ -106,6 +111,27 @@ impl Point {
             _ => Err(Error::InvalidRecord(format!("{pos:?} is not a position"))),
         }
     }
+
+    /// Parses a `gml:posList` with pairs of latitude and longitude.
+    fn from_pos_list(pos_list: &str) -> Result<Vec<Self>, Error> {
+        let mut values = pos_list.split_whitespace().map(str::parse::<f64>);
+        let mut points = Vec::new();
+
+        loop {
+            match (values.next(), values.next()) {
+                (None, _) => return Ok(points),
+                (Some(Ok(latitude)), Some(Ok(longitude))) => points.push(Self {
+                    latitude,
+                    longitude,
+                }),
+                _ => {
+                    return Err(Error::InvalidRecord(format!(
+                        "{pos_list:?} is not a list of positions"
+                    )))
+                }
+            }
+        }
+    }
 }
 
 /// A value with its unit of measurement `U`, e.g. a `ValDistanceType`
@@ -130,20 +156,19 @@ impl<U> Measure<U> {
         U: Code,
     {
         let uom = attribute(element, "uom")?.map(|uom| U::from_code(&uom));
+        stream.read_optional_text(element, |text| Self::parse(text, uom))
+    }
 
-        let value = stream.read_optional_text(element, |text| {
-            text.parse::<f64>()
-                .map_err(|_| Error::InvalidRecord(format!("{text:?} is not a measure")))
-        })?;
-
-        let Some(value) = value else {
-            return Ok(None);
-        };
+    /// Parses the value `text` in the unit of measurement `uom`.
+    fn parse(text: &str, uom: Option<U>) -> Result<Self, Error> {
+        let value = text
+            .parse::<f64>()
+            .map_err(|_| Error::InvalidRecord(format!("{text:?} is not a measure")))?;
 
         let uom =
             uom.ok_or_else(|| Error::InvalidRecord(format!("measure {value} has no uom")))?;
 
-        Ok(Some(Self { value, uom }))
+        Ok(Self { value, uom })
     }
 }
 

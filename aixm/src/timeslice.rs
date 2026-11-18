@@ -122,7 +122,7 @@ pub(crate) fn select_valid<T>(
         .map(|(_, time_slice)| time_slice)
 }
 
-fn number(text: &str) -> Result<u32, Error> {
+pub(crate) fn number(text: &str) -> Result<u32, Error> {
     text.parse()
         .map_err(|_| Error::InvalidRecord(format!("{text:?} is not a number")))
 }

@@ -25,7 +25,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::BufReader;
 
-use aixm::{Measure, Message, NavaidEquipment, Point};
+use aixm::{DistanceVertical, Measure, Message, NavaidEquipment, Point};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let path = env::args().nth(1).ok_or("usage: read_message <file>")?;
@@ -46,6 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     print_runways(&message);
     print_navaids(&message);
     print_designated_points(&message);
+    print_airspaces(&message);
 
     Ok(())
 }
@@ -133,6 +134,58 @@ fn print_designated_points(message: &Message) {
             code(point.kind.as_ref()),
             position(point.location)
         );
+    }
+}
+
+fn print_airspaces(message: &Message) {
+    for (_, airspace) in message.airspaces() {
+        let class: Vec<String> = airspace
+            .class
+            .iter()
+            .map(|layer| code(layer.classification.as_ref()))
+            .collect();
+
+        // a volume has limits of its own or takes them from another airspace
+        let volumes: Vec<String> = airspace
+            .geometry_component
+            .iter()
+            .filter_map(|component| component.the_airspace_volume.as_ref())
+            .map(|volume| match &volume.contributor_airspace {
+                Some(dependency) => format!(
+                    "from {}",
+                    text(
+                        dependency
+                            .the_airspace
+                            .as_ref()
+                            .and_then(|reference| reference.title.as_ref())
+                    )
+                ),
+                None => format!(
+                    "{} {} – {} {}",
+                    limit(volume.lower_limit.as_ref()),
+                    code(volume.lower_limit_reference.as_ref()),
+                    limit(volume.upper_limit.as_ref()),
+                    code(volume.upper_limit_reference.as_ref())
+                ),
+            })
+            .collect();
+
+        println!(
+            "{} {} {} class {}: {}",
+            text(airspace.designator.as_ref()),
+            code(airspace.kind.as_ref()),
+            text(airspace.name.as_ref()),
+            class.join("/"),
+            volumes.join(", ")
+        );
+    }
+}
+
+fn limit(limit: Option<&DistanceVertical>) -> String {
+    match limit {
+        Some(DistanceVertical::Value(value)) => measure(Some(value)),
+        Some(special) => format!("{special:?}").to_uppercase(),
+        None => "-".to_string(),
     }
 }
 
