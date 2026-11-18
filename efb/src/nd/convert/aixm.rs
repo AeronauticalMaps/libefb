@@ -16,16 +16,20 @@
 use std::collections::{HashMap, HashSet};
 
 use aixm::{
+    CodeAirspaceActivityType, CodeAirspaceClassificationType, CodeAirspaceType,
     CodeDeclaredDistanceType, CodeNotePurposeType, CodeRunwayPointRoleType, CodeRunwayType,
-    CodeSurfaceCompositionType, UomDistanceType,
+    CodeSurfaceCompositionType, CodeVerticalReferenceType, CurveSegment, DistanceVertical,
+    UomDistanceType, UomDistanceVerticalType,
 };
 use log::{debug, info, trace, warn};
 
+use super::{interpolate_arc, interpolate_circle};
 use crate::error::Error;
 use crate::measurements::{Angle, Length, LengthUnit};
 use crate::nd::{
-    AiracCycle, Airport, LocationIndicator, NavigationData, Region, Runway, RunwaySurface,
-    SourceFormat, Waypoint, WaypointUsage,
+    AiracCycle, Airport, Airspace, AirspaceActivity, AirspaceClassification, AirspaceType,
+    LocationIndicator, NavigationData, Region, Runway, RunwaySurface, SourceFormat, Waypoint,
+    WaypointUsage,
 };
 use crate::VerticalDistance;
 
@@ -47,7 +51,9 @@ impl NavigationData {
     /// aerodrome. Designated points that belong to an aerodrome become
     /// terminal waypoints of that aerodrome. Visual reporting points get an
     /// ident that is derived from their name, e.g. "EDDV NOVEMBER 1" becomes
-    /// "N1" in the terminal area of EDDV.
+    /// "N1" in the terminal area of EDDV. Airspaces with a horizontal
+    /// projection of their own become airspaces; airspaces that are
+    /// composed of other airspaces are skipped.
     ///
     /// # Errors
     ///
@@ -94,6 +100,7 @@ impl NavigationData {
         let mut airports = 0u32;
         let mut runways = 0u32;
         let mut waypoints = 0u32;
+        let mut airspaces = 0u32;
 
         for message in &messages {
             let cycle = AiracCycle::from(message.effective_date());
@@ -178,6 +185,21 @@ impl NavigationData {
                 }
             }
 
+            for (_, asp) in message.airspaces() {
+                match airspace(asp) {
+                    Ok(Some(asp)) => {
+                        trace!("loaded airspace {}", asp.name);
+                        builder.add_airspace(asp);
+                        airspaces += 1;
+                    }
+                    Ok(None) => {}
+                    Err(e) => {
+                        warn!("skip record: {}", e);
+                        builder.add_error(e);
+                    }
+                }
+            }
+
             // FIXME: Convert the navaids of the message -- VOR, DME, NDB
             // and TACAN -- once `NavAid` has a variant for them, and
             // count them in the summary below.
@@ -189,8 +211,8 @@ impl NavigationData {
             .build();
 
         debug!(
-            "AIXM loading complete: {} airports, {} runways, {} waypoints",
-            airports, runways, waypoints
+            "AIXM loading complete: {} airports, {} runways, {} waypoints, {} airspaces",
+            airports, runways, waypoints, airspaces
         );
 
         if !nd.errors().is_empty() {
@@ -242,6 +264,7 @@ impl TryFrom<&aixm::Measure<UomDistanceType>> for Length {
         match &measure.uom {
             UomDistanceType::M => Ok(Length::m(value)),
             UomDistanceType::FT => Ok(Length::ft(value)),
+            UomDistanceType::NM | UomDistanceType::NMI_I => Ok(Length::nm(value)),
             uom => Err(Error::InvalidAixm(format!("unsupported length unit {uom}"))),
         }
     }
@@ -406,6 +429,265 @@ fn icao_code(reference: &aixm::Reference) -> Result<&str, Error> {
         })
 }
 
+/// Converts an airspace with a horizontal projection of its own. Returns
+/// `None` for an airspace of a type that has no airspace type, or one that
+/// is composed of other airspaces.
+fn airspace(asp: &aixm::Airspace) -> Result<Option<Airspace>, Error> {
+    let name = asp
+        .name
+        .as_deref()
+        .or(asp.designator.as_deref())
+        .ok_or_else(|| Error::InvalidAixm("airspace has no name".to_string()))?;
+
+    let Some(airspace_type) = airspace_type(asp) else {
+        trace!(
+            "skip airspace {name} of type {}",
+            asp.kind.as_ref().map_or("-", CodeAirspaceType::as_str)
+        );
+        return Ok(None);
+    };
+
+    let volume = match asp.geometry_component.as_slice() {
+        [component] => component.the_airspace_volume.as_ref(),
+        [] => None,
+        components => {
+            warn!(
+                "skip airspace {name}: composed of {} volumes",
+                components.len()
+            );
+            return Ok(None);
+        }
+    }
+    .ok_or_else(|| Error::InvalidAixm(format!("airspace {name} has no volume")))?;
+
+    if volume.contributor_airspace.is_some() {
+        warn!("skip airspace {name}: takes its geometry from another airspace");
+        return Ok(None);
+    }
+
+    let surface = volume.horizontal_projection.as_ref().ok_or_else(|| {
+        Error::InvalidAixm(format!("airspace {name} has no horizontal projection"))
+    })?;
+
+    Ok(Some(Airspace {
+        name: name.to_string(),
+        airspace_type,
+        classification: asp
+            .class
+            .first()
+            .and_then(|layer| classification(layer.classification.as_ref()?)),
+        ceiling: vertical_limit(
+            name,
+            volume.upper_limit.as_ref(),
+            volume.upper_limit_reference.as_ref(),
+        )?,
+        floor: vertical_limit(
+            name,
+            volume.lower_limit.as_ref(),
+            volume.lower_limit_reference.as_ref(),
+        )?,
+        polygon: polygon(name, surface)?,
+    }))
+}
+
+fn airspace_type(asp: &aixm::Airspace) -> Option<AirspaceType> {
+    match (asp.kind.as_ref()?, asp.local_type.as_deref()) {
+        // an airspace of a class only, e.g. a class E area, is taken as a
+        // control area, as in OpenAir
+        (CodeAirspaceType::CTA | CodeAirspaceType::CLASS, _) => Some(AirspaceType::CTA),
+        (CodeAirspaceType::CTR, _) => Some(AirspaceType::CTR),
+        (CodeAirspaceType::TMA, _) => Some(AirspaceType::TMA),
+        (CodeAirspaceType::R, _) => Some(AirspaceType::Restricted),
+        (CodeAirspaceType::D, _) => Some(AirspaceType::Danger),
+        (CodeAirspaceType::P, _) => Some(AirspaceType::Prohibited),
+        (CodeAirspaceType::A, _) => Some(AirspaceType::Alert {
+            activity: asp
+                .activation
+                .iter()
+                .find_map(|activation| activity(activation.activity.as_ref()?)),
+        }),
+        // the DFS publishes TMZ and RMZ as regulated airspaces with a local
+        // type
+        (CodeAirspaceType::RAS, Some("TMZ")) => Some(AirspaceType::TMZ),
+        (CodeAirspaceType::RAS, Some("RMZ")) => Some(AirspaceType::RMZ),
+        _ => None,
+    }
+}
+
+fn activity(activity: &CodeAirspaceActivityType) -> Option<AirspaceActivity> {
+    match activity {
+        CodeAirspaceActivityType::AD_TFC => Some(AirspaceActivity::AerodromeTraffic),
+        CodeAirspaceActivityType::HELI_TFC => Some(AirspaceActivity::HelicopterTraffic),
+        CodeAirspaceActivityType::TRAINING => Some(AirspaceActivity::Training),
+        CodeAirspaceActivityType::AEROBATICS => Some(AirspaceActivity::Aerobatics),
+        CodeAirspaceActivityType::AIRSHOW => Some(AirspaceActivity::AirShow),
+        CodeAirspaceActivityType::SPORT => Some(AirspaceActivity::AirSports),
+        CodeAirspaceActivityType::ULM => Some(AirspaceActivity::Ultralight),
+        CodeAirspaceActivityType::GLIDING => Some(AirspaceActivity::Gliding),
+        CodeAirspaceActivityType::PARAGLIDER => Some(AirspaceActivity::Paragliding),
+        CodeAirspaceActivityType::HANGGLIDING => Some(AirspaceActivity::HangGliding),
+        CodeAirspaceActivityType::PARACHUTE => Some(AirspaceActivity::Parachuting),
+        CodeAirspaceActivityType::AIR_DROP => Some(AirspaceActivity::AirDrop),
+        CodeAirspaceActivityType::BALLOON => Some(AirspaceActivity::Ballooning),
+        CodeAirspaceActivityType::RADIOSONDE => Some(AirspaceActivity::Radiosonde),
+        CodeAirspaceActivityType::SPACE_FLIGHT => Some(AirspaceActivity::SpaceFlight),
+        CodeAirspaceActivityType::UAV => Some(AirspaceActivity::UAV),
+        CodeAirspaceActivityType::AERIAL_WORK => Some(AirspaceActivity::AerialWork),
+        CodeAirspaceActivityType::CROP_DUSTING => Some(AirspaceActivity::CropDusting),
+        CodeAirspaceActivityType::FIRE_FIGHTING => Some(AirspaceActivity::FireFighting),
+        CodeAirspaceActivityType::MILOPS => Some(AirspaceActivity::Military),
+        CodeAirspaceActivityType::REFUEL => Some(AirspaceActivity::AirRefuelling),
+        CodeAirspaceActivityType::JET_CLIMBING => Some(AirspaceActivity::JetClimbing),
+        CodeAirspaceActivityType::EXERCISE => Some(AirspaceActivity::InterceptionExercise),
+        CodeAirspaceActivityType::TOWING => Some(AirspaceActivity::TargetTowing),
+        CodeAirspaceActivityType::NAVAL_EXER => Some(AirspaceActivity::NavalExercise),
+        CodeAirspaceActivityType::MISSILES => Some(AirspaceActivity::Missiles),
+        CodeAirspaceActivityType::AIR_GUN => Some(AirspaceActivity::AirGunnery),
+        CodeAirspaceActivityType::ARTILLERY => Some(AirspaceActivity::Artillery),
+        CodeAirspaceActivityType::SHOOTING => Some(AirspaceActivity::Shooting),
+        CodeAirspaceActivityType::BLASTING => Some(AirspaceActivity::Blasting),
+        CodeAirspaceActivityType::WATER_BLASTING => Some(AirspaceActivity::UnderwaterBlasting),
+        CodeAirspaceActivityType::ANTI_HAIL => Some(AirspaceActivity::AntiHail),
+        CodeAirspaceActivityType::BIRD => Some(AirspaceActivity::Birds),
+        CodeAirspaceActivityType::BIRD_MIGRATION => Some(AirspaceActivity::BirdMigration),
+        CodeAirspaceActivityType::FIREWORK => Some(AirspaceActivity::Fireworks),
+        CodeAirspaceActivityType::HI_RADIO => Some(AirspaceActivity::HighIntensityRadio),
+        CodeAirspaceActivityType::HI_LIGHT => Some(AirspaceActivity::HighIntensityLight),
+        CodeAirspaceActivityType::LASER => Some(AirspaceActivity::Laser),
+        CodeAirspaceActivityType::NATURE => Some(AirspaceActivity::NatureReserve),
+        CodeAirspaceActivityType::FAUNA => Some(AirspaceActivity::Fauna),
+        CodeAirspaceActivityType::NO_NOISE => Some(AirspaceActivity::NoiseAbatement),
+        CodeAirspaceActivityType::ACCIDENT => Some(AirspaceActivity::AccidentInvestigation),
+        CodeAirspaceActivityType::POPULATION => Some(AirspaceActivity::Population),
+        CodeAirspaceActivityType::VIP => Some(AirspaceActivity::VIP),
+        CodeAirspaceActivityType::VIP_PRES => Some(AirspaceActivity::HeadOfState),
+        CodeAirspaceActivityType::VIP_VICE => Some(AirspaceActivity::ViceHeadOfState),
+        CodeAirspaceActivityType::OIL => Some(AirspaceActivity::Oil),
+        CodeAirspaceActivityType::GAS => Some(AirspaceActivity::Gas),
+        CodeAirspaceActivityType::REFINERY => Some(AirspaceActivity::Refinery),
+        CodeAirspaceActivityType::CHEMICAL => Some(AirspaceActivity::ChemicalPlant),
+        CodeAirspaceActivityType::NUCLEAR => Some(AirspaceActivity::NuclearPlant),
+        CodeAirspaceActivityType::TECHNICAL => Some(AirspaceActivity::Technical),
+        CodeAirspaceActivityType::ATS => Some(AirspaceActivity::ATS),
+        CodeAirspaceActivityType::PROCEDURE => Some(AirspaceActivity::Procedure),
+        CodeAirspaceActivityType::Other(_) => None,
+    }
+}
+
+fn classification(class: &CodeAirspaceClassificationType) -> Option<AirspaceClassification> {
+    match class {
+        CodeAirspaceClassificationType::A => Some(AirspaceClassification::A),
+        CodeAirspaceClassificationType::B => Some(AirspaceClassification::B),
+        CodeAirspaceClassificationType::C => Some(AirspaceClassification::C),
+        CodeAirspaceClassificationType::D => Some(AirspaceClassification::D),
+        CodeAirspaceClassificationType::E => Some(AirspaceClassification::E),
+        CodeAirspaceClassificationType::F => Some(AirspaceClassification::F),
+        CodeAirspaceClassificationType::G => Some(AirspaceClassification::G),
+        CodeAirspaceClassificationType::Other(_) => None,
+    }
+}
+
+/// Converts the upper or lower limit of the airspace `name` with its
+/// reference: a flight level above the standard pressure, an altitude above
+/// mean sea level or a height above the surface.
+fn vertical_limit(
+    name: &str,
+    limit: Option<&DistanceVertical>,
+    reference: Option<&CodeVerticalReferenceType>,
+) -> Result<VerticalDistance, Error> {
+    let limit = limit
+        .ok_or_else(|| Error::InvalidAixm(format!("airspace {name} has no vertical limit")))?;
+
+    let value = match limit {
+        DistanceVertical::Gnd => return Ok(VerticalDistance::Gnd),
+        DistanceVertical::Unl => return Ok(VerticalDistance::Unlimited),
+        DistanceVertical::Value(value) => Some(value),
+        DistanceVertical::Floor | DistanceVertical::Ceiling => None,
+    };
+
+    match (value, reference) {
+        (Some(fl), Some(CodeVerticalReferenceType::STD))
+            if fl.uom == UomDistanceVerticalType::FL =>
+        {
+            u16::try_from(fl.value.round() as i64)
+                .map(VerticalDistance::Fl)
+                .map_err(|_| Error::InvalidAixm(format!("airspace {name} has FL {}", fl.value)))
+        }
+        (Some(altitude), Some(CodeVerticalReferenceType::MSL)) => {
+            feet(name, altitude).map(VerticalDistance::Msl)
+        }
+        (Some(height), Some(CodeVerticalReferenceType::SFC)) => match feet(name, height)? {
+            0 => Ok(VerticalDistance::Gnd),
+            ft => Ok(VerticalDistance::Agl(ft)),
+        },
+        _ => Err(Error::InvalidAixm(format!(
+            "airspace {name} has an unsupported vertical limit {limit:?} {reference:?}"
+        ))),
+    }
+}
+
+/// Converts a vertical distance of the airspace `name` in feet or metres to
+/// feet.
+fn feet(name: &str, distance: &aixm::Measure<UomDistanceVerticalType>) -> Result<u16, Error> {
+    let value = distance.value as f32;
+
+    let length = match &distance.uom {
+        UomDistanceVerticalType::FT => Length::ft(value),
+        UomDistanceVerticalType::M => Length::m(value),
+        uom => {
+            return Err(Error::InvalidAixm(format!(
+                "airspace {name} has a vertical limit in {uom}"
+            )))
+        }
+    };
+
+    let ft = *length.convert_to(LengthUnit::Feet).value();
+
+    u16::try_from(ft.round() as i64)
+        .map_err(|_| Error::InvalidAixm(format!("airspace {name} has a limit of {ft} ft")))
+}
+
+/// Converts the horizontal projection of the airspace `name` to a polygon.
+fn polygon(name: &str, surface: &aixm::Surface) -> Result<geo::Polygon<f64>, Error> {
+    let point = |position: &aixm::Point| geo::Point::new(position.longitude, position.latitude);
+    let mut coords = Vec::new();
+
+    for segment in &surface.exterior {
+        match segment {
+            CurveSegment::GeodesicString(positions)
+            | CurveSegment::LineStringSegment(positions) => {
+                coords.extend(positions.iter().map(|position| point(position).0))
+            }
+            // the angles are bearings from true north, and the arc runs
+            // clockwise if the angle increases from start to end (AIXM 5.1
+            // coding guidelines, ArcByCenterPoint Interpretation Summary)
+            CurveSegment::ArcByCenterPoint {
+                center,
+                radius,
+                start_angle,
+                end_angle,
+            } => coords.extend(interpolate_arc(
+                point(center),
+                Length::try_from(radius)?,
+                Angle::t(*start_angle as f32),
+                Angle::t(*end_angle as f32),
+                start_angle < end_angle,
+            )),
+            CurveSegment::CircleByCenterPoint { center, radius } => {
+                coords.extend(interpolate_circle(point(center), Length::try_from(radius)?))
+            }
+        }
+    }
+
+    if coords.len() < 3 {
+        return Err(Error::InvalidAixm(format!(
+            "airspace {name} has fewer than three positions"
+        )));
+    }
+
+    Ok(geo::Polygon::new(geo::LineString::new(coords), vec![]))
+}
+
 /// Returns `true` if a remark of the point marks it as visual reporting point.
 fn is_vrp(point: &aixm::DesignatedPoint) -> bool {
     point
@@ -443,6 +725,10 @@ fn vrp_ident(name: &str, airport: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use geo::Contains;
+
     use super::*;
     use crate::nd::{Fix, NavAid};
     use crate::route::Route;
@@ -931,5 +1217,300 @@ mod tests {
     fn takes_cycle_from_effective_date() {
         let nd = navigation_data();
         assert_eq!(nd.cycle(), Some(&AiracCycle::new(26, 11)));
+    }
+
+    const CTR_EDDK: &str = r#"
+        <message:hasMember>
+            <aixm:Airspace gml:id="id.c700554c-d360-4476-925c-86e411f1a350">
+                <gml:identifier codeSpace="urn:uuid:">c700554c-d360-4476-925c-86e411f1a350</gml:identifier>
+                <aixm:timeSlice>
+                    <aixm:AirspaceTimeSlice gml:id="id.ts.c700554c-d360-4476-925c-86e411f1a350">
+                        <gml:validTime>
+                            <gml:TimePeriod gml:id="id.ts.vt.c700554c-d360-4476-925c-86e411f1a350">
+                                <gml:beginPosition>2026-10-29T00:00:00Z</gml:beginPosition>
+                                <gml:endPosition indeterminatePosition="before">2026-11-26T00:00:00Z</gml:endPosition>
+                            </gml:TimePeriod>
+                        </gml:validTime>
+                        <aixm:interpretation>BASELINE</aixm:interpretation>
+                        <aixm:type>CTR</aixm:type>
+                        <aixm:designator>EDDK</aixm:designator>
+                        <aixm:localType xsi:nil="true" nilReason="unknown"/>
+                        <aixm:name>KOELN/BONN</aixm:name>
+                        <aixm:class>
+                            <aixm:AirspaceLayerClass gml:id="id.ts.alc.c700554c-d360-4476-925c-86e411f1a350">
+                                <aixm:classification>D</aixm:classification>
+                            </aixm:AirspaceLayerClass>
+                        </aixm:class>
+                        <aixm:geometryComponent>
+                            <aixm:AirspaceGeometryComponent gml:id="id.asegeomcomp.c700554c-d360-4476-925c-86e411f1a350">
+                                <aixm:theAirspaceVolume>
+                                    <aixm:AirspaceVolume gml:id="id.asevol.c700554c-d360-4476-925c-86e411f1a350">
+                                        <aixm:upperLimit uom="FT">2500</aixm:upperLimit>
+                                        <aixm:upperLimitReference>MSL</aixm:upperLimitReference>
+                                        <aixm:lowerLimit uom="FT">0</aixm:lowerLimit>
+                                        <aixm:lowerLimitReference>SFC</aixm:lowerLimitReference>
+                                        <aixm:horizontalProjection>
+                                            <aixm:Surface gml:id="ID_SURF_962" srsName="urn:ogc:def:crs:EPSG::4326">
+                                                <gml:patches>
+                                                    <gml:PolygonPatch>
+                                                        <gml:exterior>
+                                                            <gml:Ring>
+                                                                <gml:curveMember>
+                                                                    <gml:Curve gml:id="ID_CURV_962-6233">
+                                                                        <gml:segments>
+                                                                            <gml:GeodesicString>
+                                                                                <gml:pos>51.017222000000 7.030278000000</gml:pos>
+                                                                                <gml:pos>50.950278000000 7.129722000000</gml:pos>
+                                                                                <gml:pos>50.940833000000 7.205833000000</gml:pos>
+                                                                                <gml:pos>50.975278000000 7.323333000000</gml:pos>
+                                                                                <gml:pos>50.884722000000 7.390000000000</gml:pos>
+                                                                                <gml:pos>50.851389000000 7.275833000000</gml:pos>
+                                                                                <gml:pos>50.785833333000 7.372500000000</gml:pos>
+                                                                                <gml:pos>50.723055556000 7.265555556000</gml:pos>
+                                                                                <gml:pos>50.786944000000 7.172500000000</gml:pos>
+                                                                                <gml:pos>50.794722000000 7.084444000000</gml:pos>
+                                                                                <gml:pos>50.779444000000 7.033889000000</gml:pos>
+                                                                                <gml:pos>50.861666667000 6.973055556000</gml:pos>
+                                                                                <gml:pos>50.948889000000 6.914167000000</gml:pos>
+                                                                                <gml:pos>51.017222000000 7.030278000000</gml:pos>
+                                                                            </gml:GeodesicString>
+                                                                        </gml:segments>
+                                                                    </gml:Curve>
+                                                                </gml:curveMember>
+                                                            </gml:Ring>
+                                                        </gml:exterior>
+                                                    </gml:PolygonPatch>
+                                                </gml:patches>
+                                            </aixm:Surface>
+                                        </aixm:horizontalProjection>
+                                    </aixm:AirspaceVolume>
+                                </aixm:theAirspaceVolume>
+                            </aixm:AirspaceGeometryComponent>
+                        </aixm:geometryComponent>
+                    </aixm:AirspaceTimeSlice>
+                </aixm:timeSlice>
+            </aixm:Airspace>
+        </message:hasMember>"#;
+
+    const CLASS_EDLW: &str = r#"
+        <message:hasMember>
+            <aixm:Airspace gml:id="id.2a5dfa32-1b9f-49ad-94e0-f24288a1265b">
+                <gml:identifier codeSpace="urn:uuid:">2a5dfa32-1b9f-49ad-94e0-f24288a1265b</gml:identifier>
+                <aixm:timeSlice>
+                    <aixm:AirspaceTimeSlice gml:id="id.ts.2a5dfa32-1b9f-49ad-94e0-f24288a1265b">
+                        <gml:validTime>
+                            <gml:TimePeriod gml:id="id.ts.vt.2a5dfa32-1b9f-49ad-94e0-f24288a1265b">
+                                <gml:beginPosition>2026-10-29T00:00:00Z</gml:beginPosition>
+                                <gml:endPosition indeterminatePosition="before">2026-11-26T00:00:00Z</gml:endPosition>
+                            </gml:TimePeriod>
+                        </gml:validTime>
+                        <aixm:interpretation>BASELINE</aixm:interpretation>
+                        <aixm:type>CLASS</aixm:type>
+                        <aixm:designator>EDLWCLD</aixm:designator>
+                        <aixm:name>DORTMUND</aixm:name>
+                        <aixm:class>
+                            <aixm:AirspaceLayerClass gml:id="id.ts.alc.2a5dfa32-1b9f-49ad-94e0-f24288a1265b">
+                                <aixm:classification>D</aixm:classification>
+                            </aixm:AirspaceLayerClass>
+                        </aixm:class>
+                        <aixm:geometryComponent>
+                            <aixm:AirspaceGeometryComponent gml:id="id.asegeomcomp.2a5dfa32-1b9f-49ad-94e0-f24288a1265b-10">
+                                <aixm:operation>BASE</aixm:operation>
+                                <aixm:operationSequence>1</aixm:operationSequence>
+                                <aixm:theAirspaceVolume>
+                                    <aixm:AirspaceVolume gml:id="id.asevol.2a5dfa32-1b9f-49ad-94e0-f24288a1265b-10">
+                                        <aixm:contributorAirspace>
+                                            <aixm:AirspaceVolumeDependency gml:id="id.avdep.2a5dfa32-1b9f-49ad-94e0-f24288a1265b-10">
+                                                <aixm:dependency>FULL_GEOMETRY</aixm:dependency>
+                                                <aixm:theAirspace xlink:href="urn:uuid:737ab4d5-2442-4063-8854-0dec4ba430a9" xlink:title="EDLWCLDA"/>
+                                            </aixm:AirspaceVolumeDependency>
+                                        </aixm:contributorAirspace>
+                                    </aixm:AirspaceVolume>
+                                </aixm:theAirspaceVolume>
+                            </aixm:AirspaceGeometryComponent>
+                        </aixm:geometryComponent>
+                    </aixm:AirspaceTimeSlice>
+                </aixm:timeSlice>
+            </aixm:Airspace>
+        </message:hasMember>"#;
+
+    const PJA_EDHF: &str = r#"
+        <message:hasMember>
+            <aixm:Airspace gml:id="id.552cc8af-fa1e-43ce-8395-e607da6ecfd0">
+                <gml:identifier codeSpace="urn:uuid:">552cc8af-fa1e-43ce-8395-e607da6ecfd0</gml:identifier>
+                <aixm:timeSlice>
+                    <aixm:AirspaceTimeSlice gml:id="id.ts.552cc8af-fa1e-43ce-8395-e607da6ecfd0">
+                        <gml:validTime>
+                            <gml:TimePeriod gml:id="id.ts.vt.552cc8af-fa1e-43ce-8395-e607da6ecfd0">
+                                <gml:beginPosition>2026-10-29T00:00:00Z</gml:beginPosition>
+                                <gml:endPosition indeterminatePosition="before">2026-11-26T00:00:00Z</gml:endPosition>
+                            </gml:TimePeriod>
+                        </gml:validTime>
+                        <aixm:interpretation>BASELINE</aixm:interpretation>
+                        <aixm:type>A</aixm:type>
+                        <aixm:designator>EDHFPJA</aixm:designator>
+                        <aixm:localType>PJA</aixm:localType>
+                        <aixm:name>ITZEHOE-HUNGRIGER WOLF/SCHLESWIG HOLSTEIN</aixm:name>
+                        <aixm:geometryComponent>
+                            <aixm:AirspaceGeometryComponent gml:id="id.asegeomcomp.552cc8af-fa1e-43ce-8395-e607da6ecfd0">
+                                <aixm:theAirspaceVolume>
+                                    <aixm:AirspaceVolume gml:id="id.asevol.552cc8af-fa1e-43ce-8395-e607da6ecfd0">
+                                        <aixm:upperLimit uom="FL">100</aixm:upperLimit>
+                                        <aixm:upperLimitReference>STD</aixm:upperLimitReference>
+                                        <aixm:lowerLimit uom="FT">0</aixm:lowerLimit>
+                                        <aixm:lowerLimitReference>SFC</aixm:lowerLimitReference>
+                                        <aixm:horizontalProjection>
+                                            <aixm:Surface gml:id="ID_SURF_4159" srsName="urn:ogc:def:crs:EPSG::4326">
+                                                <gml:patches>
+                                                    <gml:PolygonPatch>
+                                                        <gml:exterior>
+                                                            <gml:Ring>
+                                                                <gml:curveMember>
+                                                                    <gml:Curve gml:id="ID_CURV_4159-22343">
+                                                                        <gml:segments>
+                                                                            <gml:CircleByCenterPoint numArc="1">
+                                                                                <gml:pos>53.994444444 9.578611111</gml:pos>
+                                                                                <gml:radius uom="[nmi_i]">2</gml:radius>
+                                                                            </gml:CircleByCenterPoint>
+                                                                        </gml:segments>
+                                                                    </gml:Curve>
+                                                                </gml:curveMember>
+                                                            </gml:Ring>
+                                                        </gml:exterior>
+                                                    </gml:PolygonPatch>
+                                                </gml:patches>
+                                            </aixm:Surface>
+                                        </aixm:horizontalProjection>
+                                    </aixm:AirspaceVolume>
+                                </aixm:theAirspaceVolume>
+                            </aixm:AirspaceGeometryComponent>
+                        </aixm:geometryComponent>
+                        <aixm:activation>
+                            <aixm:AirspaceActivation gml:id="id.ts.aseactiv.552cc8af-fa1e-43ce-8395-e607da6ecfd0-411">
+                                <aixm:activity>PARACHUTE</aixm:activity>
+                                <aixm:status>ACTIVE</aixm:status>
+                            </aixm:AirspaceActivation>
+                        </aixm:activation>
+                    </aixm:AirspaceTimeSlice>
+                </aixm:timeSlice>
+            </aixm:Airspace>
+        </message:hasMember>"#;
+
+    /// The airport of Cologne/Bonn (lon, lat), inside the EDDK CTR.
+    const EDDK_ARP: geo::Point<f64> = geo::Point(geo::Coord {
+        x: 7.142778,
+        y: 50.865833,
+    });
+
+    fn airspace_data(members: &[&str]) -> NavigationData {
+        let members: Vec<String> = members.iter().map(|member| member.to_string()).collect();
+        NavigationData::try_from_aixm(&[message(&members).as_bytes()])
+            .expect("AIXM should be readable")
+    }
+
+    fn airspaces_at(nd: &NavigationData, point: geo::Point<f64>) -> Vec<Arc<Airspace>> {
+        nd.at(&point, Length::nm(0.0)).airspaces
+    }
+
+    #[test]
+    fn loads_airspace_with_horizontal_projection() {
+        let nd = airspace_data(&[CTR_EDDK]);
+
+        let [eddk] = airspaces_at(&nd, EDDK_ARP)
+            .try_into()
+            .unwrap_or_else(|airspaces: Vec<_>| {
+                panic!(
+                    "EDDK ARP should be in one airspace, not {}",
+                    airspaces.len()
+                )
+            });
+        assert_eq!(eddk.name, "KOELN/BONN");
+        assert_eq!(eddk.airspace_type, AirspaceType::CTR);
+        assert_eq!(eddk.classification, Some(AirspaceClassification::D));
+        assert_eq!(eddk.floor, VerticalDistance::Gnd);
+        assert_eq!(eddk.ceiling, VerticalDistance::Msl(2500));
+        assert!(nd.errors().is_empty());
+    }
+
+    #[test]
+    fn converts_flight_level_limit() {
+        let xml = CTR_EDDK
+            .replace(
+                r#"<aixm:upperLimit uom="FT">2500"#,
+                r#"<aixm:upperLimit uom="FL">65"#,
+            )
+            .replace(">MSL<", ">STD<");
+        let nd = airspace_data(&[&xml]);
+
+        let eddk = airspaces_at(&nd, EDDK_ARP);
+        assert_eq!(eddk[0].ceiling, VerticalDistance::Fl(65));
+    }
+
+    #[test]
+    fn loads_parachute_jumping_area_as_alert_area() {
+        let nd = airspace_data(&[PJA_EDHF]);
+
+        // the ARP of EDHF, 0.4 NM from the centre of the circle
+        let edhf = airspaces_at(&nd, geo::Point::new(9.5785, 53.9945));
+        assert_eq!(edhf.len(), 1);
+        assert_eq!(
+            edhf[0].airspace_type,
+            AirspaceType::Alert {
+                activity: Some(AirspaceActivity::Parachuting)
+            }
+        );
+        assert_eq!(edhf[0].floor, VerticalDistance::Gnd);
+        assert_eq!(edhf[0].ceiling, VerticalDistance::Fl(100));
+    }
+
+    #[test]
+    fn skips_airspace_composed_of_other_airspaces() {
+        let nd = airspace_data(&[CLASS_EDLW]);
+        assert!(nd.errors().is_empty());
+        assert!(nd.airspaces.is_empty());
+    }
+
+    #[test]
+    fn rejects_airspace_without_vertical_limit() {
+        let xml = CTR_EDDK.replace(r#"<aixm:upperLimit uom="FT">2500</aixm:upperLimit>"#, "");
+        let nd = airspace_data(&[&xml]);
+        assert!(matches!(nd.errors(), [Error::InvalidAixm(_)]));
+    }
+
+    #[test]
+    fn draws_arc_from_start_to_end_angle() {
+        // a quarter circle of 10 NM north-east of 50°N 7°E
+        let center = aixm::Point {
+            latitude: 50.0,
+            longitude: 7.0,
+        };
+        let north = aixm::Point {
+            latitude: 50.0 + 10.0 / 60.0,
+            longitude: 7.0,
+        };
+        let quarter = |start_angle, end_angle| aixm::Surface {
+            exterior: vec![
+                aixm::CurveSegment::GeodesicString(vec![center, north]),
+                aixm::CurveSegment::ArcByCenterPoint {
+                    center,
+                    radius: aixm::Measure {
+                        value: 10.0,
+                        uom: UomDistanceType::NMI_I,
+                    },
+                    start_angle,
+                    end_angle,
+                },
+            ],
+        };
+        let north_east = geo::Point::new(7.0917, 50.0589);
+        let south_west = geo::Point::new(6.9083, 49.9411);
+
+        let clockwise = polygon("CW", &quarter(0.0, 90.0)).expect("arc should be drawn");
+        assert!(clockwise.contains(&north_east));
+        assert!(!clockwise.contains(&south_west));
+
+        let anticlockwise = polygon("CCW", &quarter(360.0, 90.0)).expect("arc should be drawn");
+        assert!(!anticlockwise.contains(&north_east));
+        assert!(anticlockwise.contains(&south_west));
     }
 }
