@@ -48,7 +48,7 @@ pub mod db;
 
 pub use airac_cycle::{AiracCycle, CycleValidity};
 pub use airport::Airport;
-pub use airspace::{Airspace, AirspaceClassification, AirspaceType};
+pub use airspace::{Airspace, AirspaceActivity, AirspaceClassification, AirspaceType};
 pub use fix::Fix;
 pub use location::{LocationIndicator, TerritoryLetters};
 pub use navaid::NavAid;

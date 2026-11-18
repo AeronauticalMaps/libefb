@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Read the territory of airports from AIXM 5.x
+- Alert areas with their activity, e.g. parachute jumping
 
 ### Changed
 

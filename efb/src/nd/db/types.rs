@@ -35,6 +35,7 @@ impl ToSql for AirspaceType {
             Self::TMZ => b"tmz",
             Self::RMZ => b"rmz",
             Self::RadarZone => b"radar_zone",
+            Self::Alert { .. } => b"alert",
         })))
     }
 }
@@ -51,6 +52,7 @@ impl FromSql for AirspaceType {
             "tmz" => Ok(Self::TMZ),
             "rmz" => Ok(Self::RMZ),
             "radar_zone" => Ok(Self::RadarZone),
+            "alert" => Ok(Self::Alert { activity: None }),
             other => Err(FromSqlError::Other(
                 format!("unknown airspace_type: {other}").into(),
             )),
