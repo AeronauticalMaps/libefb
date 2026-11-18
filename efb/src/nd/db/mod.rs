@@ -106,7 +106,8 @@ impl NavigationData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nd::Fix;
+    use crate::nd::{Airspace, AirspaceActivity, AirspaceType, Fix, SourceFormat};
+    use crate::VerticalDistance;
 
     const HAMBURG_A424: &[u8] = br#"
 SEURP EDDHEDA        0        N N53374900E009591762E002000053                   P    MWGE    HAMBURG                       356462409
@@ -141,6 +142,38 @@ SEURP EDDHEDGRW23    0106632300 N53380900E009595876                          151
             }
             _ => panic!("expected airport"),
         }
+    }
+
+    #[test]
+    fn round_trip_preserves_activity_of_alert_area() {
+        let mut conn = Connection::open_in_memory().unwrap();
+
+        let alert = AirspaceType::Alert {
+            activity: Some(AirspaceActivity::Parachuting),
+        };
+        let mut builder = NavigationData::builder().with_format(SourceFormat::Aixm);
+        builder.add_airspace(Airspace {
+            name: String::from("ITZEHOE-HUNGRIGER WOLF/SCHLESWIG HOLSTEIN"),
+            airspace_type: alert,
+            classification: None,
+            ceiling: VerticalDistance::Fl(100),
+            floor: VerticalDistance::Gnd,
+            polygon: polygon![
+                (9.52, 53.96),
+                (9.64, 53.96),
+                (9.64, 54.03),
+                (9.52, 54.03),
+                (9.52, 53.96),
+            ],
+        });
+        builder
+            .build()
+            .try_into_sqlite(&mut conn)
+            .expect("write should succeed");
+
+        let loaded = NavigationData::try_from_sqlite(&mut conn).expect("read should succeed");
+
+        assert_eq!(loaded[0].airspaces[0].airspace_type, alert);
     }
 
     #[test]

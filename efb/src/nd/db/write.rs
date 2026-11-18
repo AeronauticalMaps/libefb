@@ -18,7 +18,7 @@ use rusqlite::{params, Connection, Statement, Transaction};
 
 use crate::error::{Error, Result};
 use crate::measurements::AngleUnit;
-use crate::nd::{Airport, Airspace, NavigationData, Runway, Waypoint};
+use crate::nd::{Airport, Airspace, AirspaceType, NavigationData, Runway, Waypoint};
 
 use super::encoding::{vd_kind, vd_value};
 
@@ -80,10 +80,10 @@ impl<'t> PreparedWrites<'t> {
             )?,
             airspace: tx.prepare(
                 "INSERT INTO airspaces \
-                 (partition_id, name, airspace_type, classification, \
+                 (partition_id, name, airspace_type, classification, activity, \
                   ceiling_kind, ceiling_value, floor_kind, floor_value, \
                   min_lat, min_lon, max_lat, max_lon) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             )?,
             airspace_vertex: tx.prepare(
                 "INSERT INTO airspace_vertices (airspace_id, ring, ordinal, lat, lon) \
@@ -190,11 +190,17 @@ fn write_airspace(
         .bounding_rect()
         .ok_or_else(|| Error::Database(format!("airspace '{}' has an empty polygon", a.name)))?;
 
+    let activity = match a.airspace_type {
+        AirspaceType::Alert { activity } => activity,
+        _ => None,
+    };
+
     let airspace_id = airspace_stmt.insert(params![
         partition_id,
         &a.name,
         a.airspace_type,
         a.classification.as_ref(),
+        activity,
         vd_kind(&a.ceiling),
         vd_value(&a.ceiling),
         vd_kind(&a.floor),

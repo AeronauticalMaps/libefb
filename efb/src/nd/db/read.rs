@@ -214,7 +214,7 @@ fn load_airspaces(
 
     let mut stmt = conn.prepare(
         "SELECT id, name, airspace_type, classification, \
-                ceiling_kind, ceiling_value, floor_kind, floor_value \
+                ceiling_kind, ceiling_value, floor_kind, floor_value, activity \
          FROM airspaces WHERE partition_id = ?1",
     )?;
 
@@ -222,7 +222,12 @@ fn load_airspaces(
     while let Some(row) = rows.next()? {
         let id: i64 = row.get(0)?;
         let name: String = row.get(1)?;
-        let airspace_type: AirspaceType = row.get(2)?;
+        let airspace_type = match row.get(2)? {
+            AirspaceType::Alert { .. } => AirspaceType::Alert {
+                activity: row.get(8)?,
+            },
+            airspace_type => airspace_type,
+        };
         let classification: Option<AirspaceClassification> = row.get(3)?;
         let ceiling_kind: String = row.get(4)?;
         let ceiling_value: Option<i64> = row.get(5)?;
