@@ -80,8 +80,9 @@ impl From<fields::RestrictiveType> for AirspaceType {
         match value {
             fields::RestrictiveType::Danger => Self::Danger,
             fields::RestrictiveType::Prohibited => Self::Prohibited,
+            // ARINC 424 doesn't code the activity of an alert area
+            fields::RestrictiveType::Alert => Self::Alert { activity: None },
             fields::RestrictiveType::Restricted
-            | fields::RestrictiveType::Alert
             | fields::RestrictiveType::Caution
             | fields::RestrictiveType::LongTermTFR
             | fields::RestrictiveType::MOA

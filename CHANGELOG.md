@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The ICAO ident of an airport is a four-letter location indicator
 - Navaids have a territory instead of a location indicator
+- Alert areas of ARINC 424 load as alert areas instead of restricted areas
 
 ### Fixed
 
