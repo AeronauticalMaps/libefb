@@ -56,7 +56,7 @@ impl AirspaceIndex {
     }
 
     /// Returns airspaces whose bounding boxes contain the point.
-    pub fn candidates_at(&self, lon: f64, lat: f64) -> impl Iterator<Item = &Arc<Airspace>> + '_ {
+    pub fn at(&self, lon: f64, lat: f64) -> impl Iterator<Item = &Arc<Airspace>> + '_ {
         let point_envelope = AABB::from_point(Point::new(lon, lat));
         self.tree
             .locate_in_envelope_intersecting(&point_envelope)
@@ -64,7 +64,7 @@ impl AirspaceIndex {
     }
 
     /// Returns airspaces whose bounding boxes intersect the given envelope.
-    pub fn candidates_intersecting(
+    pub fn within_envelope(
         &self,
         envelope: &AABB<Point<f64>>,
     ) -> impl Iterator<Item = &Arc<Airspace>> + '_ {
@@ -146,6 +146,13 @@ impl NavAidIndex {
             .filter(move |entry| Geodesic.distance(center, *entry.geom()) <= radius_m)
             .map(|entry| &entry.data)
     }
+
+    /// Returns navaids within the bounding boxes.
+    pub fn within_envelope(&self, envelope: &AABB<Point<f64>>) -> impl Iterator<Item = &NavAid> {
+        self.tree
+            .locate_in_envelope_intersecting(envelope)
+            .map(|entry| &entry.data)
+    }
 }
 
 #[cfg(test)]
@@ -219,7 +226,7 @@ mod tests {
 
         let index = AirspaceIndex::new(airspaces.iter());
 
-        let candidates: Vec<_> = index.candidates_at(9.5, 53.5).collect();
+        let candidates: Vec<_> = index.at(9.5, 53.5).collect();
         assert_eq!(candidates.len(), 1);
         assert!(Arc::ptr_eq(candidates[0], &airspaces[0]));
     }
@@ -244,7 +251,7 @@ mod tests {
 
         let index = AirspaceIndex::new(airspaces.iter());
 
-        let candidates: Vec<_> = index.candidates_at(8.0, 52.0).collect();
+        let candidates: Vec<_> = index.at(8.0, 52.0).collect();
         assert!(candidates.is_empty());
     }
 

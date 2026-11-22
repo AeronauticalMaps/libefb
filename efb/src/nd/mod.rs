@@ -24,7 +24,7 @@ use log::{debug, trace, warn};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use geo::{Contains, Point};
+use geo::{Contains, Point, Rect};
 use rstar::AABB;
 
 use crate::error::Error;
@@ -184,7 +184,7 @@ impl NavigationData {
         // Find airspaces containing the point
         let airspaces: Vec<_> = self
             .airspace_index
-            .candidates_at(point.x(), point.y())
+            .at(point.x(), point.y())
             .filter(|airspace| airspace.polygon.contains(point))
             .cloned()
             .collect();
@@ -199,14 +199,26 @@ impl NavigationData {
         Nearby { airspaces, navaids }
     }
 
-    /// Returns candidate airspaces whose bounding boxes intersect the given
-    /// envelope.
-    pub(crate) fn candidate_airspaces_for_envelope(
-        &self,
-        envelope: &AABB<Point<f64>>,
-    ) -> Vec<Arc<Airspace>> {
+    /// Returns all airspaces and navaids within the bounding box.
+    ///
+    /// This includes airspaces which are also just intersecting the bounding box
+    /// and are only partially within it.
+    pub fn within(&self, bounds: &Rect<f64>) -> Nearby {
+        let envelope = AABB::from_corners(bounds.min().into(), bounds.max().into());
+        let airspaces: Vec<_> = self.airspaces_within(&envelope);
+        let navaids: Vec<_> = self
+            .navaid_index
+            .within_envelope(&envelope)
+            .cloned()
+            .collect();
+
+        Nearby { airspaces, navaids }
+    }
+
+    /// Returns airspaces whose bounding boxes intersect the given envelope.
+    pub(crate) fn airspaces_within(&self, envelope: &AABB<Point<f64>>) -> Vec<Arc<Airspace>> {
         self.airspace_index
-            .candidates_intersecting(envelope)
+            .within_envelope(envelope)
             .cloned()
             .collect()
     }

@@ -34,7 +34,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 aixm = { path = "../aixm", version = "0.1.0" }
 arinc424 = { path = "../arinc424", version = "0.4.1" }
 chrono = "0.4.42"
-geo = { version = "0.32.0", default-features = false }
+geo = { version = "0.33.1", default-features = false }
 geojson = { version = "0.24.2", optional = true }
 log = "0.4"
 rstar = "0.12.2"

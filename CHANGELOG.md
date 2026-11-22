@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Get airspaces and navaids within an envelope
 - Read the territory of airports from AIXM 5.x
 - Read airspaces from AIXM 5.x
 - Alert areas with their activity, e.g. parachute jumping

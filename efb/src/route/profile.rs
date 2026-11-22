@@ -206,7 +206,7 @@ impl VerticalProfile {
         // Use the spatial index: query candidates whose bounding boxes
         // intersect the route's envelope (LineString implements RTreeObject)
         let route_envelope = route_line.envelope();
-        let candidates = nd.candidate_airspaces_for_envelope(&route_envelope);
+        let candidates = nd.airspaces_within(&route_envelope);
 
         let mut intersections = Vec::new();
 
